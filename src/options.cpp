@@ -176,6 +176,7 @@ Options::Options(void)
 	ROMNameSlot7[0] = 0;
 	ROMNameSlot8[0] = 0;
 	ROMName1581[0] = 0;
+	ROMName1551[0] = 0;
 	newDiskType[0] = 0;
 }
 
@@ -282,6 +283,10 @@ void Options::Process(char* buffer)
 		{
 			strncpy(ROMName1581, pValue, 255);
 		}
+		else if ((strcasecmp(pOption, "ROM1551") == 0))
+		{
+			strncpy(ROMName1551, pValue, 255);
+		}
 		else if ((strcasecmp(pOption, "ROM") == 0) || (strcasecmp(pOption, "ROM1") == 0))
 		{
 			strncpy(ROMName, pValue, 255);
@@ -364,6 +369,14 @@ const char* Options::GetRomName(int index) const
 		return ROMNameSlot8;
 	}
 	return ROMName;
+}
+
+const char* Options::GetRomName1551() const
+{
+	if (ROMName1551[0] == 0)
+		return "dos1551-318008-01.bin";
+	else
+		return ROMName1551;
 }
 
 const char* Options::GetRomName1581() const

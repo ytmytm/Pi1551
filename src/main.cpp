@@ -39,6 +39,7 @@ extern "C"
 #include "iec_commands.h"
 #include "diskio.h"
 #include "Pi1541.h"
+#include "Pi1551.h"
 #include "Pi1581.h"
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
@@ -79,7 +80,8 @@ enum EmulatingMode
 {
 	IEC_COMMANDS,
 	EMULATING_1541,
-	EMULATING_1581
+	EMULATING_1581,
+	EMULATING_1551
 };
 
 volatile EmulatingMode emulating;
@@ -104,6 +106,9 @@ DiskCaddy diskCaddy;
 Pi1541 pi1541;
 #if defined(PI1581SUPPORT)
 Pi1581 pi1581;
+#endif
+#if defined(PI1551SUPPORT)
+Pi1551 pi1551;
 #endif
 CEMMCDevice	m_EMMC;
 Screen screen;
@@ -246,6 +251,10 @@ extern void write6502(u16 address, const u8 value);
 extern void write6502ExtraRAM(u16 address, const u8 value);
 extern u8 read6502_1581(u16 address);
 extern void write6502_1581(u16 address, const u8 value);
+extern u8 read6502_1551(u16 address);
+extern void write6502_1551(u16 address, const u8 value);
+extern u8 read6502ExtraRAM_1551(u16 address);
+extern void write6502ExtraRAM_1551(u16 address, const u8 value);
 
 void InitialiseHardware()
 {
@@ -450,6 +459,11 @@ void UpdateScreen()
 			led = pi1581.IsLEDOn();
 			motor = pi1581.IsMotorOn();
 		}
+		else if (emulating == EMULATING_1551)
+		{
+			led = pi1551.drive.IsLEDOn();
+			motor = pi1551.drive.IsMotorOn();
+		}
 
 		value = led;
 		if (value != oldLED)
@@ -569,6 +583,18 @@ void UpdateScreen()
 		if (emulating == EMULATING_1541)
 		{
 			track = pi1541.drive.Track();
+			if (track != oldTrack)
+			{
+				oldTrack = track;
+				snprintf(tempBufferTrack, tempBufferTrackSize, "%02d.%d", (oldTrack >> 1) + 1, oldTrack & 1 ? 5 : 0);
+				screen.PrintText(false, 20 * 8, y, tempBufferTrack, textColour, bgColour);
+				//refreshUartStatusDisplay = true;
+				refreshLCDStatusDisplay = true;
+			}
+		}
+		else if (emulating == EMULATING_1551)
+		{
+			track = pi1551.drive.Track();
 			if (track != oldTrack)
 			{
 				oldTrack = track;
@@ -699,6 +725,15 @@ EmulatingMode BeginEmulating(FileBrowser* fileBrowser, const char* filenameForIc
 		}
 		else
 #endif
+#if defined(PI1551SUPPORT)
+		if (1==1) {
+			pi1551.drive.Insert(diskImage);
+			fileBrowser->DisplayDiskInfo(diskImage, filenameForIcon);
+			fileBrowser->ShowDeviceAndROM();
+			return EMULATING_1551;
+		}
+		else // XXXMW will never fall back to 1541 this way
+#endif
 		{
 			pi1541.drive.Insert(diskImage);
 			fileBrowser->DisplayDiskInfo(diskImage, filenameForIcon);
@@ -751,6 +786,9 @@ void GlobalSetDeviceID(u8 id)
 	deviceID = id;
 	m_IEC_Commands.SetDeviceId(id);
 	pi1541.SetDeviceID(id);
+#if defined(PI1551SUPPORT)
+	pi1551.SetDeviceID(id);
+#endif
 #if defined(PI1581SUPPORT)
 	pi1581.SetDeviceID(id);
 #endif
@@ -1024,6 +1062,276 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 	}
 	return exitReason;
 }
+
+#if defined(PI1551SUPPORT)
+EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
+{
+	EXIT_TYPE exitReason = EXIT_UNKNOWN;
+	bool oldLED = false;
+	unsigned ctBefore = 0;
+	unsigned ctAfter = 0;
+	int cycleCount = 0;
+	unsigned caddyIndex;
+	int headSoundCounter = 0;
+	int headSoundFreqCounter = 0;
+	unsigned char oldHeadDir = 0;
+	int resetCount = 0;
+	bool refreshOutsAfterCPUStep = true;
+	unsigned numberOfImages = diskCaddy.GetNumberOfImages();
+	unsigned numberOfImagesMax = numberOfImages;
+	if (numberOfImagesMax > 10)
+		numberOfImagesMax = 10;
+
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Acquire();
+#endif
+	diskCaddy.Display();
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Release();
+#endif
+
+	inputMappings->directDiskSwapRequest = 0;
+	// Force an update on all the buttons now before we start emulation mode. 
+	IEC_Bus::ReadBrowseMode();
+
+	bool extraRAM = options.GetExtraRAM();
+	DataBusReadFn dataBusRead = extraRAM ? read6502ExtraRAM_1551 : read6502_1551;
+	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
+	pi1541.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
+
+	IEC_Bus::VIA = &pi1551.VIA[0];
+	IEC_Bus::port = pi1551.VIA[0].GetPortB();
+	pi1551.Reset();	// will call IEC_Bus::Reset();
+
+	IEC_Bus::LetSRQBePulledHigh();
+
+	//resetWhileEmulating = false;
+	selectedViaIECCommands = false;
+
+	u32 hash = pi1551.drive.GetDiskImage()->GetHash();
+	// 0x42c02586 = maniac_mansion_s1[lucasfilm_1989](ntsc).g64
+	// 0x18651422 = aliens[electric_dreams_1987].g64
+	// 0x2a7f4b77 = zak_mckracken_boot[activision_1988](manual)(!).g64
+	// 0x97732c3e = maniac_mansion_s1[activision_1987](!).g64
+	// 0x63f809d2 = 4x4_offroad_racing_s1[epyx_1988](ntsc)(!).g64
+	if (hash == 0x42c02586 || hash == 0x18651422 || hash == 0x2a7f4b77 || hash == 0x97732c3e || hash == 0x63f809d2)
+	{
+		refreshOutsAfterCPUStep = false;
+	}
+
+	// Quickly get through 1541's self test code.
+	// This will make the emulated 1541 responsive to commands asap.
+	// During this time we don't need to set outputs.
+
+	while (cycleCount < FAST_BOOT_CYCLES)
+	{
+		IEC_Bus::ReadEmulationMode1541();
+
+		pi1551.m6502.SYNC();
+
+		pi1551.m6502.Step();
+
+		pi1551.Update();
+
+		cycleCount++;
+	}
+
+	// Self test code done. Begin realtime emulation.
+
+#if defined(RPI2)
+	asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctBefore));
+#else
+	ctBefore = read32(ARM_SYSTIMER_CLO);
+#endif
+
+
+
+		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
+		{
+			if (pi1581.m6502.SYNC())	// About to start a new instruction.
+			{
+				pc = pi1581.m6502.GetPC();
+				// See if the emulated cpu is executing CD:_ (ie back out of emulated image)
+				if (snoopIndex == 0 && (pc == SNOOP_CD_CBM1581)) snoopPC = pc;
+
+				if (pc == snoopPC)
+				{
+					if (Snoop(pi1581.m6502.GetA()))
+					{
+						emulating = IEC_COMMANDS;
+						exitReason = EXIT_CD;
+					}
+				}
+			}
+			pi1581.m6502.Step();
+			pi1581.Update();
+		}
+
+
+	while (exitReason == EXIT_UNKNOWN)
+	{
+		IEC_Bus::ReadEmulationMode1541();	// XXXMW
+
+		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
+		{
+			if (pi1551.m6502.SYNC())	// About to start a new instruction.
+			{
+				pc = pi1551.m6502.GetPC();
+				// See if the emulated cpu is executing CD:_ (ie back out of emulated image)
+				if (snoopIndex == 0 && (pc == SNOOP_CD_CBM || pc == SNOOP_CD_JIFFY_BOTH || pc == SNOOP_CD_JIFFY_DRIVEONLY)) snoopPC = pc;
+
+				if (pc == snoopPC)
+				{
+					if (Snoop(pi1551.m6502.GetA()))
+					{
+						emulating = IEC_COMMANDS;
+						exitReason = EXIT_CD;
+					}
+				}
+			}
+			pi1551.m6502.Step();
+			pi1551.Update();
+		}
+
+		IEC_Bus::RefreshOuts1541();	// Now output all outputs. // XXXMW
+
+		IEC_Bus::OutputLED = pi1551.drive.IsLEDOn();
+#if defined(RPI3)
+		if (IEC_Bus::OutputLED ^ oldLED)
+		{
+			SetACTLed(IEC_Bus::OutputLED);
+			oldLED = IEC_Bus::OutputLED;
+		}
+#endif
+
+		// Do head moving sound
+		unsigned char headDir = pi1551.drive.GetLastHeadDirection();
+		if (headDir != oldHeadDir)	// Need to start a new sound?
+		{
+			oldHeadDir = headDir;
+			if (options.SoundOnGPIO())
+			{
+				headSoundCounter = headSoundCounterDuration;
+				headSoundFreqCounter = headSoundFreq;
+			}
+			else
+			{
+#if not defined(EXPERIMENTALZERO)
+				PlaySoundDMA();
+#endif
+			}
+		}
+
+		IEC_Bus::ReadGPIOUserInput();
+
+		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
+#if not defined(EXPERIMENTALZERO)
+		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+		inputMappings->CheckButtonsEmulationMode();
+
+		bool exitEmulation = inputMappings->Exit();
+		bool exitDoAutoLoad = inputMappings->AutoLoad();
+
+		// We have now output so HERE is where the next phi2 cycle starts.
+		pi1551.Update();
+
+
+		bool reset = IEC_Bus::IsReset();
+		if (reset)
+			resetCount++;
+		else
+			resetCount = 0;
+
+		if ((emulating == IEC_COMMANDS) || (resetCount > 10) || exitEmulation || exitDoAutoLoad)
+		{
+			if (reset)
+				exitReason = EXIT_RESET;
+			if (exitEmulation)
+				exitReason = EXIT_KEYBOARD;
+			if (exitDoAutoLoad)
+				exitReason = EXIT_AUTOLOAD;
+		}
+
+#if defined(RPI2)
+		do  // Sync to the 1MHz clock
+		{
+			asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctAfter));
+		} while ((ctAfter - ctBefore) < clockCycles1MHz);
+#else
+		do	// Sync to the 1MHz clock
+		{
+			ctAfter = read32(ARM_SYSTIMER_CLO);
+			unsigned ct = ctAfter - ctBefore;
+			if (ct > 1)
+			{
+				// If this ever occurs then we have taken too long (ie >1us) and lost a cycle.
+				// Cycle accuracy is now in jeopardy. If this occurs during critical communication loops then emulation can fail!
+				//DEBUG_LOG("!");
+			}
+		} while (ctAfter == ctBefore);
+#endif
+		ctBefore = ctAfter;
+		
+		if (!refreshOutsAfterCPUStep)
+		{
+			IEC_Bus::ReadEmulationMode1541(); // XXXMW
+			IEC_Bus::RefreshOuts1541();	// Now output all outputs. // XXXMW
+		}
+
+		if (options.SoundOnGPIO() && headSoundCounter > 0)
+		{
+			headSoundFreqCounter--;		// Continue updating a GPIO non DMA sound.
+			if (headSoundFreqCounter <= 0)
+			{
+				headSoundFreqCounter = headSoundFreq;
+				headSoundCounter -= headSoundFreq * 8;
+				IEC_Bus::OutputSound = !IEC_Bus::OutputSound;
+			}
+		}
+
+		if (numberOfImages > 1)
+		{
+			bool nextDisk = inputMappings->NextDisk();
+			bool prevDisk = inputMappings->PrevDisk();
+			if (nextDisk)
+			{
+				pi1551.drive.Insert(diskCaddy.PrevDisk());
+#if defined(EXPERIMENTALZERO)
+				diskCaddy.Update();
+#endif
+			}
+			else if (prevDisk)
+			{
+				pi1551.drive.Insert(diskCaddy.NextDisk());
+#if defined(EXPERIMENTALZERO)
+				diskCaddy.Update();
+#endif
+			}
+#if not defined(EXPERIMENTALZERO)
+			else if (inputMappings->directDiskSwapRequest != 0)
+			{
+				for (caddyIndex = 0; caddyIndex < numberOfImagesMax; ++caddyIndex)
+				{
+					if (inputMappings->directDiskSwapRequest & (1 << caddyIndex))
+					{
+						DiskImage* diskImage = diskCaddy.SelectImage(caddyIndex);
+						if (diskImage && diskImage != pi1551.drive.GetDiskImage())
+						{
+							pi1551.drive.Insert(diskImage);
+							break;
+						}
+					}
+				}
+				inputMappings->directDiskSwapRequest = 0;
+			}
+#endif
+		}
+	}
+	return exitReason;
+}
+#endif
+
 
 #if defined(PI1581SUPPORT)
 EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
@@ -1389,6 +1697,10 @@ void emulator()
 		{
 			if (emulating == EMULATING_1541)
 				exitReason = Emulate1541(fileBrowser);
+#if defined(PI1551SUPPORT)
+			else if (emulating == EMULATING_1551)
+				exitReason = Emulate1551(fileBrowser);
+#endif
 #if defined(PI1581SUPPORT)
 			else
 				exitReason = Emulate1581(fileBrowser);
@@ -1618,6 +1930,34 @@ static void CheckOptions()
 		}
 	}
 #endif
+	const char* ROMName1551 = options.GetRomName1551();
+	if (ROMName1551)
+	{
+		//DEBUG_LOG("%d Rom Name = %s\r\n", ROMIndex, ROMName);
+		if ((FR_OK == f_open(&fp, ROMName1551, FA_READ)))
+		{
+			u32 bytesRead;
+
+			screen.Clear(COLOUR_BLACK);
+			snprintf(tempBuffer, tempBufferSize, "Loading ROM %s\r\n", ROMName1551);
+			screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+			xpos = (widthScreen - widthText) >> 1;
+			ypos = (heightScreen - heightText) >> 1;
+			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+
+			SetACTLed(true);
+			res = f_read(&fp, roms.ROMImage1551, ROMs::ROM1551_SIZE, &bytesRead);
+			SetACTLed(false);
+			if (res == FR_OK && bytesRead == ROMs::ROM1551_SIZE)
+			{
+				strncpy(roms.ROMName1551, ROMName1551, 255);
+				roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
+			}
+			f_close(&fp);
+			//DEBUG_LOG("Read ROM %s from options\r\n", ROMName);
+		}
+	}
+
 	const char* ROMName1581 = options.GetRomName1581();
 	if (ROMName1581)
 	{

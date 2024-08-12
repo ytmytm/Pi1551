@@ -3,6 +3,7 @@
 
 #include "debug.h"
 #define PI1581SUPPORT 1
+#define PI1551SUPPORT 1
 // Indicates a Pi with the 40 pin GPIO connector
 // so that additional functionality (e.g. test pins) can be enabled
 #if defined(RPIZERO) || defined(RPI1BPLUS) || defined(RPI2) || defined(RPI3)
