@@ -54,7 +54,7 @@ u8 read6502_1551(u16 address)
 		}
 	}
 	else
-	{
+	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
 		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
 		u16 addressLines12_11_10 = (address & 0x1c00) >> 10;
 		switch (addressLines12_11_10)
@@ -85,7 +85,7 @@ u8 read6502ExtraRAM_1551(u16 address)
 		return roms.Read(address);
 	}
 	else
-	{
+	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
 		u16 addressLines11And12 = address & 0x1800;
 		if (addressLines11And12 == 0x1800) return pi1551.VIA[(address & 0x400) != 0].Read(address);	// address line 10 indicates what VIA to index
 		return s_u8Memory[address & 0x7fff];
@@ -101,7 +101,7 @@ u8 peek6502_1551(u16 address)
 		value = roms.Read(address);
 	}
 	else
-	{
+	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
 		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
 		u16 addressLines15_12_11_10 = (address & 0x1c00) >> 10;
 		addressLines15_12_11_10 |= (address & 0x8000) >> (15 - 3);
@@ -131,7 +131,7 @@ void write6502_1551(u16 address, const u8 value)
 		}
 	}
 	else
-	{
+	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
 		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
 		u16 addressLines12_11_10 = (address & 0x1c00) >> 10;
 		switch (addressLines12_11_10)
@@ -153,7 +153,7 @@ void write6502_1551(u16 address, const u8 value)
 }
 
 void write6502ExtraRAM_1551(u16 address, const u8 value)
-{
+{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
 	if (address & 0x8000) return; // address line 15 selects the ROM
 	u16 addressLines11And12 = address & 0x1800;
 	if (addressLines11And12 == 0) s_u8Memory[address & 0x7fff] = value;
