@@ -26,6 +26,8 @@
 class m6523
 {
 
+// CPU port is not part of TIA, but there is only one TIA in 1551 and this neatly encapsulates it
+
 // ; TIA 6523 registers $4000-$4005
 // ;
 // ; Port registers A, B and C
@@ -98,12 +100,32 @@ public:
 	inline IOPort* GetPortA() { return &portA; }
 	inline IOPort* GetPortB() { return &portB; }
 	inline IOPort* GetPortC() { return &portC; }
+	inline IOPort* GetPortCPU() { return &portCPU; }
 
 	void Execute();
 
 	unsigned char Read(unsigned int address);
 	unsigned char Peek(unsigned int address);
 	void Write(unsigned int address, unsigned char value);
+
+	inline unsigned char ReadCPUPort()
+	{
+		unsigned char ddr = portCPU.GetDirection();
+		unsigned char value = (unsigned char)((portCPU.GetInput() & ~ddr) | (portCPU.GetOutput() & ddr));
+		return value;
+	}
+
+	inline unsigned char PeekCPUPort()
+	{
+		unsigned char ddr = portCPU.GetDirection();
+		unsigned char value = (unsigned char)((portCPU.GetInput() & ~ddr) | (portCPU.GetOutput() & ddr));
+		return value;
+	}
+
+	inline void WriteCPUPort(unsigned char value)
+	{
+		portCPU.SetOutput(value);
+	}
 
 private:
 	inline unsigned char ReadPortA()
@@ -166,6 +188,7 @@ private:
 	IOPort portA;
 	IOPort portB;
 	IOPort portC;
+	IOPort portCPU;
 };
 
 #endif

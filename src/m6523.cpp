@@ -34,6 +34,7 @@ void m6523::Reset()
 	portA.SetDirection(0);
 	portB.SetDirection(0);
 	portC.SetDirection(0);
+	portCPU.SetDirection(0);
 }
 
 // Update for a single cycle
