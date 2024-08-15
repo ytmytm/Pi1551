@@ -19,7 +19,7 @@
 #ifndef PI1551_H
 #define PI1551_H
 
-#include "Drive.h"
+#include "Drive1551.h"
 #include "m6502.h"
 #include "iec_bus.h"
 
@@ -37,21 +37,15 @@ public:
 
 	//void ConfigureOfExtraRAM(bool extraRAM);
 
-	Drive drive;
-	m6522 VIA[2];
+	Drive1551 drive;
+	m6523 TIA;
 
 	M6502 m6502;
 
-	enum PortPins
-	{
-		VIAPORTPINS_DEVSEL0 = 0x20,	//pb5
-		VIAPORTPINS_DEVSEL1 = 0x40,	//pb6
-	};
-
 	inline void SetDeviceID(u8 id)
 	{
-		VIA[0].GetPortB()->SetInput(VIAPORTPINS_DEVSEL0, id & 1);
-		VIA[0].GetPortB()->SetInput(VIAPORTPINS_DEVSEL1, id & 2);
+		// bit 5 = 0 for #8, 1 for #9
+		TIA.GetPortC()->SetInput(0x20, !(id & 1));
 	}
 
 private:

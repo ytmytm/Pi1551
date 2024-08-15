@@ -182,6 +182,8 @@ void Pi1551::Initialise()
 
 void Pi1551::Update()
 {
+	// XXXMW IRQ timer should run here, there is nothing to do for VIA
+	// IRQ source, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
 	if (drive.Update())
 	{
 		//This pin sets the overflow flag on a negative transition from TTL one to TTL zero.
