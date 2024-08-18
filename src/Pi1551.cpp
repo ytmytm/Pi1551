@@ -52,14 +52,14 @@ u8 read6502_1551(u16 address)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
-		return pi1551.TIA.GetPortCPU().GetDirection()
+		return pi1551.TPI.GetPortCPU().GetDirection()
 	}
 	else if (address == 1) {
-		return pi1551.TIA.ReadCPUPort();
+		return pi1551.TPI.ReadCPUPort();
 	}
 	// 0x4000-0x7fff is VIA
 	else if (address >= 0x4000 && address < 0x8000) {
-		return pi1551.TIA.Read(address)
+		return pi1551.TPI.Read(address)
 	}
 	// 0x0002-0x3FFF is RAM
 	return s_u8Memory[address & 0x7ff];
@@ -74,14 +74,14 @@ u8 read6502ExtraRAM_1551(u16 address)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
-		return pi1551.TIA.GetPortCPU().GetDirection()
+		return pi1551.TPI.GetPortCPU().GetDirection()
 	}
 	else if (address == 1) {
-		return pi1551.TIA.ReadCPUPort();
+		return pi1551.TPI.ReadCPUPort();
 	}
 	// 0x4000-0x4008 is TIA
 	else if (address >= 0x4000 && address < 0x4008) {
-		return pi1551.TIA.Read(address)
+		return pi1551.TPI.Read(address)
 	}
 	// otherwise it's RAM
 	return s_u8Memory[address & 0x7fff];
@@ -96,14 +96,14 @@ u8 peek6502_1551(u16 address)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
-		return pi1551.TIA.GetPortCPU().GetDirection()
+		return pi1551.TPI.GetPortCPU().GetDirection()
 	}
 	else if (address == 1) {
-		return pi1551.TIA.PeekCPUPort();
+		return pi1551.TPI.PeekCPUPort();
 	}
 	// 0x4000-0x7fff is TIA
 	else if (address >= 0x4000 && address < 0x8000) {
-		return pi1551.TIA.Peek(address)
+		return pi1551.TPI.Peek(address)
 	}
 	// otherwise it's RAM
 	return s_u8Memory[address & 0x7ff]
@@ -129,14 +129,14 @@ void write6502_1551(u16 address, const u8 value)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
-		pi1551.TIA.GetPortCPU().SetDirection(value)
+		pi1551.TPI.GetPortCPU().SetDirection(value)
 	}
 	else if (address == 1) {
-		pi1551.TIA.WriteCPUPort(value);
+		pi1551.TPI.WriteCPUPort(value);
 	}
 	// 0x4000-0x7fff is TIA
 	else if (address >= 0x4000 && address < 0x8000) {
-		pi1551.TIA.Write(address, value)
+		pi1551.TPI.Write(address, value)
 	}
 	else {
 		// otherwise it's RAM
@@ -149,14 +149,14 @@ void write6502ExtraRAM_1551(u16 address, const u8 value)
 	if (address & 0x8000) return; // address line 15 selects the ROM
 	// 0x0, 0x1 is CPU port
 	if (address == 0) {
-		pi1551.TIA.GetPortCPU().SetDirection(value)
+		pi1551.TPI.GetPortCPU().SetDirection(value)
 	}
 	else if (address == 1) {
-		pi1551.TIA.WriteCPUPort(value);
+		pi1551.TPI.WriteCPUPort(value);
 	}
 	// 0x4000-0x4008 is TIA
 	else if (address >= 0x4000 && address < 0x4008) {
-		pi1551.TIA.Write(address, value)
+		pi1551.TPI.Write(address, value)
 	}
 	else {
 		// otherwise it's RAM
@@ -166,12 +166,12 @@ void write6502ExtraRAM_1551(u16 address, const u8 value)
 
 Pi1551::Pi1551()
 {
-	TIA.ConnectIRQ(&m6502.IRQ);
+	TPI.ConnectIRQ(&m6502.IRQ);
 }
 
 void Pi1551::Initialise()
 {
-	TIA.ConnectIRQ(&m6502.IRQ);
+	TPI.ConnectIRQ(&m6502.IRQ);
 }
 
 //void Pi1551::ConfigureOfExtraRAM(bool extraRAM)
@@ -192,12 +192,12 @@ void Pi1551::Update()
 	}
 
 	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
-	TIA.Execute();
+	TPI.Execute();
 }
 
 void Pi1551::Reset()
 {
-	TIA.Reset();
+	TPI.Reset();
 	drive.Reset();
 	IEC_Bus::Reset(); // XXXMW
 }

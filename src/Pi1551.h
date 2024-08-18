@@ -38,14 +38,14 @@ public:
 	//void ConfigureOfExtraRAM(bool extraRAM);
 
 	Drive1551 drive;
-	m6523 TIA;
+	m6523 TPI;
 
 	M6502 m6502;
 
 	inline void SetDeviceID(u8 id)
 	{
 		// bit 5 = 0 for #8, 1 for #9
-		TIA.GetPortC()->SetInput(0x20, !(id & 1));
+		TPI.GetPortC()->SetInput(0x20, !(id & 1));
 	}
 
 private:
