@@ -36,45 +36,33 @@ extern ROMs roms;
 // 1c00 !cs2 on pin 7
 u8 read6502_1551(u16 address)
 {
-	u8 value = 0;
 	if (address & 0x8000)
 	{
 		switch (address & 0xe000) // keep bits 15,14,13
 		{
 			case 0x8000: // 0x8000-0x9fff
 				if (options.GetRAMBOard()) {
-					value = s_u8Memory[address]; // 74LS42 outputs low on pin 1 or pin 2
-					break;
+					return s_u8Memory[address]; // 74LS42 outputs low on pin 1 or pin 2
 				}
 			case 0xa000: // 0xa000-0xbfff
 			case 0xc000: // 0xc000-0xdfff
 			case 0xe000: // 0xe000-0xffff
-				value = roms.Read(address);
-				break;
+				return roms.Read(address);
 		}
 	}
-	else
-	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
-		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
-		u16 addressLines12_11_10 = (address & 0x1c00) >> 10;
-		switch (addressLines12_11_10)
-		{
-			case 0:
-			case 1:
-				value = s_u8Memory[address & 0x7ff]; // 74LS42 outputs low on pin 1 or pin 2
-				break;
-			case 6:
-				value = pi1551.VIA[0].Read(address);	// 74LS42 outputs low on pin 7
-				break;
-			case 7:
-				value = pi1551.VIA[1].Read(address);	// 74LS42 outputs low on pin 9
-				break;
-			default:
-				value = address >> 8;	// Empty address bus
-				break;
-		}
+	// 0x0, 0x1 is CPU port
+	else if (address == 0) {
+		return pi1551.TIA.GetPortCPU().GetDirection()
 	}
-	return value;
+	else if (address == 1) {
+		return pi1551.TIA.ReadCPUPort();
+	}
+	// 0x4000-0x7fff is VIA
+	else if (address >= 0x4000 && address < 0x8000) {
+		return pi1551.TIA.Read(address)
+	}
+	// 0x0002-0x3FFF is RAM
+	return s_u8Memory[address & 0x7ff];
 }
 
 // Allows a mode where we have RAM at all addresses other than the ROM and the VIAs. (Maybe useful to someone?)
@@ -84,33 +72,41 @@ u8 read6502ExtraRAM_1551(u16 address)
 	{
 		return roms.Read(address);
 	}
-	else
-	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
-		u16 addressLines11And12 = address & 0x1800;
-		if (addressLines11And12 == 0x1800) return pi1551.VIA[(address & 0x400) != 0].Read(address);	// address line 10 indicates what VIA to index
-		return s_u8Memory[address & 0x7fff];
+	// 0x0, 0x1 is CPU port
+	else if (address == 0) {
+		return pi1551.TIA.GetPortCPU().GetDirection()
 	}
+	else if (address == 1) {
+		return pi1551.TIA.ReadCPUPort();
+	}
+	// 0x4000-0x4008 is TIA
+	else if (address >= 0x4000 && address < 0x4008) {
+		return pi1551.TIA.Read(address)
+	}
+	// otherwise it's RAM
+	return s_u8Memory[address & 0x7fff];
 }
 
 // Use for debugging (Reads VIA registers without the regular VIA read side effects)
 u8 peek6502_1551(u16 address)
 {
-	u8 value;
 	if (address & 0x8000)	// address line 15 selects the ROM
 	{
-		value = roms.Read(address);
+		return roms.Read(address);
 	}
-	else
-	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
-		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
-		u16 addressLines15_12_11_10 = (address & 0x1c00) >> 10;
-		addressLines15_12_11_10 |= (address & 0x8000) >> (15 - 3);
-		if (addressLines15_12_11_10 == 0 || addressLines15_12_11_10 == 1) value = s_u8Memory[address & 0x7ff]; // 74LS42 outputs low on pin 1 or pin 2
-		else if (addressLines15_12_11_10 == 6) value = pi1551.VIA[0].Peek(address);	// 74LS42 outputs low on pin 7
-		else if (addressLines15_12_11_10 == 7) value = pi1551.VIA[1].Peek(address);	// 74LS42 outputs low on pin 9
-		else value = address >> 8;	// Empty address bus
+	// 0x0, 0x1 is CPU port
+	else if (address == 0) {
+		return pi1551.TIA.GetPortCPU().GetDirection()
 	}
-	return value;
+	else if (address == 1) {
+		return pi1551.TIA.PeekCPUPort();
+	}
+	// 0x4000-0x7fff is TIA
+	else if (address >= 0x4000 && address < 0x8000) {
+		return pi1551.TIA.Peek(address)
+	}
+	// otherwise it's RAM
+	return s_u8Memory[address & 0x7ff]
 }
 
 void write6502_1551(u16 address, const u8 value)
@@ -122,6 +118,7 @@ void write6502_1551(u16 address, const u8 value)
 			case 0x8000: // 0x8000-0x9fff
 				if (options.GetRAMBOard()) {
 					s_u8Memory[address] = value; // 74LS42 outputs low on pin 1 or pin 2
+					return;
 					break;
 				}
 			case 0xa000: // 0xa000-0xbfff
@@ -130,34 +127,41 @@ void write6502_1551(u16 address, const u8 value)
 				return;
 		}
 	}
-	else
-	{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
-		// Address lines 15, 12, 11 and 10 are fed into a 74LS42 for decoding
-		u16 addressLines12_11_10 = (address & 0x1c00) >> 10;
-		switch (addressLines12_11_10)
-		{
-			case 0:
-			case 1:
-				s_u8Memory[address & 0x7ff] = value; // 74LS42 outputs low on pin 1 or pin 2
-				break;
-			case 6:
-				pi1551.VIA[0].Write(address, value);	// 74LS42 outputs low on pin 7
-				break;
-			case 7:
-				pi1551.VIA[1].Write(address, value);	// 74LS42 outputs low on pin 9
-				break;
-			default:
-				break;
-		}
+	// 0x0, 0x1 is CPU port
+	else if (address == 0) {
+		pi1551.TIA.GetPortCPU().SetDirection(value)
+	}
+	else if (address == 1) {
+		pi1551.TIA.WriteCPUPort(value);
+	}
+	// 0x4000-0x7fff is TIA
+	else if (address >= 0x4000 && address < 0x8000) {
+		pi1551.TIA.Write(address, value)
+	}
+	else {
+		// otherwise it's RAM
+		s_u8Memory[address & 0x7ff] = value;
 	}
 }
 
 void write6502ExtraRAM_1551(u16 address, const u8 value)
-{	// XXXMW - RAM, TIA @ $4000 and nothing else; 8-bit CPU port of 6510T at $00/$01
+{	
 	if (address & 0x8000) return; // address line 15 selects the ROM
-	u16 addressLines11And12 = address & 0x1800;
-	if (addressLines11And12 == 0) s_u8Memory[address & 0x7fff] = value;
-	else if (addressLines11And12 == 0x1800) pi1551.VIA[(address & 0x400) != 0].Write(address, value);	// address line 10 indicates what VIA to index
+	// 0x0, 0x1 is CPU port
+	if (address == 0) {
+		pi1551.TIA.GetPortCPU().SetDirection(value)
+	}
+	else if (address == 1) {
+		pi1551.TIA.WriteCPUPort(value);
+	}
+	// 0x4000-0x4008 is TIA
+	else if (address >= 0x4000 && address < 0x4008) {
+		pi1551.TIA.Write(address, value)
+	}
+	else {
+		// otherwise it's RAM
+		s_u8Memory[address & 0x7fff] = value;
+	}
 }
 
 Pi1551::Pi1551()
@@ -184,7 +188,7 @@ void Pi1551::Update()
 	{
 		//This pin sets the overflow flag on a negative transition from TTL one to TTL zero.
 		// SO is sampled at the trailing edge of P1, the cpu V flag is updated at next P1.
-		m6502.SO();
+		m6502.SO(); //XXXMW not used in 1551
 	}
 
 	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
@@ -193,15 +197,7 @@ void Pi1551::Update()
 
 void Pi1551::Reset()
 {
-	// Must reset the VIAs first as the devices will initialise inputs (eg CA1 ports etc)
-	// - VIAs will reset the inputs to a default value
-	//		- devices will then set the inputs
-	//			- could cause a IR_CXX IRQ
-	//				- possibilities
-	//					- reset while an ATN
-	//					- reset while !BYTE SYNC
-	//			- should be fine as VIA's functionControlRegister is reset to 0 and IRQs will be turned off
 	TIA.Reset();
 	drive.Reset();
-	IEC_Bus::Reset();
+	IEC_Bus::Reset(); // XXXMW
 }
