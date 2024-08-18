@@ -162,14 +162,12 @@ void write6502ExtraRAM_1551(u16 address, const u8 value)
 
 Pi1551::Pi1551()
 {
-	VIA[0].ConnectIRQ(&m6502.IRQ);
-	VIA[1].ConnectIRQ(&m6502.IRQ);
+	TIA.ConnectIRQ(&m6502.IRQ);
 }
 
 void Pi1551::Initialise()
 {
-	VIA[0].ConnectIRQ(&m6502.IRQ);
-	VIA[1].ConnectIRQ(&m6502.IRQ);
+	TIA.ConnectIRQ(&m6502.IRQ);
 }
 
 //void Pi1551::ConfigureOfExtraRAM(bool extraRAM)
@@ -182,8 +180,6 @@ void Pi1551::Initialise()
 
 void Pi1551::Update()
 {
-	// XXXMW IRQ timer should run here, there is nothing to do for VIA
-	// IRQ source, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
 	if (drive.Update())
 	{
 		//This pin sets the overflow flag on a negative transition from TTL one to TTL zero.
@@ -191,14 +187,12 @@ void Pi1551::Update()
 		m6502.SO();
 	}
 
-	VIA[1].Execute();
-	VIA[0].Execute();
+	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
+	TIA.Execute();
 }
 
 void Pi1551::Reset()
 {
-	IOPort* VIABortB;
-
 	// Must reset the VIAs first as the devices will initialise inputs (eg CA1 ports etc)
 	// - VIAs will reset the inputs to a default value
 	//		- devices will then set the inputs
@@ -207,14 +201,7 @@ void Pi1551::Reset()
 	//					- reset while an ATN
 	//					- reset while !BYTE SYNC
 	//			- should be fine as VIA's functionControlRegister is reset to 0 and IRQs will be turned off
-	VIA[0].Reset();
-	VIA[1].Reset();
+	TIA.Reset();
 	drive.Reset();
 	IEC_Bus::Reset();
-	// On a real drive the outputs look like they are being pulled high (when set to inputs) (Taking an input from the front end of an inverter)
-	VIABortB = VIA[0].GetPortB();
-	VIABortB->SetInput(VIAPORTPINS_DATAOUT, true);
-	VIABortB->SetInput(VIAPORTPINS_CLOCKOUT, true);
-	VIABortB->SetInput(VIAPORTPINS_ATNAOUT, true);
 }
-

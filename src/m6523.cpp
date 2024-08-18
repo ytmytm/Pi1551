@@ -35,12 +35,22 @@ void m6523::Reset()
 	portB.SetDirection(0);
 	portC.SetDirection(0);
 	portCPU.SetDirection(0);
+	// reset NE555
+	ne555counter = 0;
 }
 
 // Update for a single cycle
 void m6523::Execute()
 {
-
+	// IRQ from NE555 active for a single cycle only
+	if (ne555counter == 0) {
+		if (irq) irq->Release();
+	}
+	ne555counter++;
+	if (ne555counter >= 10000) { // 100Hz, 10ms period, cycles counted at 1MHz
+		ne555counter = 0;
+		if (irq) irq->Assert();
+	}
 }
 
 unsigned char m6523::Read(unsigned int address)

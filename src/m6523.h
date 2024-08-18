@@ -96,6 +96,7 @@ public:
 	m6523();
 
 	void Reset();
+	void ConnectIRQ(Interrupt* irq) { this->irq = irq; }
 
 	inline IOPort* GetPortA() { return &portA; }
 	inline IOPort* GetPortB() { return &portB; }
@@ -128,6 +129,7 @@ public:
 	}
 
 private:
+
 	inline unsigned char ReadPortA()
 	{
 		unsigned char ddr = portA.GetDirection();
@@ -189,6 +191,10 @@ private:
 	IOPort portB;
 	IOPort portC;
 	IOPort portCPU;
+
+	Interrupt* irq;
+
+	unsigned int ne555counter;
 };
 
 #endif

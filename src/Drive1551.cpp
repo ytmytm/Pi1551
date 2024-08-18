@@ -378,10 +378,6 @@ void Drive::Reset()
 	ResetEncoderDecoder(18.0f, 22.0f);
 #endif
 	newDiskImageQueuedCylesRemaining = DISK_SWAP_CYCLES_DISK_EJECTING + DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING;
-	m_pVIA->InputCA1(true);	// Reset in read mode
-	m_pVIA->InputCB1(true);
-	m_pVIA->InputCA2(true);
-	m_pVIA->InputCB2(true);
 }
 
 void Drive::Insert(DiskImage* diskImage)
