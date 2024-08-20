@@ -38,9 +38,12 @@ extern "C"
 #include "options.h"
 #include "iec_commands.h"
 #include "diskio.h"
-#include "Pi1541.h"
+#if defined(PI1551SUPPORT)
 #include "Pi1551.h"
+#else
+#include "Pi1541.h"
 #include "Pi1581.h"
+#endif
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
 #include "SpinLock.h"
@@ -611,7 +614,6 @@ void UpdateScreen()
 				refreshLCDStatusDisplay = true;
 			}
 		}
-#endif
 		else if (emulating == EMULATING_1581)
 		{
 			track = pi1581.wd177x.GetCurrentTrack();
@@ -624,6 +626,7 @@ void UpdateScreen()
 				refreshLCDStatusDisplay = true;
 			}
 		}
+#endif
 		if (emulating != IEC_COMMANDS)
 		{
 			// Putting the semaphore around diskCaddy.Update() keeps this core awake and this breaks emulation on option B hardware.
@@ -1109,7 +1112,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	bool extraRAM = options.GetExtraRAM();
 	DataBusReadFn dataBusRead = extraRAM ? read6502ExtraRAM_1551 : read6502_1551;
 	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
-	pi1541.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
+	pi1551.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
 
 	IEC_Bus::VIA = &pi1551.VIA[0];
 	IEC_Bus::port = pi1551.VIA[0].GetPortB();
@@ -1545,14 +1548,19 @@ void emulator()
 	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
 #if defined(PI1551SUPPORT)
 	pi1551.Initialise();
-#else
-	pi1541.Initialise();
-#endif
 
 	m_IEC_Commands.SetAutoBootFB128(options.AutoBootFB128());
 	m_IEC_Commands.Set128BootSectorName(options.Get128BootSectorName());
 	m_IEC_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
 	m_IEC_Commands.SetNewDiskType(options.GetNewDiskType());
+#else
+	pi1541.Initialise();
+
+	m_IEC_Commands.SetAutoBootFB128(options.AutoBootFB128());
+	m_IEC_Commands.Set128BootSectorName(options.Get128BootSectorName());
+	m_IEC_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
+	m_IEC_Commands.SetNewDiskType(options.GetNewDiskType());
+#endif
 
 	emulating = IEC_COMMANDS;
 	while (1)
@@ -2231,7 +2239,7 @@ extern "C"
 		InitialiseLCD();
 #if not defined(EXPERIMENTALZERO)
 		int y_pos = 184;
-		snprintf(tempBuffer, tempBufferSize, "Copyright(C) 2018 Stephen White");
+		snprintf(tempBuffer, tempBufferSize, "Copyright(C) 2018 Stephen White, 2024 Maciej Witkowiak");
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 		snprintf(tempBuffer, tempBufferSize, "This program comes with ABSOLUTELY NO WARRANTY.");
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
@@ -2281,14 +2289,6 @@ extern "C"
 
 		CheckOptions();
 
-		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
-		IEC_Bus::SetInvertIECInputs(options.InvertIECInputs());
-		IEC_Bus::SetInvertIECOutputs(options.InvertIECOutputs());
-		IEC_Bus::SetIgnoreReset(options.IgnoreReset());
-		//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
-		IEC_Bus::SetRotaryEncoderEnable(options.RotaryEncoderEnable());
-		//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
-		IEC_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
 #if not defined(EXPERIMENTALZERO)
 		if (!options.SoundOnGPIO())
 		{
@@ -2314,6 +2314,32 @@ extern "C"
 				UpdateFirmwareToSD();
 		}
 #endif
+
+#if defined(PI1551SUPPORT)
+		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
+		IEC_Bus::SetIgnoreReset(options.IgnoreReset());
+		//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
+		IEC_Bus::SetRotaryEncoderEnable(options.RotaryEncoderEnable());
+		//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
+		IEC_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
+
+		f_chdir("/1551");
+
+		m_IEC_Commands.SetStarFileName(options.GetStarFileName());
+		GlobalSetDeviceID(deviceID);
+		pi1541.drive.SetVIA(&pi1541.VIA[1]);
+		pi1541.VIA[0].GetPortB()->SetPortOut(0, IEC_Bus::PortB_OnPortOut);
+		IEC_Bus::Initialise();
+#else
+		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
+		IEC_Bus::SetInvertIECInputs(options.InvertIECInputs());
+		IEC_Bus::SetInvertIECOutputs(options.InvertIECOutputs());
+		IEC_Bus::SetIgnoreReset(options.IgnoreReset());
+		//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
+		IEC_Bus::SetRotaryEncoderEnable(options.RotaryEncoderEnable());
+		//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
+		IEC_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
+
 		f_chdir("/1541");
 
 		m_IEC_Commands.SetStarFileName(options.GetStarFileName());
@@ -2323,6 +2349,7 @@ extern "C"
 		pi1541.drive.SetVIA(&pi1541.VIA[1]);
 		pi1541.VIA[0].GetPortB()->SetPortOut(0, IEC_Bus::PortB_OnPortOut);
 		IEC_Bus::Initialise();
+#endif
 		if (screenLCD)
 			screenLCD->ClearInit(0);
 
