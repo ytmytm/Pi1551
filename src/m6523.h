@@ -118,9 +118,7 @@ public:
 
 	inline unsigned char PeekCPUPort()
 	{
-		unsigned char ddr = portCPU.GetDirection();
-		unsigned char value = (unsigned char)((portCPU.GetInput() & ~ddr) | (portCPU.GetOutput() & ddr));
-		return value;
+		return ReadCPUPort();
 	}
 
 	inline void WriteCPUPort(unsigned char value)
@@ -139,9 +137,7 @@ private:
 
 	inline unsigned char PeekPortA()
 	{
-		unsigned char ddr = portA.GetDirection();
-		unsigned char value = (unsigned char)((portA.GetInput() & ~ddr) | (portA.GetOutput() & ddr));
-		return value;
+		return ReadPortA();
 	}
 
 	inline void WritePortA(unsigned char value)
@@ -158,9 +154,7 @@ private:
 
 	inline unsigned char PeekPortB()
 	{
-		unsigned char ddr = portB.GetDirection();
-		unsigned char value = (unsigned char)((portB.GetInput() & ~ddr) | (portB.GetOutput() & ddr));
-		return value;
+		return ReadPortB();
 	}
 
 	inline void WritePortB(unsigned char value)
@@ -177,9 +171,7 @@ private:
 
 	inline unsigned char PeekPortC()
 	{
-		unsigned char ddr = portC.GetDirection();
-		unsigned char value = (unsigned char)((portC.GetInput() & ~ddr) | (portC.GetOutput() & ddr));
-		return value;
+		return ReadPortC();
 	}
 
 	inline void WritePortC(unsigned char value)
