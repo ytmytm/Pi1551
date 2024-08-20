@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
-#include "Drive.h"
+#include "Drive1551.h"
 #include "m6523.h"
 #include "debug.h"
 
@@ -450,13 +450,13 @@ bool Drive::Update()
 	{
 		newDiskImageQueuedCylesRemaining--;
 		if (newDiskImageQueuedCylesRemaining == 0) m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly()); // X Write protect status of D2
-		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPU->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
+		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
 		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPI->GetPortCPU()->SetInput(0x10, true); // 1 Not write protected (no disk)
 		else m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D2 inserting)
 	}
 	else if (diskImage && motor)
 	{
-		bool writing = m_pTPI->GetPortC()->PeekPortA() & 0x10; // XXXMW: negated or not?
+		bool writing = m_pTPI->GetPortC()->GetInput() & 0x10; // XXXMW: negated or not?
 
 		if (SO)
 		{

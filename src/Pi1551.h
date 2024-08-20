@@ -56,7 +56,7 @@ public:
 
 	//void ConfigureOfExtraRAM(bool extraRAM);
 
-	Drive1551 drive;
+	Drive drive;
 	m6523 TPI;
 
 	M6502 m6502;
