@@ -346,7 +346,7 @@ extern "C"
 
 Drive::Drive()
 	: diskImage(0)
-	, m_pVIA(0)
+	, m_pTPI(0)
 {
 	srand(0x811c9dc5U);
 #if defined(EXPERIMENTALZERO)
@@ -397,7 +397,7 @@ void Drive::DumpTrack(unsigned track)
 	if (diskImage) diskImage->DumpTrack(track);
 }
 
-// Signals from the VIA.
+// Signals from the CPU port.
 void Drive::OnPortOut(void* pThis, unsigned char status)
 {
 	Drive* pDrive = (Drive*)pThis;
@@ -449,15 +449,14 @@ bool Drive::Update()
 	if (newDiskImageQueuedCylesRemaining > 0)
 	{
 		newDiskImageQueuedCylesRemaining--;
-		if (newDiskImageQueuedCylesRemaining == 0) m_pVIA->GetPortB()->SetInput(0x10, !diskImage->GetReadOnly()); // X Write protect status of D2
-		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING) m_pVIA->GetPortB()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
-		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_DISK_INSERTING) m_pVIA->GetPortB()->SetInput(0x10, true); // 1 Not write protected (no disk)
-		else m_pVIA->GetPortB()->SetInput(0x10, false); // 0 Write protected (D2 inserting)
+		if (newDiskImageQueuedCylesRemaining == 0) m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly()); // X Write protect status of D2
+		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPU->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
+		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPI->GetPortCPU()->SetInput(0x10, true); // 1 Not write protected (no disk)
+		else m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D2 inserting)
 	}
 	else if (diskImage && motor)
 	{
-		unsigned char FCR = m_pVIA->GetFCR();
-		bool writing = ((FCR & m6523::FCR_CB2_OUTPUT_MODE0) == 0) && ((FCR & m6523::FCR_CB2_IO) != 0);
+		bool writing = m_pTPI->GetPortC()->PeekPortA() & 0x10; // XXXMW: negated or not?
 
 		if (SO)
 		{
@@ -543,11 +542,11 @@ bool Drive::Update()
 					if (!writing && ((readShiftRegister & 0x3ff) == 0x3ff))	// if the last 10 bits are 1s then SYNC
 					{
 						UE3Counter = 0;	// Phase lock on to byte boundary
-						m_pVIA->GetPortB()->SetInput(0x80, false);			// PB7 active low SYNC
+						m_pTPI->GetPortC()->SetInput(0x40, false);			// PC6 active low SYNC
 					}
 					else
 					{
-						if (!writing) m_pVIA->GetPortB()->SetInput(0x80, true); // SYNC not asserted if not following the SYNC bits
+						if (!writing) m_pTPI->GetPortC()->SetInput(0x40, true); // SYNC not asserted if not following the SYNC bits
 						UE3Counter++;
 					}
 				}
@@ -555,22 +554,22 @@ bool Drive::Update()
 				else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 				{
 					UE3Counter = 0;
-					SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
+					SO = true;
 					if (writing) 
 					{
-						writeShiftRegister = m_pVIA->GetPortA()->GetOutput();
+						writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
 					}
 					else
 					{
 						writeShiftRegister = (u8)(readShiftRegister & 0xff);
-						m_pVIA->GetPortA()->SetInput(writeShiftRegister);
+						m_pTPI->GetPortB()->SetInput(writeShiftRegister);
 					}
 				}
 			}
 		}
 #endif
 	}
-	m_pVIA->InputCA1(!SO);
+	m_pTPI->GetPortCPU()->SetInput(0x80, SO);			// byte latched 1=yes, 0=no
 
 #if defined(PROFILE)
 	read_performance_counters(&pct);
@@ -613,7 +612,7 @@ void Drive::DriveLoopReadNoFluxNoCycles()
 			//writeShiftRegister <<= 1;
 			
 			bool resetTime = ((readShiftRegister & 0x3ff) == 0x3ff);
-			m_pVIA->GetPortB()->SetInput(0x80, !resetTime);
+			m_pTPI->GetPortC()->SetInput(0x40, !resetTime);
 			if (resetTime)	// if the last 10 bits are 1s then SYNC
 				UE3Counter = 0;	// Phase lock on to byte boundary
 			else
@@ -625,7 +624,7 @@ void Drive::DriveLoopReadNoFluxNoCycles()
 			UE3Counter = 0;
 			SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
 //			writeShiftRegister = readShiftRegister;
-			m_pVIA->GetPortA()->SetInput(readShiftRegister & 0xff);
+			m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 		}
 	};
 }
@@ -685,7 +684,7 @@ void Drive::DriveLoopReadNoFlux()
 				//writeShiftRegister <<= 1;
 
 				bool resetTime = ((readShiftRegister & 0x3ff) == 0x3ff);
-				m_pVIA->GetPortB()->SetInput(0x80, !resetTime);
+				m_pTPI->GetPortC()->SetInput(0x40, !resetTime);
 				if (resetTime)	// if the last 10 bits are 1s then SYNC
 					UE3Counter = 0;	// Phase lock on to byte boundary
 				else
@@ -695,9 +694,9 @@ void Drive::DriveLoopReadNoFlux()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
+				SO = true;
 	//			writeShiftRegister = readShiftRegister;
-				m_pVIA->GetPortA()->SetInput(readShiftRegister & 0xff);
+				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
 		}
 	};
@@ -738,7 +737,7 @@ void Drive::DriveLoopReadNoCycles()
 				//writeShiftRegister <<= 1;
 
 				bool resetTime = ((readShiftRegister & 0x3ff) == 0x3ff);
-				m_pVIA->GetPortB()->SetInput(0x80, !resetTime);
+				m_pTPI->GetPortC()->SetInput(0x40, !resetTime);
 				if (resetTime)	// if the last 10 bits are 1s then SYNC
 					UE3Counter = 0;	// Phase lock on to byte boundary
 				else
@@ -748,9 +747,9 @@ void Drive::DriveLoopReadNoCycles()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
+				SO = true;
 	//			writeShiftRegister = readShiftRegister;
-				m_pVIA->GetPortA()->SetInput(readShiftRegister & 0xff);
+				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
 		}
 	};
@@ -803,7 +802,7 @@ void Drive::DriveLoopRead()
 				//writeShiftRegister <<= 1;
 
 				bool resetTime = ((readShiftRegister & 0x3ff) == 0x3ff);
-				m_pVIA->GetPortB()->SetInput(0x80, !resetTime);
+				m_pTPI->GetPortC()->SetInput(0x40, !resetTime);
 				if (resetTime)	// if the last 10 bits are 1s then SYNC
 					UE3Counter = 0;	// Phase lock on to byte boundary
 				else
@@ -813,9 +812,9 @@ void Drive::DriveLoopRead()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
+				SO = true;
 	//			writeShiftRegister = readShiftRegister;
-				m_pVIA->GetPortA()->SetInput(readShiftRegister & 0xff);
+				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
 		}
 	};
@@ -855,8 +854,8 @@ void Drive::DriveLoopWrite()
 		else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 		{
 			UE3Counter = 0;
-			SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
-			writeShiftRegister = m_pVIA->GetPortA()->GetOutput();
+			SO = true;
+			writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
 		}
 	}
 }

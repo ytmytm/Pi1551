@@ -39,10 +39,10 @@ class Drive
 public:
 	Drive();
 
-	void SetVIA(m6523* pVIA)
+	void SetTPI(m6523* pTPI)
 	{
-		m_pVIA = pVIA;
-		pVIA->GetPortB()->SetPortOut(this, OnPortOut);
+		m_pTPI = pTPI;
+		pTPI->GetPortCPU()->SetPortOut(this, OnPortOut);
 	}
 
 	static void OnPortOut(void*, unsigned char status);
@@ -182,7 +182,7 @@ private:
 	//	- check pulled H/L
 	// CB2 (output)
 	//	- R/!W
-	m6523* m_pVIA;
+	m6523* m_pTPI;
 #if defined(EXPERIMENTALZERO)
 	unsigned int cyclesLeftForBit;
 	unsigned int fluxReversalCyclesLeft;
