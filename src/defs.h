@@ -2,7 +2,7 @@
 #define DEFS_H
 
 #include "debug.h"
-#define PI1581SUPPORT 1
+//#define PI1581SUPPORT 1
 #define PI1551SUPPORT 1
 // Indicates a Pi with the 40 pin GPIO connector
 // so that additional functionality (e.g. test pins) can be enabled
