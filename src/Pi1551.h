@@ -23,6 +23,25 @@
 #include "m6502.h"
 #include "iec_bus.h"
 
+// handled ports
+// PA 0:7 DATA:TCBM - not
+// PB 0:7 (head) - yes, Drive1551.cpp
+// PC 7:DAV:TCBM - not
+// PC 6:SYNC - yes, Drive1551.cpp (active low) ($1C00 bit 7, VIA#2 port B) ??? zanegowac
+// PC 5:DEVNUM - yes, Pi1551.h SetDeviceID
+// PC 4:MODE - yes, Drive1551.cpp 'writing' ??? zanegowane
+// PC 3:ACK:TCBM - not
+// PC 2:DEV:TCBM - not
+// PC 01:STATUS:TCBM - not
+
+// CPU ~ $1C00 (VIA#2 port B) GetPortCPU
+// CPU 7:byte latch - yes, Drive1551.cpp (SO, VIA - CA1, ale chyba zanegowane bo 1=latched, 0=nie)
+// CPU 56:density - yes, Drive1551.h OnPortOut
+// CPU 4:wps - yes, Drive1551.cpp disk change
+// CPU 3:led - yes, Drive1551.h OnPortOut
+// CPU 2:motor - yes, Drive1551.h OnPortOut
+// CPU 01:stepper - yes, Drive1551.h OnPortOut
+
 class Pi1551
 {
 
