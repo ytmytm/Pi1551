@@ -2327,7 +2327,7 @@ extern "C"
 
 		m_IEC_Commands.SetStarFileName(options.GetStarFileName());
 		GlobalSetDeviceID(deviceID);
-		pi1541.drive.SetVIA(&pi1541.VIA[1]);
+		pi1551.drive.SetTPI(&pi1551.TPI);
 		pi1541.VIA[0].GetPortB()->SetPortOut(0, IEC_Bus::PortB_OnPortOut);
 		IEC_Bus::Initialise();
 #else
