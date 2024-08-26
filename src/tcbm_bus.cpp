@@ -34,7 +34,6 @@ u32 TCBM_Bus::PIGPIO_MASK_IN_RESET = 1 << PIGPIO_RESET;
 bool TCBM_Bus::PI_Atn = false;
 bool TCBM_Bus::PI_Data = false;
 bool TCBM_Bus::PI_Clock = false;
-bool TCBM_Bus::PI_SRQ = false;
 bool TCBM_Bus::PI_Reset = false;
 
 bool TCBM_Bus::VIA_Atna = false;
@@ -44,10 +43,8 @@ bool TCBM_Bus::VIA_Clock = false;
 bool TCBM_Bus::DataSetToOut = false;
 bool TCBM_Bus::AtnaDataSetToOut = false;
 bool TCBM_Bus::ClockSetToOut = false;
-bool TCBM_Bus::SRQSetToOut = false;
 
 m6522* TCBM_Bus::VIA = 0;
-m8520* TCBM_Bus::CIA = 0;
 IOPort* TCBM_Bus::port = 0;
 
 bool TCBM_Bus::OutputLED = false;
@@ -275,82 +272,6 @@ void TCBM_Bus::ReadEmulationMode1541(void)
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (invertIECInputs ? PIGPIO_MASK_IN_RESET : 0));
 }
 
-void TCBM_Bus::ReadEmulationMode1581(void)
-{
-	IOPort* portB = 0;
-	gplev0 = read32(ARM_GPIO_GPLEV0);
-
-	portB = port;
-
-	bool ATNIn = (gplev0 & PIGPIO_MASK_IN_ATN) == (invertIECInputs ? PIGPIO_MASK_IN_ATN : 0);
-	if (PI_Atn != ATNIn)
-	{
-		PI_Atn = ATNIn;
-
-		//DEBUG_LOG("A%d\r\n", PI_Atn);
-		//if (port)
-		{
-			if ((portB->GetDirection() & 0x10) != 0)
-			{
-				// Emulate the XOR gate UD3
-				// We only need to do this when fully emulating, iec commands do this internally
-				AtnaDataSetToOut = (VIA_Atna & PI_Atn);
-			}
-
-			portB->SetInput(VIAPORTPINS_ATNIN, ATNIn);	//is inverted and then connected to pb7 and ca1
-			CIA->SetPinFLAG(!ATNIn);
-		}
-	}
-
-	if (portB && (portB->GetDirection() & 0x10) == 0)
-		AtnaDataSetToOut = false; // If the ATNA PB4 gets set to an input then we can't be pulling data low. (Maniac Mansion does this)
-
-	if (!AtnaDataSetToOut && !DataSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool DATAIn = (gplev0 & PIGPIO_MASK_IN_DATA) == (invertIECInputs ? PIGPIO_MASK_IN_DATA : 0);
-		if (PI_Data != DATAIn)
-		{
-			PI_Data = DATAIn;
-			portB->SetInput(VIAPORTPINS_DATAIN, DATAIn);	// VIA DATAin pb0 output from inverted DIN 5 DATA
-		}
-	}
-	else
-	{
-		PI_Data = true;
-		portB->SetInput(VIAPORTPINS_DATAIN, true);	// simulate the read in software
-	}
-
-	if (!ClockSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool CLOCKIn = (gplev0 & PIGPIO_MASK_IN_CLOCK) == (invertIECInputs ? PIGPIO_MASK_IN_CLOCK : 0);
-		if (PI_Clock != CLOCKIn)
-		{
-			PI_Clock = CLOCKIn;
-			portB->SetInput(VIAPORTPINS_CLOCKIN, CLOCKIn); // VIA CLKin pb2 output from inverted DIN 4 CLK
-		}
-	}
-	else
-	{
-		PI_Clock = true;
-		portB->SetInput(VIAPORTPINS_CLOCKIN, true); // simulate the read in software
-	}
-
-	if (!SRQSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool SRQIn = (gplev0 & PIGPIO_MASK_IN_SRQ) == (invertIECInputs ? PIGPIO_MASK_IN_SRQ : 0);
-		if (PI_SRQ != SRQIn)
-		{
-			PI_SRQ = SRQIn;
-		}
-	}
-	else
-	{
-		PI_SRQ = true;
-	}
-
-	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (invertIECInputs ? PIGPIO_MASK_IN_RESET : 0));
-}
-
 void TCBM_Bus::RefreshOuts1541(void)
 {
 	unsigned set = 0;
@@ -467,12 +388,10 @@ void TCBM_Bus::Reset(void)
 
 	DataSetToOut = false;
 	ClockSetToOut = false;
-	SRQSetToOut = false;
 
 	PI_Atn = false;
 	PI_Data = false;
 	PI_Clock = false;
-	PI_SRQ = false;
 
 #ifdef REAL_XOR
 	AtnaDataSetToOut = VIA_Atna;
@@ -485,6 +404,5 @@ void TCBM_Bus::Reset(void)
 	if (AtnaDataSetToOut) PI_Data = true;
 #endif
 
-	RefreshOuts1581();
 }
 

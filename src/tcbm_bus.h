@@ -387,12 +387,6 @@ public:
 
 	}
 
-	static inline void LetSRQBePulledHigh()
-	{
-		SRQSetToOut = TCBM_Bus::invertIECInputs;
-		RefreshOuts1581();
-	}
-
 #if defined(EXPERIMENTALZERO)
 	static inline bool AnyButtonPressed()
 	{
@@ -477,7 +471,6 @@ public:
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
 	static void ReadEmulationMode1541(void);
-	static void ReadEmulationMode1581(void);
 
 	static void WaitUntilReset(void)
 	{
@@ -499,51 +492,6 @@ public:
 
 	static void RefreshOuts1541(void);
 
-	static inline void RefreshOuts1581(void)
-	{
-		unsigned set = 0;
-		unsigned clear = 0;
-		unsigned tmp;
-
-		if (!splitIECLines)
-		{
-			unsigned outputs = 0;
-
-			if (AtnaDataSetToOut || DataSetToOut) outputs |= (FS_OUTPUT << ((PIGPIO_DATA - 10) * 3));
-			if (ClockSetToOut) outputs |= (FS_OUTPUT << ((PIGPIO_CLOCK - 10) * 3));
-			//if (SRQSetToOut) outputs |= (FS_OUTPUT << ((PIGPIO_SRQ - 10) * 3));			// For Option A hardware we should not support pulling more than 2 lines low at any one time!
-
-			unsigned nValue = (myOutsGPFSEL1 & PI_OUTPUT_MASK_GPFSEL1) | outputs;
-			write32(ARM_GPIO_GPFSEL1, nValue);
-		}
-		else
-		{
-			if (AtnaDataSetToOut || DataSetToOut) set |= 1 << PIGPIO_OUT_DATA;
-			else clear |= 1 << PIGPIO_OUT_DATA;
-
-			if (ClockSetToOut) set |= 1 << PIGPIO_OUT_CLOCK;
-			else clear |= 1 << PIGPIO_OUT_CLOCK;
-
-			if (SRQSetToOut) set |= 1 << PIGPIO_OUT_SRQ;	// fast clock is pulled high but we have an inverter in our hardware so to compensate we invert in software now
-			else clear |= 1 << PIGPIO_OUT_SRQ;
-
-			if (!invertIECOutputs) {
-				tmp = set;
-				set = clear;
-				clear = tmp;
-			}
-		}
-
-		if (OutputLED) set |= 1 << PIGPIO_OUT_LED;
-		else clear |= 1 << PIGPIO_OUT_LED;
-
-		if (OutputSound) set |= 1 << PIGPIO_OUT_SOUND;
-		else clear |= 1 << PIGPIO_OUT_SOUND;
-
-		write32(ARM_GPIO_GPSET0, set);
-		write32(ARM_GPIO_GPCLR0, clear);
-	}
-
 	static void WaitMicroSeconds(u32 amount)
 	{
 		u32 count;
@@ -559,17 +507,6 @@ public:
 				after = read32(ARM_SYSTIMER_CLO);
 			} while (after == before);
 		}
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////
-	// 1581 Fast Serial
-	static inline void SetFastSerialData(bool value)
-	{
-		DataSetToOut = value;
-	}
-	static inline void SetFastSerialSRQ(bool value)
-	{
-		SRQSetToOut = value;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////
@@ -608,7 +545,6 @@ public:
 		}
 	}
 
-	static inline bool GetPI_SRQ() { return PI_SRQ; }
 	static inline bool GetPI_Atn() { return PI_Atn; }
 	static inline bool IsAtnAsserted() { return PI_Atn; }
 	static inline bool IsAtnReleased() { return !PI_Atn; }
@@ -654,7 +590,6 @@ public:
 			PI_Atn = !PI_Atn;
 			PI_Data = !PI_Data;
 			PI_Clock = !PI_Clock;
-			PI_SRQ = !PI_SRQ;
 			PI_Reset = !PI_Reset;
 		}
 	}
@@ -687,7 +622,6 @@ public:
 	// CA2, CB1 and CB2 are not connected
 	//	- check if pulled high or low
 	static m6522* VIA;
-	static m8520* CIA;
 	static IOPort* port;
 
 	static void Reset(void);
@@ -723,7 +657,6 @@ private:
 	static bool PI_Atn;
 	static bool PI_Data;
 	static bool PI_Clock;
-	static bool PI_SRQ;
 	static bool PI_Reset;
 
 	static bool VIA_Atna;
@@ -733,7 +666,6 @@ private:
 	static bool DataSetToOut;
 	static bool AtnaDataSetToOut;
 	static bool ClockSetToOut;
-	static bool SRQSetToOut;
 	static bool Resetting;
 
 	static int buttonCount;
