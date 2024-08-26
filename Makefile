@@ -5,6 +5,8 @@ OBJS	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 	Pi1551.o \
 	Drive1551.o \
 	m6523.o \
+	tcbm_bus.o \
+	tcbm_commands.o \
 	gcr.o prot.o lz.o emmc.o diskio.o options.o Screen.o SSD1306.o ScreenLCD.o \
 	Timer.o FileBrowser.o DiskCaddy.o ROMs.o InputMappings.o xga_font_data.o m8520.o wd177x.o Pi1581.o SpinLock.o
 
