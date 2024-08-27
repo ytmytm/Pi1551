@@ -1108,18 +1108,16 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	inputMappings->directDiskSwapRequest = 0;
 	// Force an update on all the buttons now before we start emulation mode. 
-	IEC_Bus::ReadBrowseMode();
+	TCBM_Bus::ReadBrowseMode();
 
 	bool extraRAM = options.GetExtraRAM();
 	DataBusReadFn dataBusRead = extraRAM ? read6502ExtraRAM_1551 : read6502_1551;
 	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
 	pi1551.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
 
-	IEC_Bus::VIA = &pi1551.VIA[0];
-	IEC_Bus::port = pi1551.VIA[0].GetPortB();
-	pi1551.Reset();	// will call IEC_Bus::Reset();
-
-	IEC_Bus::LetSRQBePulledHigh();
+	TCBM_Bus::TPI = &pi1551.TPI;
+	TCBM_Bus::port = pi1551.TPI.GetPortA();
+	pi1551.Reset();	// will call TCBM_Bus::Reset();
 
 	//resetWhileEmulating = false;
 	selectedViaIECCommands = false;
@@ -1141,7 +1139,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	while (cycleCount < FAST_BOOT_CYCLES)
 	{
-		IEC_Bus::ReadEmulationMode1541();
+		TCBM_Bus::ReadEmulationMode1551();
 
 		pi1551.m6502.SYNC();
 
@@ -1162,8 +1160,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	while (exitReason == EXIT_UNKNOWN)
 	{
-		IEC_Bus::ReadEmulationMode1541();
-	// XXXMW
+		TCBM_Bus::ReadEmulationMode1551();
 
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
@@ -1186,15 +1183,14 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			pi1551.Update();
 		}
 
-		IEC_Bus::RefreshOuts1541();	// Now output all outputs.
- // XXXMW
+		TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
 
-		IEC_Bus::OutputLED = pi1551.drive.IsLEDOn();
+		TCBM_Bus::OutputLED = pi1551.drive.IsLEDOn();
 #if defined(RPI3)
-		if (IEC_Bus::OutputLED ^ oldLED)
+		if (TCBM_Bus::OutputLED ^ oldLED)
 		{
-			SetACTLed(IEC_Bus::OutputLED);
-			oldLED = IEC_Bus::OutputLED;
+			SetACTLed(TCBM_Bus::OutputLED);
+			oldLED = TCBM_Bus::OutputLED;
 		}
 #endif
 
@@ -2329,7 +2325,7 @@ extern "C"
 		m_IEC_Commands.SetStarFileName(options.GetStarFileName());
 		GlobalSetDeviceID(deviceID);
 		pi1551.drive.SetTPI(&pi1551.TPI);
-		pi1541.VIA[0].GetPortB()->SetPortOut(0, IEC_Bus::PortB_OnPortOut);
+		pi1551.TPI.GetPortB()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
 		IEC_Bus::Initialise();
 #else
 		IEC_Bus::SetSplitIECLines(options.SplitIECLines());

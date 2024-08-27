@@ -21,8 +21,7 @@
 
 #include "defs.h"
 #include "debug.h"
-#include "m6522.h"
-#include "m8520.h"
+#include "m6523.h"
 
 #include "rpi-gpio.h"
 #include "rpiHardware.h"
@@ -470,7 +469,7 @@ public:
 
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
-	static void ReadEmulationMode1541(void);
+	static void ReadEmulationMode1551(void);
 
 	static void WaitUntilReset(void)
 	{
@@ -478,8 +477,7 @@ public:
 		do
 		{
 			gplev0 = read32(ARM_GPIO_GPLEV0);
-			Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == \
-				 (invertIECInputs ? PIGPIO_MASK_IN_RESET : 0));
+			Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));
 
 			if (Resetting)
 				TCBM_Bus::WaitMicroSeconds(100);
@@ -488,9 +486,9 @@ public:
 	}
 
 	// Out going
-	static void PortB_OnPortOut(void* pUserData, unsigned char status);
+	static void PortA_OnPortOut(void* pUserData, unsigned char status);
 
-	static void RefreshOuts1541(void);
+	static void RefreshOuts1551(void);
 
 	static void WaitMicroSeconds(u32 amount)
 	{
@@ -516,7 +514,7 @@ public:
 		if (!DataSetToOut)
 		{
 			DataSetToOut = true;
-			RefreshOuts1541();
+			RefreshOuts1551();
 		}
 	}
 	static inline void ReleaseData()
@@ -524,40 +522,13 @@ public:
 		if (DataSetToOut)
 		{
 			DataSetToOut = false;
-			RefreshOuts1541();
+			RefreshOuts1551();
 		}
 	}
 
-	static inline void AssertClock()
-	{
-		if (!ClockSetToOut)
-		{
-			ClockSetToOut = true;
-			RefreshOuts1541();
-		}
-	}
-	static inline void ReleaseClock()
-	{
-		if (ClockSetToOut)
-		{
-			ClockSetToOut = false;
-			RefreshOuts1541();
-		}
-	}
-
-	static inline bool GetPI_Atn() { return PI_Atn; }
-	static inline bool IsAtnAsserted() { return PI_Atn; }
-	static inline bool IsAtnReleased() { return !PI_Atn; }
-	static inline bool GetPI_Data() { return PI_Data; }
-	static inline bool IsDataAsserted() { return PI_Data; }
-	static inline bool IsDataReleased() { return !PI_Data; }
-	static inline bool GetPI_Clock() { return PI_Clock; }
-	static inline bool IsClockAsserted() { return PI_Clock; }
-	static inline bool IsClockReleased() { return !PI_Clock; }
+	static inline u8 GetPI_Data() { return PI_Data; }
 	static inline bool GetPI_Reset() { return PI_Reset; }
 	static inline bool IsDataSetToOut() { return DataSetToOut; }
-	//static inline bool IsAtnaDataSetToOut() { return AtnaDataSetToOut; }
-	static inline bool IsClockSetToOut() { return ClockSetToOut; }
 	static inline bool IsReset() { return Resetting; }
 
 	static inline void WaitWhileAtnAsserted()
@@ -582,23 +553,6 @@ public:
 		}
 	}
 
-	static inline void SetInvertIECInputs(bool value) 
-	{
-		invertIECInputs = value;
-		if (value)
-		{
-			PI_Atn = !PI_Atn;
-			PI_Data = !PI_Data;
-			PI_Clock = !PI_Clock;
-			PI_Reset = !PI_Reset;
-		}
-	}
-
-	static inline void SetInvertIECOutputs(bool value)
-	{
-		invertIECOutputs = value;
-	}
-
 	static inline void SetIgnoreReset(bool value)
 	{
 		ignoreReset = value;
@@ -616,12 +570,7 @@ public:
 		rotaryEncoderInvert = value;
 	}
 
-	// CA1 input ATN
-	// If CA1 is ever set to output
-	//	- CA1 will start to drive pb7
-	// CA2, CB1 and CB2 are not connected
-	//	- check if pulled high or low
-	static m6522* VIA;
+	static m6523* TPI;
 	static IOPort* port;
 
 	static void Reset(void);
@@ -640,8 +589,6 @@ private:
 	static u32 oldSets;
 
 	static bool splitIECLines;
-	static bool invertIECInputs;
-	static bool invertIECOutputs;
 	static bool ignoreReset;
 
 	static u32 PIGPIO_MASK_IN_ATN;
@@ -654,18 +601,18 @@ private:
 
 	static unsigned gplev0;
 
-	static bool PI_Atn;
-	static bool PI_Data;
-	static bool PI_Clock;
+	static u8 PI_Data;
+	static u8 PI_Status;
+	static bool PI_ACK;
+	static bool PI_DEV;
 	static bool PI_Reset;
 
-	static bool VIA_Atna;
-	static bool VIA_Data;
-	static bool VIA_Clock;
+	static u8 TPI_Data;
+	static u8 TPI_Status;
+	static bool TPI_ACK;
+	static bool TPI_DEV;
 
 	static bool DataSetToOut;
-	static bool AtnaDataSetToOut;
-	static bool ClockSetToOut;
 	static bool Resetting;
 
 	static int buttonCount;
