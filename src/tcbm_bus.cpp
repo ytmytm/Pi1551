@@ -29,12 +29,14 @@ u32 TCBM_Bus::oldSets = 0;
 u8 TCBM_Bus::PI_Data = 0;
 u8 TCBM_Bus::PI_Status = 0;
 bool TCBM_Bus::PI_ACK = false;
+bool TCBM_Bus::PI_DAV = false;
 bool TCBM_Bus::PI_DEV = false;
 bool TCBM_Bus::PI_Reset = false;
 
 u8 TCBM_Bus::TPI_Data = 0;
 u8 TCBM_Bus::TPI_Status = 0;
 bool TCBM_Bus::TPI_ACK = false;
+bool TCBM_Bus::TPI_DAV = false;
 bool TCBM_Bus::TPI_DEV = false;
 
 bool TCBM_Bus::DataSetToOut = false;
@@ -129,42 +131,24 @@ void TCBM_Bus::ReadGPIOUserInput()
 
 //ROTARY: Modified for rotary encoder support - 09/05/2019 by Geo...
 /// @brief read real I/O pins in browser mode + read the rotary encoder/buttons
+///        don't update TIA port status
 /// @param  
 void TCBM_Bus::ReadBrowseMode(void)
 {
 	gplev0 = read32(ARM_GPIO_GPLEV0);
 	ReadGPIOUserInput();
 
-	bool ATNIn = (gplev0 & PIGPIO_MASK_IN_ATN) == (PIGPIO_MASK_IN_ATN);
-	if (PI_Atn != ATNIn)
-	{
-		PI_Atn = ATNIn;
-	}
+	PI_DAV  = gplev0 & PIGPIO_MASK_IN_DAV == PIGPIO_MASK_IN_DAV;
 
-	if (!AtnaDataSetToOut && !DataSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool DATAIn = (gplev0 & PIGPIO_MASK_IN_DATA) == (PIGPIO_MASK_IN_DATA);
-		if (PI_Data != DATAIn)
-		{
-			PI_Data = DATAIn;
-		}
-	}
-	else
-	{
-		PI_Data = true;
-	}
-
-	if (!ClockSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool CLOCKIn = (gplev0 & PIGPIO_MASK_IN_CLOCK) == (PIGPIO_MASK_IN_CLOCK);
-		if (PI_Clock != CLOCKIn)
-		{
-			PI_Clock = CLOCKIn;
-		}
-	}
-	else
-	{
-		PI_Clock = true;
+	if (!DataSetToOut) { // we treat port A on byte level, not bit level
+		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
+			(gplev0 & PIGPIO_DIO2 ? 0x02 : 0x00) |
+			(gplev0 & PIGPIO_DIO3 ? 0x04 : 0x00) |
+			(gplev0 & PIGPIO_DIO4 ? 0x08 : 0x00) |
+			(gplev0 & PIGPIO_DIO5 ? 0x10 : 0x00) |
+			(gplev0 & PIGPIO_DIO6 ? 0x20 : 0x00) |
+			(gplev0 & PIGPIO_DIO7 ? 0x40 : 0x00) |
+			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
 	}
 
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));
@@ -174,94 +158,24 @@ void TCBM_Bus::ReadBrowseMode(void)
 /// @param  
 void TCBM_Bus::ReadEmulationMode1551(void)
 {
-	IOPort* portB = 0;
+	IOPort* portC = TPI->GetPortC();
+
 	gplev0 = read32(ARM_GPIO_GPLEV0);
 
-	portB = port;
+	PI_DAV  = gplev0 & PIGPIO_MASK_IN_DAV == PIGPIO_MASK_IN_DAV;
+	portC -> SetInput(0x80, PI_DAV); // DAV is bit 7
 
-#ifndef REAL_XOR
-	bool ATNIn = (gplev0 & PIGPIO_MASK_IN_ATN) == (PIGPIO_MASK_IN_ATN);
-	if (PI_Atn != ATNIn)
-	{
-		PI_Atn = ATNIn;
-
-		//DEBUG_LOG("A%d\r\n", PI_Atn);
-		//if (port)
-		{
-			if ((portB->GetDirection() & 0x10) != 0)
-			{
-				// Emulate the XOR gate UD3
-				// We only need to do this when fully emulating, iec commands do this internally
-				AtnaDataSetToOut = (VIA_Atna != PI_Atn);
-			}
-
-			portB->SetInput(VIAPORTPINS_ATNIN, ATNIn);	//is inverted and then connected to pb7 and ca1
-			VIA->InputCA1(ATNIn);
-		}
-	}
-
-	if (portB && (portB->GetDirection() & 0x10) == 0)
-		AtnaDataSetToOut = false; // If the ATNA PB4 gets set to an input then we can't be pulling data low. (Maniac Mansion does this)
-
-	// moved from PortB_OnPortOut
-	if (AtnaDataSetToOut)
-		portB->SetInput(VIAPORTPINS_DATAIN, true);	// simulate the read in software
-
-	if (!AtnaDataSetToOut && !DataSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool DATAIn = (gplev0 & PIGPIO_MASK_IN_DATA) == (PIGPIO_MASK_IN_DATA);
-		//if (PI_Data != DATAIn)
-		{
-			PI_Data = DATAIn;
-			portB->SetInput(VIAPORTPINS_DATAIN, DATAIn);	// VIA DATAin pb0 output from inverted DIN 5 DATA
-		}
-	}
-	else
-	{
-		PI_Data = true;
-		portB->SetInput(VIAPORTPINS_DATAIN, true);	// simulate the read in software
-	}
-#else
-	bool ATNIn = (gplev0 & PIGPIO_MASK_IN_ATN) == (PIGPIO_MASK_IN_ATN);
-	if (PI_Atn != ATNIn)
-	{
-		PI_Atn = ATNIn;
-
-		{
-			portB->SetInput(VIAPORTPINS_ATNIN, ATNIn);	//is inverted and then connected to pb7 and ca1
-			VIA->InputCA1(ATNIn);
-		}
-	}
-
-	if (!DataSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool DATAIn = (gplev0 & PIGPIO_MASK_IN_DATA) == (PIGPIO_MASK_IN_DATA);
-		//if (PI_Data != DATAIn)
-		{
-			PI_Data = DATAIn;
-			portB->SetInput(VIAPORTPINS_DATAIN, DATAIn);	// VIA DATAin pb0 output from inverted DIN 5 DATA
-		}
-	}
-	else
-	{
-		PI_Data = true;
-		portB->SetInput(VIAPORTPINS_DATAIN, true);	// simulate the read in software
-	}
-
-#endif
-	if (!ClockSetToOut)	// only sense if we have not brought the line low (because we can't as we have the pin set to output but we can simulate in software)
-	{
-		bool CLOCKIn = (gplev0 & PIGPIO_MASK_IN_CLOCK) == (PIGPIO_MASK_IN_CLOCK);
-		//if (PI_Clock != CLOCKIn)
-		{
-			PI_Clock = CLOCKIn;
-			portB->SetInput(VIAPORTPINS_CLOCKIN, CLOCKIn); // VIA CLKin pb2 output from inverted DIN 4 CLK
-		}
-	}
-	else
-	{
-		PI_Clock = true;
-		portB->SetInput(VIAPORTPINS_CLOCKIN, true); // simulate the read in software
+	if (!DataSetToOut) { // we treat port A on byte level, not bit level
+		IOPort* portA = TPI->GetPortA();
+		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
+			(gplev0 & PIGPIO_DIO2 ? 0x02 : 0x00) |
+			(gplev0 & PIGPIO_DIO3 ? 0x04 : 0x00) |
+			(gplev0 & PIGPIO_DIO4 ? 0x08 : 0x00) |
+			(gplev0 & PIGPIO_DIO5 ? 0x10 : 0x00) |
+			(gplev0 & PIGPIO_DIO6 ? 0x20 : 0x00) |
+			(gplev0 & PIGPIO_DIO7 ? 0x40 : 0x00) |
+			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
+		portA->SetInput(PI_Data);
 	}
 
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));

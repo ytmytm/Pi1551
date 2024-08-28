@@ -86,10 +86,10 @@ enum PIGPIO
 	PIGPIO_DIO7 = 8,
 	PIGPIO_DIO8 = 7,
 
-	PIGPIO_OUT_DAV = 12,
+	PIGPIO_IN_DAV = 12,
 	PIGPIO_OUT_STATUS0 = 16,
 	PIGPIO_OUT_STATUS1 = 21,
-	PIGPIO_IN_ACK = 20,
+	PIGPIO_OUT_ACK = 20,
 
 	PIGPIO_IN_BUTTON4 = 4,
 	PIGPIO_IN_BUTTON3 = 17,
@@ -117,10 +117,10 @@ enum PIGPIOMasks
 	PIGPIO_MASK_DIO7 = 1 << PIGPIO_DIO7,
 	PIGPIO_MASK_DIO8 = 1 << PIGPIO_DIO8,
 	PIGPIO_MASK_ANY_DIO = PIGPIO_MASK_DIO1 | PIGPIO_MASK_DIO2 | PIGPIO_MASK_DIO3 | PIGPIO_MASK_DIO4 | PIGPIO_MASK_DIO5 | PIGPIO_MASK_DIO6 | PIGPIO_MASK_DIO7 | PIGPIO_MASK_DIO8,
-	PIGPIO_MASK_OUT_DAV = 1 << PIGPIO_OUT_DAV,
+	PIGPIO_MASK_IN_DAV = 1 << PIGPIO_IN_DAV,
 	PIGPIO_MASK_OUT_STATUS0 = 1 << PIGPIO_OUT_STATUS0,
 	PIGPIO_MASK_OUT_STATUS1 = 1 << PIGPIO_OUT_STATUS1,
-	PIGPIO_MASK_IN_ACK = 1 << PIGPIO_IN_ACK,
+	PIGPIO_MASK_OUT_ACK = 1 << PIGPIO_OUT_ACK,
 	PIGPIO_MASK_IN_RESET = 1 << PIGPIO_IN_RESET,
 
 	PIGPIO_MASK_IN_BUTTON1 = 1 << PIGPIO_IN_BUTTON1,
@@ -194,10 +194,10 @@ public:
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DAV, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DAV, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS0, FS_OUTPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS1, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_ACK, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ACK, FS_OUTPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_RESET, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DEV, FS_OUTPUT);
 
@@ -459,12 +459,14 @@ private:
 	static u8 PI_Data;
 	static u8 PI_Status;
 	static bool PI_ACK;
+	static bool PI_DAV;
 	static bool PI_DEV;
 	static bool PI_Reset;
 
 	static u8 TPI_Data;
 	static u8 TPI_Status;
 	static bool TPI_ACK;
+	static bool TPI_DAV;
 	static bool TPI_DEV;
 
 	static bool DataSetToOut;
