@@ -77,117 +77,51 @@
 #if defined(HAS_40PINS)
 enum PIGPIO
 {
-	// Original Non-split lines
-	PIGPIO_ATN = 2,			// 3
-	PIGPIO_CLOCK = 17,		// 11
-	PIGPIO_DATA = 18,		// 12
-	PIGPIO_SRQ = 19,		// 35
-	PIGPIO_RESET = 3,		// 5
+	PIGPIO_DIO1 = 14,
+	PIGPIO_DIO2 = 15,
+	PIGPIO_DIO3 = 18,
+	PIGPIO_DIO4 = 23,
+	PIGPIO_DIO5 = 24,
+	PIGPIO_DIO6 = 25,
+	PIGPIO_DIO7 = 8,
+	PIGPIO_DIO8 = 7,
 
+	PIGPIO_OUT_DAV = 12,
+	PIGPIO_OUT_STATUS0 = 16,
+	PIGPIO_OUT_STATUS1 = 21,
+	PIGPIO_IN_ACK = 20,
 
-	// Pinout for those that want to split the lines (and the common ones like buttons, sound and LED)
-	// 0 IDSC			//28
-	// 1 IDSD			//27
-	// 2 I2C_SDA		//3
-	// 3 I2C_CLK		//5
-	PIGPIO_IN_BUTTON4 = 4,	// 07 Common
-	PIGPIO_IN_BUTTON5 = 5,	// 29 Common
-	//PIGPIO_OUT_RESET = 6,	// 31 
-	PIGPIO_OUT_SPI0_RS = 6,	// 31 
-	// 7 SPI0_CS1		//26
-	// 8 SPI0_CS0		//24
-	// 9 SPI0_MISO		//21
-	// 10 SPI0_MOSI		//19
-	// 11 SPI0_CLK		//23
-	PIGPIO_OUT_ATN = 12,	// 32
-	PIGPIO_OUT_SOUND = 13,	// 33 Common
-	// 14 TX			//8
-	// 15 RX			//10
-	PIGPIO_OUT_LED = 16,	// 36 Common
-	PIGPIO_OUT_CLOCK = 17,	// 11
-	PIGPIO_OUT_DATA = 18,	// 12
-	PIGPIO_OUT_SRQ = 19,	// 35
-	PIGPIO_IN_RESET = 20,	// 38
-	PIGPIO_IN_SRQ = 21,		// 40
-	PIGPIO_IN_BUTTON2 = 22,	// 15 Common
-	PIGPIO_IN_BUTTON3 = 23,	// 16 Common
-	PIGPIO_IN_ATN = 24,		// 18
-	PIGPIO_IN_DATA = 25,	// 22
-	PIGPIO_IN_CLOCK = 26,	// 37
-	PIGPIO_IN_BUTTON1 = 27	// 13 Common
+	PIGPIO_IN_BUTTON4 = 4,
+	PIGPIO_IN_BUTTON3 = 17,
+	PIGPIO_IN_BUTTON1 = 27,
+	PIGPIO_IN_BUTTON2 = 22,
+	PIGPIO_OUT_LED = 16,
+	PIGPIO_OUT_DEV = 9,
+	PIGPIO_IN_RESET = 11,
+	PIGPIO_IN_BUTTON5 = 5,
+	PIGPIO_OUT_SPI0_RS = 6,
+	PIGPIO_OUT_SOUND = 13
 };
 #else
-//Added GPIO bindings for Raspberry Pi 1B Rev 1/2 (only 26 I/O ports)
-enum PIGPIO
-{
-	// Original Non-split lines
-	// Raspberry Pi 1B Rev 2 has GPIO0/1 in place of GPIO2/3
-#if defined(RPI1BREV1)	
-	PIGPIO_ATN = 0,			// 3
-	PIGPIO_RESET = 1,		// 5
-#else
-	PIGPIO_ATN = 2,			// 3
-	PIGPIO_RESET = 3,		// 5
+#error "Raspberry Pi 1B Rev 1/2 not supported (only 26 I/O ports)"
 #endif
-	PIGPIO_CLOCK = 17,		// 11
-	PIGPIO_DATA = 18,		// 12
-	PIGPIO_SRQ = 19,		// 35  not connected yet
-
-	// Pinout for those that want to split the lines (and the common ones like buttons, sound and LED)
-	// Funktion = 	GPIO	// Hardware PIN
-	// 0 IDSC				// 28
-	// 1 IDSD				// 27
-	// 2 I2C_SDA			// 3
-	// 3 I2C_CLK			// 5
-	PIGPIO_IN_BUTTON4 = 4,	// 07 Common
-	//GPIO = 5,				// 29 Common
-	//PIGPIO_OUT_RESET = 6,	// 31
-	PIGPIO_OUT_SPI0_RS = 6,	// 31 not connected yet
-	// 7 SPI0_CS1			// 26
-	PIGPIO_IN_BUTTON5 =  9,	// 21
-	PIGPIO_IN_RESET = 20,	// 38
-	PIGPIO_IN_CLOCK = 10,	// 19
-	PIGPIO_OUT_LED = 7,	    // 26
-	PIGPIO_OUT_ATN = 12,	// 32 not connected yet
-	PIGPIO_OUT_SOUND = 11,  // 23
-	// 14 TX				// 8
-	// 15 RX  				// 10
-	//GPIO = 16,			// 36 Common
-	PIGPIO_OUT_CLOCK = 17,	// 11
-	PIGPIO_OUT_DATA = 18,	// 12
-	PIGPIO_OUT_SRQ = 19,	// 35 not connected yet
-	//GPIO 20,				// 38
-	PIGPIO_IN_SRQ = 21,		// 40 not connected yet
-	PIGPIO_IN_BUTTON2 = 22,	// 15 Common
-	PIGPIO_IN_BUTTON3 = 23,	// 16 Common
-	PIGPIO_IN_ATN = 24,		// 18
-	PIGPIO_IN_DATA = 25,	// 22
-	//GPIO 26,				// 37
-#if defined(RPI1BREV1)
-	PIGPIO_IN_BUTTON1 = 21	// 13 Common
-#else
-	PIGPIO_IN_BUTTON1 = 27	// 13 Common
-#endif
-};
-#endif
-
-
 
 enum PIGPIOMasks
 {
-	// Non-split lines
-	//PIGPIO_MASK_IN_ATN = 1 << PIGPIO_ATN,
-	//PIGPIO_MASK_IN_DATA = 1 << PIGPIO_DATA,
-	//PIGPIO_MASK_IN_CLOCK = 1 << PIGPIO_CLOCK,
-	//PIGPIO_MASK_IN_SRQ = 1 << PIGPIO_SRQ,
-	//PIGPIO_MASK_IN_RESET = 1 << PIGPIO_RESET,
-
-	// Split lines
-	//PIGPIO_MASK_IN_ATN = 1 << PIGPIO_IN_ATN,
-	//PIGPIO_MASK_IN_DATA = 1 << PIGPIO_IN_DATA,
-	//PIGPIO_MASK_IN_CLOCK = 1 << PIGPIO_IN_CLOCK,
-	//PIGPIO_MASK_IN_SRQ = 1 << PIGPIO_IN_SRQ,
-	//PIGPIO_MASK_IN_RESET = 1 << PIGPIO_IN_RESET,
+	PIGPIO_MASK_DIO1 = 1 << PIGPIO_DIO1,
+	PIGPIO_MASK_DIO2 = 1 << PIGPIO_DIO2,
+	PIGPIO_MASK_DIO3 = 1 << PIGPIO_DIO3,
+	PIGPIO_MASK_DIO4 = 1 << PIGPIO_DIO4,
+	PIGPIO_MASK_DIO5 = 1 << PIGPIO_DIO5,
+	PIGPIO_MASK_DIO6 = 1 << PIGPIO_DIO6,
+	PIGPIO_MASK_DIO7 = 1 << PIGPIO_DIO7,
+	PIGPIO_MASK_DIO8 = 1 << PIGPIO_DIO8,
+	PIGPIO_MASK_ANY_DIO = PIGPIO_MASK_DIO1 | PIGPIO_MASK_DIO2 | PIGPIO_MASK_DIO3 | PIGPIO_MASK_DIO4 | PIGPIO_MASK_DIO5 | PIGPIO_MASK_DIO6 | PIGPIO_MASK_DIO7 | PIGPIO_MASK_DIO8,
+	PIGPIO_MASK_OUT_DAV = 1 << PIGPIO_OUT_DAV,
+	PIGPIO_MASK_OUT_STATUS0 = 1 << PIGPIO_OUT_STATUS0,
+	PIGPIO_MASK_OUT_STATUS1 = 1 << PIGPIO_OUT_STATUS1,
+	PIGPIO_MASK_IN_ACK = 1 << PIGPIO_IN_ACK,
+	PIGPIO_MASK_IN_RESET = 1 << PIGPIO_IN_RESET,
 
 	PIGPIO_MASK_IN_BUTTON1 = 1 << PIGPIO_IN_BUTTON1,
 	PIGPIO_MASK_IN_BUTTON2 = 1 << PIGPIO_IN_BUTTON2,
@@ -198,52 +132,6 @@ enum PIGPIOMasks
 };
 
 static const unsigned ButtonPinFlags[5] = { PIGPIO_MASK_IN_BUTTON1, PIGPIO_MASK_IN_BUTTON2, PIGPIO_MASK_IN_BUTTON3, PIGPIO_MASK_IN_BUTTON4, PIGPIO_MASK_IN_BUTTON5 };
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-// Original Non-split lines
-///////////////////////////////////////////////////////////////////////////////////////////////
-// I kind of stuffed up selecting what pins should be what.
-// Originally I wanted the hardware interface to be as simple as possible and was focused on all the connections down one end of the Pi header.
-// Also, originally I was only worried about ATN, DATA, CLOCK and RESET. Buttons were optional. With DATA and CLOCK only needing to go output.
-// With hindsight (now wanting to support NIBTools ATN should have been put in the same pin group as DATA and CLOCK);
-// This now requires 2 GPIO writes as PIN2 is in SEL0 and pins 17 and 18 are in SEL1.
-//GPFSEL0
-//	9	8	7	6	5	4	3	2	1	0
-// 000 000 000 000 000 000 000 001 000 000
-// To support NIBTools ATN can be made an output as well
-static const u32 PI_OUTPUT_MASK_GPFSEL0 = ~((1 << (PIGPIO_ATN * 3)));
-//GPFSEL1           RX  TX
-//	19	18	17	16	15	14	13	12	11	10
-// 000 001 001 000 000 000 000 000 000 000	(bits 21 and 24 for GPIO 17 and 18 as outputs)
-//static const u32 PI_OUTPUT_MASK_GPFSEL1 = ~((1 << 21) | (1 << 24));
-// 000 001 001 001 000 000 001 000 000 000	(bits 21 and 24 for GPIO 17 and 18 as outputs)
-//static const u32 PI_OUTPUT_MASK_GPFSEL1 = ~((1 << ((PIGPIO_OUT_SOUND - 10) * 3)) | (1 << ((PIGPIO_OUT_LED - 10) * 3)) | (1 << ((PIGPIO_CLOCK - 10) * 3)) | (1 << ((PIGPIO_DATA - 10) * 3)));
-static const u32 PI_OUTPUT_MASK_GPFSEL1 = ~((1 << ((PIGPIO_CLOCK - 10) * 3)) | (1 << ((PIGPIO_DATA - 10) * 3)));
-///////////////////////////////////////////////////////////////////////////////////////////////
-
-///////////////////////////////////////////////////////////////////////////////////////////////
-// Pinout for those that want to split the lines (and the common ones like buttons, sound and LED)
-///////////////////////////////////////////////////////////////////////////////////////////////
-// OUT (need 7)
-//  CLK
-//  DATA
-//  SRQ
-//  ATN
-//  RST
-//  LED
-//  SND
-
-// IN (need 10)
-//  CLK
-//  DATA
-//  ATN
-//  RST
-//  SRQ 
-//  BTN1
-//  BTN2
-//  BTN3
-//  BTN4
-//  BTN5
 
 //GPFSEL0
 //  S   S   S                    
@@ -288,8 +176,6 @@ enum VIAPortPins
 	VIAPORTPINS_ATNIN = 0x80	//bp7
 };
 
-typedef bool(*CheckStatus)();
-
 class TCBM_Bus
 {
 public:
@@ -300,43 +186,31 @@ public:
 		// Clear all outputs to 0
 		write32(ARM_GPIO_GPCLR0, 0xFFFFFFFF);
 
-		if (!splitIECLines)
-		{
-			// This means that when any pin is turn to output it will output a 0 and pull lines low (ie an activation state on the IEC bus)
-			// Note: on the IEC bus you never output a 1 you simply tri state and it will be pulled up to a 1 (ie inactive state on the IEC bus) if no one else is pulling it low.
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DAV, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS0, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS1, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_ACK, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_RESET, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DEV, FS_OUTPUT);
 
-			//myOutsGPFSEL0 = read32(ARM_GPIO_GPFSEL0);
-			//myOutsGPFSEL1 = read32(ARM_GPIO_GPFSEL1);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON4, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON5, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON1, FS_INPUT);
 
-			//myOutsGPFSEL1 |= (1 << ((PIGPIO_OUT_LED - 10) * 3));
-			//myOutsGPFSEL1 |= (1 << ((PIGPIO_OUT_SOUND - 10) * 3));
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_LED, FS_OUTPUT);
-		}
-		else
-		{
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON4, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON5, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_RESET, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_SRQ, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_ATN, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DATA, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_CLOCK, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON1, FS_INPUT);
-
-
-			//RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_RESET, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SPI0_RS, FS_OUTPUT);
-			
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ATN, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_LED, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_CLOCK, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DATA, FS_OUTPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SRQ, FS_OUTPUT);
-		}
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SPI0_RS, FS_OUTPUT);
+		
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_LED, FS_OUTPUT);
 	
 #if not defined(EXPERIMENTALZERO)
 		// Set up audio.
@@ -375,12 +249,12 @@ public:
 		{
 			//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 			if (TCBM_Bus::rotaryEncoderInvert == true)
-			{
-				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO23, RPI_GPIO22, RPI_GPIO27);
+			{ // button 3 / 2 / 1
+				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO17, RPI_GPIO22, RPI_GPIO27);
 			}
 			else
-			{
-				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO23, RPI_GPIO27);
+			{ // button 2 / 3 / 1
+				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO17, RPI_GPIO27);
 			}
 		}
 
@@ -531,6 +405,7 @@ public:
 	static inline bool IsDataSetToOut() { return DataSetToOut; }
 	static inline bool IsReset() { return Resetting; }
 
+	// XXX wait until ACK? wait until DAV?
 	static inline void WaitWhileAtnAsserted()
 	{
 		while (IsAtnAsserted())
@@ -539,19 +414,6 @@ public:
 		}
 	}
 	///////////////////////////////////////////////////////////////////////////////////////////////
-
-	static inline void SetSplitIECLines(bool value)
-	{
-		splitIECLines = value;
-		if (splitIECLines)
-		{
-			PIGPIO_MASK_IN_ATN = 1 << PIGPIO_IN_ATN;
-			PIGPIO_MASK_IN_DATA = 1 << PIGPIO_IN_DATA;
-			PIGPIO_MASK_IN_CLOCK = 1 << PIGPIO_IN_CLOCK;
-			PIGPIO_MASK_IN_SRQ = 1 << PIGPIO_IN_SRQ;
-			PIGPIO_MASK_IN_RESET = 1 << PIGPIO_IN_RESET;
-		}
-	}
 
 	static inline void SetIgnoreReset(bool value)
 	{
@@ -588,14 +450,7 @@ private:
 	static u32 oldClears;
 	static u32 oldSets;
 
-	static bool splitIECLines;
 	static bool ignoreReset;
-
-	static u32 PIGPIO_MASK_IN_ATN;
-	static u32 PIGPIO_MASK_IN_DATA;
-	static u32 PIGPIO_MASK_IN_CLOCK;
-	static u32 PIGPIO_MASK_IN_SRQ;
-	static u32 PIGPIO_MASK_IN_RESET;
 
 	static u32 emulationModeCheckButtonIndex;
 

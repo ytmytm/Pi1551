@@ -109,6 +109,7 @@ int numberOfUSBMassStorageDevices = 0;
 DiskCaddy diskCaddy;
 #if defined(PI1551SUPPORT)
 Pi1551 pi1551;
+TCBM_Commands m_TCBM_Commands;
 #else
 Pi1541 pi1541;
 IEC_Commands m_IEC_Commands;
@@ -1546,10 +1547,10 @@ void emulator()
 #if defined(PI1551SUPPORT)
 	pi1551.Initialise();
 
-	m_IEC_Commands.SetAutoBootFB128(options.AutoBootFB128());
-	m_IEC_Commands.Set128BootSectorName(options.Get128BootSectorName());
-	m_IEC_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
-	m_IEC_Commands.SetNewDiskType(options.GetNewDiskType());
+	m_TCBM_Commands.SetAutoBootFB128(options.AutoBootFB128());
+	m_TCBM_Commands.Set128BootSectorName(options.Get128BootSectorName());
+	m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
+	m_TCBM_Commands.SetNewDiskType(options.GetNewDiskType());
 #else
 	pi1541.Initialise();
 

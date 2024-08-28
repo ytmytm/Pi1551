@@ -25,20 +25,15 @@ int TCBM_Bus::buttonCount = sizeof(ButtonPinFlags) / sizeof(unsigned);
 
 u32 TCBM_Bus::oldClears = 0;
 u32 TCBM_Bus::oldSets = 0;
-u32 TCBM_Bus::PIGPIO_MASK_IN_ATN = 1 << PIGPIO_ATN;
-u32 TCBM_Bus::PIGPIO_MASK_IN_DATA = 1 << PIGPIO_DATA;
-u32 TCBM_Bus::PIGPIO_MASK_IN_CLOCK = 1 << PIGPIO_CLOCK;
-u32 TCBM_Bus::PIGPIO_MASK_IN_SRQ = 1 << PIGPIO_SRQ;
-u32 TCBM_Bus::PIGPIO_MASK_IN_RESET = 1 << PIGPIO_RESET;
 
-u8 TCBM_Bus::PI_Data = false;
-u8 TCBM_Bus::PI_Status = false;
+u8 TCBM_Bus::PI_Data = 0;
+u8 TCBM_Bus::PI_Status = 0;
 bool TCBM_Bus::PI_ACK = false;
 bool TCBM_Bus::PI_DEV = false;
 bool TCBM_Bus::PI_Reset = false;
 
-u8 TCBM_Bus::TPI_Data = false;
-u8 TCBM_Bus::TPI_Status = false;
+u8 TCBM_Bus::TPI_Data = 0;
+u8 TCBM_Bus::TPI_Status = 0;
 bool TCBM_Bus::TPI_ACK = false;
 bool TCBM_Bus::TPI_DEV = false;
 
@@ -280,18 +275,6 @@ void TCBM_Bus::RefreshOuts1551(void)
 	unsigned clear = 0;
 	unsigned tmp;
 
-	if (!splitIECLines)
-	{
-		unsigned outputs = 0;
-
-		if (AtnaDataSetToOut || DataSetToOut) outputs |= (FS_OUTPUT << ((PIGPIO_DATA - 10) * 3));
-		if (ClockSetToOut) outputs |= (FS_OUTPUT << ((PIGPIO_CLOCK - 10) * 3));
-
-		unsigned nValue = (myOutsGPFSEL1 & PI_OUTPUT_MASK_GPFSEL1) | outputs;
-		write32(ARM_GPIO_GPFSEL1, nValue);
-	}
-	else
-	{
 		if (AtnaDataSetToOut || DataSetToOut) set |= 1 << PIGPIO_OUT_DATA;
 		else clear |= 1 << PIGPIO_OUT_DATA;
 
@@ -303,7 +286,6 @@ void TCBM_Bus::RefreshOuts1551(void)
 			set = clear;
 			clear = tmp;
 		}
-	}
 
 	if (OutputLED) set |= 1 << PIGPIO_OUT_LED;
 	else clear |= 1 << PIGPIO_OUT_LED;
@@ -339,11 +321,6 @@ void TCBM_Bus::PortA_OnPortOut(void* pUserData, unsigned char status)
 void TCBM_Bus::Reset(void)
 {
 	WaitUntilReset();
-
-	// VIA $1800
-	//	CA2, CB1 and CB2 are not connected (reads as high)
-	// VIA $1C00
-	//	CB1 not connected (reads as high)
 
 	DataSetToOut = false;
 
