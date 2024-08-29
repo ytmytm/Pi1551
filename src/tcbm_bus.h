@@ -186,19 +186,14 @@ public:
 		// Clear all outputs to 0
 		write32(ARM_GPIO_GPCLR0, 0xFFFFFFFF);
 
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DAV, FS_INPUT);
+		SetDIODirectionInput(true);
+//		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DAV, FS_INPUT);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_DAV);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS0, FS_OUTPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS1, FS_OUTPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ACK, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_RESET, FS_INPUT);
+//		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_RESET, FS_INPUT);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_RESET);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DEV, FS_OUTPUT);
 
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON4, FS_INPUT);
@@ -340,7 +335,7 @@ public:
 
 	}
 
-
+	static void SetDIODirectionInput(bool input);
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
 	static void ReadEmulationMode1551(void);

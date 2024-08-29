@@ -129,6 +129,33 @@ void TCBM_Bus::ReadGPIOUserInput()
 }
 
 
+void TCBM_Bus::SetDIODirectionInput(bool input)
+{
+	if (input)
+	{
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
+	}
+	else
+	{
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_OUTPUT);
+		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_OUTPUT);
+	}
+}
+
+
 //ROTARY: Modified for rotary encoder support - 09/05/2019 by Geo...
 /// @brief read real I/O pins in browser mode + read the rotary encoder/buttons
 ///        don't update TIA port status
@@ -165,8 +192,9 @@ void TCBM_Bus::ReadEmulationMode1551(void)
 	PI_DAV  = gplev0 & PIGPIO_MASK_IN_DAV == PIGPIO_MASK_IN_DAV;
 	portC -> SetInput(0x80, PI_DAV); // DAV is bit 7
 
-	if (!DataSetToOut) { // we treat port A on byte level, not bit level
-		IOPort* portA = TPI->GetPortA();
+	IOPort* portA = TPI->GetPortA();
+	DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
+	if (!DataSetToOut) {
 		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
 			(gplev0 & PIGPIO_DIO2 ? 0x02 : 0x00) |
 			(gplev0 & PIGPIO_DIO3 ? 0x04 : 0x00) |
@@ -187,19 +215,20 @@ void TCBM_Bus::RefreshOuts1551(void)
 {
 	unsigned set = 0;
 	unsigned clear = 0;
-	unsigned tmp;
 
-		if (AtnaDataSetToOut || DataSetToOut) set |= 1 << PIGPIO_OUT_DATA;
-		else clear |= 1 << PIGPIO_OUT_DATA;
-
-		if (ClockSetToOut) set |= 1 << PIGPIO_OUT_CLOCK;
-		else clear |= 1 << PIGPIO_OUT_CLOCK;
-
-		if (!invertIECOutputs) {
-			tmp = set;
-			set = clear;
-			clear = tmp;
-		}
+	if (TPI && port)
+	{
+		// portA handled in PortA_OnPortOut? XXX or maybe here - both data and direction?
+		IOPort* portC = TPI->GetPortC();
+		if (portC->GetOutput() & 0x08) set |= 1 << PIGPIO_OUT_ACK;
+		else clear |= 1 << PIGPIO_OUT_ACK;
+		if (portC->GetOutput() & 0x02) set |= 1 << PIGPIO_OUT_DEV;
+		else clear |= 1 << PIGPIO_OUT_DEV;
+		if (portC->GetOutput() & 0x02) set |= 1 << PIGPIO_OUT_STATUS1;
+		else clear |= 1 << PIGPIO_OUT_STATUS1;
+		if (portC->GetOutput() & 0x01) set |= 1 << PIGPIO_OUT_STATUS0;
+		else clear |= 1 << PIGPIO_OUT_STATUS0;
+	}
 
 	if (OutputLED) set |= 1 << PIGPIO_OUT_LED;
 	else clear |= 1 << PIGPIO_OUT_LED;
@@ -237,6 +266,7 @@ void TCBM_Bus::Reset(void)
 	WaitUntilReset();
 
 	DataSetToOut = false;
+	SetDIODirectionInput(DataSetToOut);
 
 	TPI_Data = 0;
 	TPI_Status = 0;
