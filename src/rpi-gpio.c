@@ -26,6 +26,35 @@ void RPI_SetGpioInput(rpi_gpio_pin_t gpio)
   RPI_SetGpioPinFunction(gpio, FS_INPUT);
 }
 
+// Function to introduce a small delay
+void RPI_delay(int32_t count) {
+    while(count--) {
+        asm volatile("nop");
+    }
+}
+
+void RPI_SetGpioInputPullUp(rpi_gpio_pin_t gpio)
+{
+  RPI_SetGpioPinFunction(gpio, FS_INPUT);
+  // Enable pull-up control
+  RPI_GpioBase->GPPUD = 0b10;
+  delay(150); // Delay for 150 cycles, allowing the control signal to settle
+
+  // Clock the control signal into the specified GPIO pin
+  if (gpio < 32) {
+	RPI_GpioBase->GPPUDCLK0 = (1 << gpio);
+  } else {
+	RPI_GpioBase->GPPUDCLK1 = (1 << (gpio - 32));
+  }
+
+  delay(150); // Delay for 150 cycles, allowing the control signal to settle
+
+  // Remove the pull-up/down control signal
+  RPI_GpioBase->GPPUD = 0;
+  RPI_GpioBase->GPPUDCLK0 = 0;  // Clear clock register to finish the setup
+  RPI_GpioBase->GPPUDCLK1 = 0;
+}
+
 rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t gpio)
 {
   rpi_gpio_value_t result = RPI_IO_UNKNOWN;
