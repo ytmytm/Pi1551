@@ -2314,20 +2314,19 @@ extern "C"
 #endif
 
 #if defined(PI1551SUPPORT)
-		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
-		IEC_Bus::SetIgnoreReset(options.IgnoreReset());
+		TCBM_Bus::SetIgnoreReset(options.IgnoreReset());
 		//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
-		IEC_Bus::SetRotaryEncoderEnable(options.RotaryEncoderEnable());
+		TCBM_Bus::SetRotaryEncoderEnable(options.RotaryEncoderEnable());
 		//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
-		IEC_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
+		TCBM_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
 
 		f_chdir("/1551");
 
-		m_IEC_Commands.SetStarFileName(options.GetStarFileName());
+		m_TCBM_Commands.SetStarFileName(options.GetStarFileName());
 		GlobalSetDeviceID(deviceID);
 		pi1551.drive.SetTPI(&pi1551.TPI);
 		pi1551.TPI.GetPortB()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
-		IEC_Bus::Initialise();
+		TCBM_Bus::Initialise();
 #else
 		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
 		IEC_Bus::SetInvertIECInputs(options.InvertIECInputs());
