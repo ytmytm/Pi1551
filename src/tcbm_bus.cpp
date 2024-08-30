@@ -193,37 +193,45 @@ void TCBM_Bus::RefreshOuts1551(void)
 		u8 dir = port->GetDirection();
 		u8 out = port->GetOutput();
 		if (dir & 0x01) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_OUTPUT);
 			if (out & 0x01) set |= 1 << PIGPIO_DIO1;
 			else clear |= 1 << PIGPIO_DIO1;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
 		if (dir & 0x02) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_OUTPUT);
 			if (out & 0x02) set |= 1 << PIGPIO_DIO2;
 			else clear |= 1 << PIGPIO_DIO2;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
 		if (dir & 0x04) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_OUTPUT);
 			if (out & 0x04) set |= 1 << PIGPIO_DIO3;
 			else clear |= 1 << PIGPIO_DIO3;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
 		if (dir & 0x08) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_OUTPUT);
 			if (out & 0x08) set |= 1 << PIGPIO_DIO4;
 			else clear |= 1 << PIGPIO_DIO4;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
 		if (dir & 0x10) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_OUTPUT);
 			if (out & 0x10) set |= 1 << PIGPIO_DIO5;
 			else clear |= 1 << PIGPIO_DIO5;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
 		if (dir & 0x20) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_OUTPUT);
 			if (out & 0x20) set |= 1 << PIGPIO_DIO6;
 			else clear |= 1 << PIGPIO_DIO6;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
 		if (dir & 0x40) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_OUTPUT);
 			if (out & 0x40) set |= 1 << PIGPIO_DIO7;
 			else clear |= 1 << PIGPIO_DIO7;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
 		if (dir & 0x80) {
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_OUTPUT);
 			if (out & 0x80) set |= 1 << PIGPIO_DIO8;
 			else clear |= 1 << PIGPIO_DIO8;
-		}
+		} else RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
 
 		// remaining bits
 		IOPort* portC = TPI->GetPortC();
