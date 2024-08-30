@@ -23,8 +23,10 @@
 #include "debug.h"
 #include "m6523.h"
 
+extern "C"
+{
 #include "rpi-gpio.h"
-#include "rpiHardware.h"
+}
 
 //ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 #include "dmRotary.h"
