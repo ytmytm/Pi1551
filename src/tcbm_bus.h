@@ -166,16 +166,6 @@ static const unsigned ButtonPinFlags[5] = { PIGPIO_MASK_IN_BUTTON1, PIGPIO_MASK_
 // 000 000 000 000 000 000 000 000 000 000
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-enum VIAPortPins
-{
-	VIAPORTPINS_DATAIN = 0x01,	//pb0
-	VIAPORTPINS_DATAOUT = 0x02,	//pb1
-	VIAPORTPINS_CLOCKIN = 0x04,	//pb2
-	VIAPORTPINS_CLOCKOUT = 0x08,//pb3
-	VIAPORTPINS_ATNAOUT = 0x10,	//pb4
-	VIAPORTPINS_ATNIN = 0x80	//bp7
-};
-
 class TCBM_Bus
 {
 public:
@@ -228,16 +218,11 @@ public:
 		}
 
 		// Enable the internal pullups for the input button pins using the method described in BCM2835-ARM-Peripherals manual.
-		RPI_GpioBase->GPPUD = 2;
-		for (index = 0; index < 150; ++index)
-		{
-		}
-		RPI_GpioBase->GPPUDCLK0 = PIGPIO_MASK_IN_BUTTON1 | PIGPIO_MASK_IN_BUTTON2 | PIGPIO_MASK_IN_BUTTON3 | PIGPIO_MASK_IN_BUTTON4 | PIGPIO_MASK_IN_BUTTON5;
-		for (index = 0; index < 150; ++index)
-		{
-		}
-		RPI_GpioBase->GPPUD = 0;
-		RPI_GpioBase->GPPUDCLK0 = 0;
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_BUTTON1);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_BUTTON4);
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_IN_BUTTON5);
 
 		//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 		if (TCBM_Bus::rotaryEncoderEnable == true)
@@ -253,6 +238,32 @@ public:
 			}
 		}
 
+	}
+
+	static inline void SetDIODirectionInput(bool input)
+	{
+		if (input)
+		{
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
+		}
+		else
+		{
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_OUTPUT);
+		}
 	}
 
 #if defined(EXPERIMENTALZERO)
@@ -335,7 +346,7 @@ public:
 
 	}
 
-	static void SetDIODirectionInput(bool input);
+	static void Reset(void);
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
 	static void ReadEmulationMode1551(void);
@@ -378,36 +389,70 @@ public:
 
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	// Manual methods used by IEC_Commands
-	static inline void AssertData()
-	{
-		if (!DataSetToOut)
-		{
-			DataSetToOut = true;
-			RefreshOuts1551();
-		}
-	}
-	static inline void ReleaseData()
-	{
-		if (DataSetToOut)
-		{
-			DataSetToOut = false;
-			RefreshOuts1551();
-		}
-	}
 
 	static inline u8 GetPI_Data() { return PI_Data; }
 	static inline bool GetPI_Reset() { return PI_Reset; }
 	static inline bool IsDataSetToOut() { return DataSetToOut; }
 	static inline bool IsReset() { return Resetting; }
+	static inline bool IsDAVAsserted() { return PI_DAV; }
+	static inline bool IsDAVReleased() { return !PI_DAV; }
 
-	// XXX wait until ACK? wait until DAV?
-	static inline void WaitWhileAtnAsserted()
+	static inline void AssertACK() {
+		if (TPI) {
+			IOPort* portC = TPI->GetPortC();
+			u8 value = portC->GetOutput();
+			portC->SetOutput(value | 0x08);
+			RefreshOuts1551();
+		}
+	}
+
+	static inline void ReleaseACK() {
+		if (TPI) {
+			IOPort* portC = TPI->GetPortC();
+			u8 value = portC->GetOutput();
+			portC->SetOutput(value & ~0x08);
+			RefreshOuts1551();
+		}
+	}
+
+	static inline void SetStatus(u8 status) {
+		if (TPI) {
+			IOPort* portC = TPI->GetPortC();
+			u8 value = portC->GetOutput();
+			portC->SetOutput((value & ~0x03) | (status & 0x03));
+			RefreshOuts1551();
+		}
+	}
+
+	static inline void SetData(u8 data) {
+		if (TPI && port) {
+			port->SetDirection(0xff);
+			port->SetOutput(data);
+			RefreshOuts1551();
+		}
+	}
+
+	static inline void SetDataInput() {
+		if (TPI && port) {
+			port->SetDirection(0x00);
+			RefreshOuts1551();
+		}
+	}
+
+	static inline void WaitWhileDAVAsserted()
 	{
-		while (IsAtnAsserted())
-		{
+		while (IsDAVAsserted()) {
 			ReadBrowseMode();
 		}
 	}
+
+	static inline void WaitWhileDAVReleased()
+	{
+		while (IsDAVReleased()) {
+			ReadBrowseMode();
+		}
+	}
+
 	///////////////////////////////////////////////////////////////////////////////////////////////
 
 	static inline void SetIgnoreReset(bool value)
@@ -429,8 +474,6 @@ public:
 
 	static m6523* TPI;
 	static IOPort* port;
-
-	static void Reset(void);
 
 	static bool GetInputButtonPressed(int buttonIndex) { return InputButton[buttonIndex] && !InputButtonPrev[buttonIndex]; }
 	static bool GetInputButtonReleased(int buttonIndex) { return InputButton[buttonIndex] == false; }

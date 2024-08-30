@@ -19,8 +19,6 @@
 #include "tcbm_bus.h"
 #include "InputMappings.h"
 
-//#define REAL_XOR 1
-
 int TCBM_Bus::buttonCount = sizeof(ButtonPinFlags) / sizeof(unsigned);
 
 u32 TCBM_Bus::oldClears = 0;
@@ -129,33 +127,6 @@ void TCBM_Bus::ReadGPIOUserInput()
 }
 
 
-void TCBM_Bus::SetDIODirectionInput(bool input)
-{
-	if (input)
-	{
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
-	}
-	else
-	{
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_OUTPUT);
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_OUTPUT);
-	}
-}
-
-
 //ROTARY: Modified for rotary encoder support - 09/05/2019 by Geo...
 /// @brief read real I/O pins in browser mode + read the rotary encoder/buttons
 ///        don't update TIA port status
@@ -165,7 +136,7 @@ void TCBM_Bus::ReadBrowseMode(void)
 	gplev0 = read32(ARM_GPIO_GPLEV0);
 	ReadGPIOUserInput();
 
-	PI_DAV  = gplev0 & PIGPIO_MASK_IN_DAV == PIGPIO_MASK_IN_DAV;
+	PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
 
 	if (!DataSetToOut) { // we treat port A on byte level, not bit level
 		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
@@ -189,7 +160,7 @@ void TCBM_Bus::ReadEmulationMode1551(void)
 
 	gplev0 = read32(ARM_GPIO_GPLEV0);
 
-	PI_DAV  = gplev0 & PIGPIO_MASK_IN_DAV == PIGPIO_MASK_IN_DAV;
+	PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
 	portC -> SetInput(0x80, PI_DAV); // DAV is bit 7
 
 	IOPort* portA = TPI->GetPortA();
@@ -218,15 +189,52 @@ void TCBM_Bus::RefreshOuts1551(void)
 
 	if (TPI && port)
 	{
-		// portA handled in PortA_OnPortOut? XXX or maybe here - both data and direction?
+		// port A
+		u8 dir = port->GetDirection();
+		u8 out = port->GetOutput();
+		if (dir & 0x01) {
+			if (out & 0x01) set |= 1 << PIGPIO_DIO1;
+			else clear |= 1 << PIGPIO_DIO1;
+		}
+		if (dir & 0x02) {
+			if (out & 0x02) set |= 1 << PIGPIO_DIO2;
+			else clear |= 1 << PIGPIO_DIO2;
+		}
+		if (dir & 0x04) {
+			if (out & 0x04) set |= 1 << PIGPIO_DIO3;
+			else clear |= 1 << PIGPIO_DIO3;
+		}
+		if (dir & 0x08) {
+			if (out & 0x08) set |= 1 << PIGPIO_DIO4;
+			else clear |= 1 << PIGPIO_DIO4;
+		}
+		if (dir & 0x10) {
+			if (out & 0x10) set |= 1 << PIGPIO_DIO5;
+			else clear |= 1 << PIGPIO_DIO5;
+		}
+		if (dir & 0x20) {
+			if (out & 0x20) set |= 1 << PIGPIO_DIO6;
+			else clear |= 1 << PIGPIO_DIO6;
+		}
+		if (dir & 0x40) {
+			if (out & 0x40) set |= 1 << PIGPIO_DIO7;
+			else clear |= 1 << PIGPIO_DIO7;
+		}
+		if (dir & 0x80) {
+			if (out & 0x80) set |= 1 << PIGPIO_DIO8;
+			else clear |= 1 << PIGPIO_DIO8;
+		}
+
+		// remaining bits
 		IOPort* portC = TPI->GetPortC();
-		if (portC->GetOutput() & 0x08) set |= 1 << PIGPIO_OUT_ACK;
+		u8 pc = portC->GetOutput();
+		if (pc & 0x08) set |= 1 << PIGPIO_OUT_ACK;
 		else clear |= 1 << PIGPIO_OUT_ACK;
-		if (portC->GetOutput() & 0x02) set |= 1 << PIGPIO_OUT_DEV;
+		if (pc & 0x02) set |= 1 << PIGPIO_OUT_DEV;
 		else clear |= 1 << PIGPIO_OUT_DEV;
-		if (portC->GetOutput() & 0x02) set |= 1 << PIGPIO_OUT_STATUS1;
+		if (pc & 0x02) set |= 1 << PIGPIO_OUT_STATUS1;
 		else clear |= 1 << PIGPIO_OUT_STATUS1;
-		if (portC->GetOutput() & 0x01) set |= 1 << PIGPIO_OUT_STATUS0;
+		if (pc & 0x01) set |= 1 << PIGPIO_OUT_STATUS0;
 		else clear |= 1 << PIGPIO_OUT_STATUS0;
 	}
 
@@ -240,25 +248,18 @@ void TCBM_Bus::RefreshOuts1551(void)
 	write32(ARM_GPIO_GPSET0, set);
 }
 
+// called whenever someone calls SetOutput on PortA
+// pUserData is a pointer given when function is attached
+// status is status & ddr, we should ignore it
 void TCBM_Bus::PortA_OnPortOut(void* pUserData, unsigned char status)
 {
-	bool oldDataSetToOut = DataSetToOut;
-
-	// These are the values the VIA is trying to set the outputs to
-	VIA_Atna = (status & (unsigned char)VIAPORTPINS_ATNAOUT) != 0;
-	VIA_Data = (status & (unsigned char)VIAPORTPINS_DATAOUT) != 0;		// VIA DATAout PB1 inverted and then connected to DIN DATA
-	VIA_Clock = (status & (unsigned char)VIAPORTPINS_CLOCKOUT) != 0;	// VIA CLKout PB3 inverted and then connected to DIN CLK
 
 	if (TPI && port)
 	{
-		// If the VIA's data and clock outputs ever get set to inputs the real hardware reads these lines as asserted.
-		bool PB1SetToInput = (port->GetDirection() & 2) == 0;
-		bool PB3SetToInput = (port->GetDirection() & 8) == 0;
-		if (PB1SetToInput) VIA_Data = true;
-		if (PB3SetToInput) VIA_Clock = true;
+		TPI_Data = port->GetOutput();
+		DataSetToOut = port->GetDirection() !=0;
 	}
 
-	DataSetToOut = VIA_Data;
 }
 
 void TCBM_Bus::Reset(void)
@@ -277,4 +278,3 @@ void TCBM_Bus::Reset(void)
 	PI_ACK = false;
 
 }
-

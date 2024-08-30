@@ -199,5 +199,5 @@ void Pi1551::Reset()
 {
 	TPI.Reset();
 	drive.Reset();
-	IEC_Bus::Reset(); // XXXMW
+	TCBM_Bus::Reset();
 }

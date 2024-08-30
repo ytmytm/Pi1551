@@ -382,7 +382,9 @@ void UpdateLCD(const char* track, unsigned temperature)
 		core0RefreshingScreen.Acquire();
 #endif
 
+#if not defined(PI1551SUPPORT)
 		IEC_Bus::WaitMicroSeconds(100);
+#endif
 
 		if (options.DisplayTemperature())
 			snprintf(tempBuffer, tempBufferSize, "%s %02dC", track, temperature);
@@ -392,7 +394,9 @@ void UpdateLCD(const char* track, unsigned temperature)
 		screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 		screenLCD->RefreshRows(0, 1);
 
+#if not defined(PI1551SUPPORT)
 		IEC_Bus::WaitMicroSeconds(100);
+#endif
 #if not defined(EXPERIMENTALZERO)
 		core0RefreshingScreen.Release();
 #endif
@@ -496,6 +500,9 @@ void UpdateScreen()
 		if (options.GraphIEC())
 			screen.DrawLineV(graphX, top3, bottom, BkColour);
 
+#if defined(PI1551SUPPORT)
+// XXX plot something?
+#else
 		value = IEC_Bus::GetPI_Atn();
 		if (options.GraphIEC())
 		{
@@ -582,6 +589,7 @@ void UpdateScreen()
 		////	screen.PrintText(false, 41 * 8, y, tempBuffer, textColour, bgColour);
 		////	//refreshUartStatusDisplay = true;
 		//}
+#endif
 
 		if (graphX++ > screenWidthM1) graphX = 0;
 // black vertical line ahead of graph
@@ -589,7 +597,6 @@ void UpdateScreen()
 			screen.DrawLineV(graphX, top3, bottom, COLOUR_BLACK);
 
 		u32 track;
-
 #if defined(PI1551SUPPORT)
 		if (emulating == EMULATING_1551)
 		{
@@ -1213,7 +1220,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			}
 		}
 
-		IEC_Bus::ReadGPIOUserInput();
+		TCBM_Bus::ReadGPIOUserInput();
 
 		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
 #if not defined(EXPERIMENTALZERO)
@@ -1228,7 +1235,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		pi1551.Update();
 
 
-		bool reset = IEC_Bus::IsReset();
+		bool reset = TCBM_Bus::IsReset();
 		if (reset)
 			resetCount++;
 		else
@@ -1266,10 +1273,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		
 		if (!refreshOutsAfterCPUStep)
 		{
-			IEC_Bus::ReadEmulationMode1541();
- // XXXMW
-			IEC_Bus::RefreshOuts1541();	// Now output all outputs.
- // XXXMW
+			TCBM_Bus::ReadEmulationMode1551();
+			TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
 		}
 
 		if (options.SoundOnGPIO() && headSoundCounter > 0)
@@ -1279,7 +1284,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			{
 				headSoundFreqCounter = headSoundFreq;
 				headSoundCounter -= headSoundFreq * 8;
-				IEC_Bus::OutputSound = !IEC_Bus::OutputSound;
+				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
 			}
 		}
 
@@ -1532,6 +1537,7 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 }
 #endif
 
+#if defined(PI1551SUPPORT)
 void emulator()
 {
 #if not defined(EXPERIMENTALZERO)
@@ -1544,21 +1550,191 @@ void emulator()
 
 	diskCaddy.SetScreen(&screen, screenLCD, &roms);
 	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
-#if defined(PI1551SUPPORT)
+
 	pi1551.Initialise();
 
-	m_TCBM_Commands.SetAutoBootFB128(options.AutoBootFB128());
-	m_TCBM_Commands.Set128BootSectorName(options.Get128BootSectorName());
 	m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
 	m_TCBM_Commands.SetNewDiskType(options.GetNewDiskType());
+
+	emulating = IEC_COMMANDS;
+	while (1)
+	{
+		if (emulating == IEC_COMMANDS)
+		{
+			TCBM_Bus::TPI = 0;
+			TCBM_Bus::port = 0;
+			TCBM_Bus::Reset();
+
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Acquire();
+#endif
+			roms.ResetCurrentROMIndex();
+			fileBrowser->ClearScreen();
+
+			fileBrowserSelectedName = 0;
+			fileBrowser->ClearSelections();
+
+			fileBrowser->RefeshDisplay(); // Just redisplay the current folder.
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Release();
+#endif
+			selectedViaIECCommands = false;
+
+			inputMappings->Reset();
+#if not defined(EXPERIMENTALZERO)
+			inputMappings->SetKeyboardBrowseLCDScreen(screenLCD && options.KeyboardBrowseLCDScreen());
+#endif
+			fileBrowser->ShowDeviceAndROM();
+
+			if (!options.GetDisableSD2IECCommands())
+			{
+				m_TCBM_Commands.SimulateIECBegin();
+
+				CheckAutoMountImage(exitReason, fileBrowser);
+
+				while (emulating == IEC_COMMANDS)
+				{
+					TCBM_Commands::UpdateAction updateAction = m_TCBM_Commands.SimulateIECUpdate();
+
+					switch (updateAction)
+					{
+						case TCBM_Commands::RESET:
+							if (options.GetOnResetChangeToStartingFolder())
+								fileBrowser->DisplayRoot();
+							TCBM_Bus::Reset();
+							m_TCBM_Commands.SimulateIECBegin();
+							CheckAutoMountImage(EXIT_UNKNOWN, fileBrowser);
+							break;
+						case TCBM_Commands::NONE:
+							fileBrowser->Update();
+							// Check selections made via FileBrowser
+							if (fileBrowser->SelectionsMade())
+								emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
+							break;
+						case TCBM_Commands::IMAGE_SELECTED:
+							// Check selections made via IEC commands (like fb64)
+
+							fileBrowserSelectedName = m_TCBM_Commands.GetNameOfImageSelected();
+
+							if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
+							{
+								if (fileBrowser->SelectLST(fileBrowserSelectedName))
+								{
+									emulating = BeginEmulating(fileBrowser, fileBrowserSelectedName);
+								}
+								else
+								{
+									m_TCBM_Commands.Reset();
+									fileBrowserSelectedName = 0;
+								}
+							}
+							else if (DiskImage::IsDiskImageExtention(fileBrowserSelectedName))
+							{
+								const FILINFO* filInfoSelected = m_TCBM_Commands.GetImageSelected();
+								DEBUG_LOG("IEC mounting %s\r\n", filInfoSelected->fname);
+								bool readOnly = (filInfoSelected->fattrib & AM_RDO) != 0;
+
+								if (diskCaddy.Insert(filInfoSelected, readOnly))
+									emulating = BeginEmulating(fileBrowser, filInfoSelected->fname);
+								else
+									fileBrowserSelectedName = 0;
+							}
+							else
+							{
+								fileBrowserSelectedName = 0;
+							}
+
+							if (fileBrowserSelectedName == 0)
+								m_TCBM_Commands.Reset();
+
+							selectedViaIECCommands = true;
+							break;
+						case TCBM_Commands::DIR_PUSHED:
+							fileBrowser->FolderChanged();
+							break;
+						case TCBM_Commands::POP_DIR:
+							fileBrowser->PopFolder();
+							break;
+						case TCBM_Commands::POP_TO_ROOT:
+							fileBrowser->DisplayRoot();
+							break;
+						case TCBM_Commands::REFRESH:
+							fileBrowser->FolderChanged();
+							break;
+						case TCBM_Commands::DEVICEID_CHANGED:
+							GlobalSetDeviceID( m_TCBM_Commands.GetDeviceId() );
+							fileBrowser->ShowDeviceAndROM();
+							break;
+						case TCBM_Commands::DEVICE_SWITCHED:
+							DEBUG_LOG("DECIVE_SWITCHED\r\n");
+							fileBrowser->DeviceSwitched();
+							break;
+						default:
+							break;
+					}
+					usDelay(1);
+				}
+			}
+			else
+			{
+				while (emulating == IEC_COMMANDS)
+				{
+					fileBrowser->Update();
+					if (fileBrowser->SelectionsMade())
+						emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
+					usDelay(1);
+				}
+			}
+		}
+		else
+		{
+			if (emulating == EMULATING_1551)
+				exitReason = Emulate1551(fileBrowser);
+
+			DEBUG_LOG("Exited emulation\r\n");
+
+			// Clearing the caddy now
+			//	- will write back all changed/dirty/written to disk images now
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Acquire();
+#endif
+			if (diskCaddy.Empty())
+				TCBM_Bus::WaitMicroSeconds(2 * 1000000);
+
+			TCBM_Bus::WaitUntilReset();
+			emulating = IEC_COMMANDS;
+	
+			if ((exitReason == EXIT_RESET) && (options.GetOnResetChangeToStartingFolder() || selectedViaIECCommands))
+				fileBrowser->DisplayRoot(); // TO CHECK
+
+			inputMappings->WaitForClearButtons();
+
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Release();
+#endif
+		}
+	}
+	delete fileBrowser;
+}
 #else
+void emulator()
+{
+#if not defined(EXPERIMENTALZERO)
+	Keyboard* keyboard = Keyboard::Instance();
+#endif
+	FileBrowser* fileBrowser;
+	EXIT_TYPE exitReason = EXIT_UNKNOWN;
+
+	roms.lastManualSelectedROMIndex = 0;
+
+	diskCaddy.SetScreen(&screen, screenLCD, &roms);
+	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
 	pi1541.Initialise();
 
 	m_IEC_Commands.SetAutoBootFB128(options.AutoBootFB128());
 	m_IEC_Commands.Set128BootSectorName(options.Get128BootSectorName());
 	m_IEC_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
 	m_IEC_Commands.SetNewDiskType(options.GetNewDiskType());
-#endif
 
 	emulating = IEC_COMMANDS;
 	while (1)
@@ -1697,16 +1873,11 @@ void emulator()
 		}
 		else
 		{
-#if defined(PI1551SUPPORT)
-			if (emulating == EMULATING_1551)
-				exitReason = Emulate1551(fileBrowser);
-#else
 			if (emulating == EMULATING_1541)
 				exitReason = Emulate1541(fileBrowser);
 #if defined(PI1581SUPPORT)
 			else
 				exitReason = Emulate1581(fileBrowser);
-#endif
 #endif
 
 			DEBUG_LOG("Exited emulation\r\n");
@@ -1734,6 +1905,7 @@ void emulator()
 	}
 	delete fileBrowser;
 }
+#endif
 
 //static void MouseHandler(unsigned nButtons,
 //	int nDisplacementX,		// -127..127
@@ -2039,14 +2211,20 @@ static void CheckOptions()
 		screen.MeasureText(false, tempBuffer, &widthText, &heightText);
 		xpos = (widthScreen - widthText) >> 1;
 		ypos = (heightScreen - heightText) >> 1;
+#if defined(PI1551SUPPORT)
+		screen.Clear(COLOUR_RED);
+		screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+		do { } while (1);
+#else
 		do
 		{
 			screen.Clear(COLOUR_RED);
 			IEC_Bus::WaitMicroSeconds(20000);
 			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-			IEC_Bus::WaitMicroSeconds(100000);
+			IEC_Bus::WaitMicroSeconds(20000);
 		}
 		while (1);
+#endif
 	}
 
 	inputMappings->INPUT_BUTTON_ENTER = options.GetButtonEnter();
@@ -2325,7 +2503,7 @@ extern "C"
 		m_TCBM_Commands.SetStarFileName(options.GetStarFileName());
 		GlobalSetDeviceID(deviceID);
 		pi1551.drive.SetTPI(&pi1551.TPI);
-		pi1551.TPI.GetPortB()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
+		pi1551.TPI.GetPortA()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
 		TCBM_Bus::Initialise();
 #else
 		IEC_Bus::SetSplitIECLines(options.SplitIECLines());

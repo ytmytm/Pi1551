@@ -75,14 +75,6 @@ public:
 
 	void SetLowercaseBrowseModeFilenames(bool value) { lowercaseBrowseModeFilenames = value; }
 	void SetNewDiskType(DiskImage::DiskType type) { newDiskType = type; }
-	void SetAutoBootFB128(bool autoBootFB128) { this->autoBootFB128 = autoBootFB128; }
-	void Set128BootSectorName(const char* SectorName) 
-	{
-		if (SectorName && SectorName[0])
-			this->C128BootSectorName = SectorName;
-		else
-			this->C128BootSectorName = 0;
-	}
 
 	void Reset(void);
 	void SimulateIECBegin(void);
@@ -131,9 +123,8 @@ protected:
 		bool CanFit(u32 bytes) const { return bytes <= sizeof(buffer) - cursor; }
 	};
 
-	bool CheckATN(void);
 	bool WriteIECSerialPort(u8 data, bool eoi);
-	bool ReadIECSerialPort(u8& byte);
+	bool ReadIECSerialPort(u8& byte, bool eoi=false);
 
 	void Listen();
 	void Talk();
@@ -176,10 +167,9 @@ protected:
 
 	UpdateAction updateAction;
 	u8 commandCode;
+	u8 busCommandCode;
 	bool receivedCommand : 1;
 	bool receivedEOI : 1;	// End Or Identify
-	bool usingVIC20 : 1;	// When sending data we need to wait longer for the 64 as its VICII may be stealing its cycles. VIC20 does not have this problem and can accept data faster.
-	bool autoBootFB128 : 1;
 
 	u8 deviceID;
 	u8 secondaryAddress;
@@ -194,7 +184,6 @@ protected:
 	FILINFO filInfoSelectedImage;
 
 	const char* starFileName;
-	const char* C128BootSectorName;
 
 	bool displayingDevices;
 	bool lowercaseBrowseModeFilenames;

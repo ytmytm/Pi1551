@@ -21,7 +21,7 @@
 
 #include "Drive1551.h"
 #include "m6502.h"
-#include "iec_bus.h"
+#include "tcbm_bus.h"
 
 // handled ports
 // PA 0:7 DATA:TCBM - not

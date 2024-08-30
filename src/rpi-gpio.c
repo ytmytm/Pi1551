@@ -38,7 +38,7 @@ void RPI_SetGpioInputPullUp(rpi_gpio_pin_t gpio)
   RPI_SetGpioPinFunction(gpio, FS_INPUT);
   // Enable pull-up control
   RPI_GpioBase->GPPUD = 0b10;
-  delay(150); // Delay for 150 cycles, allowing the control signal to settle
+  RPI_delay(150); // Delay for 150 cycles, allowing the control signal to settle
 
   // Clock the control signal into the specified GPIO pin
   if (gpio < 32) {
@@ -47,7 +47,7 @@ void RPI_SetGpioInputPullUp(rpi_gpio_pin_t gpio)
 	RPI_GpioBase->GPPUDCLK1 = (1 << (gpio - 32));
   }
 
-  delay(150); // Delay for 150 cycles, allowing the control signal to settle
+  RPI_delay(150); // Delay for 150 cycles, allowing the control signal to settle
 
   // Remove the pull-up/down control signal
   RPI_GpioBase->GPPUD = 0;

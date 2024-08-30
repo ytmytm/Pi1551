@@ -54,13 +54,6 @@ extern void SwitchDrive(const char* drive);
 extern int numberOfUSBMassStorageDevices;
 extern void DisplayMessage(int x, int y, bool LCD, const char* message, u32 textColour, u32 backgroundColour);
 
-#define WaitWhile(checkStatus) \
-	do\
-	{\
-		TCBM_Bus::ReadBrowseMode();\
-		if (CheckATN()) return true;\
-	} while (checkStatus)
-
 #define VERSION_OFFSET_IN_DIR_HEADER 17
 static u8 DirectoryHeader[] =
 {
@@ -216,11 +209,8 @@ void TCBM_Commands::Channel::Close()
 TCBM_Commands::TCBM_Commands()
 {
 	deviceID = 8;
-	usingVIC20 = false;
-	autoBootFB128 = false;
 	Reset();
 	starFileName = 0;
-	C128BootSectorName = 0;
 	displayingDevices = false;
 	lowercaseBrowseModeFilenames = false;
 	newDiskType = DiskImage::D64;
@@ -247,139 +237,35 @@ void TCBM_Commands::CloseAllChannels()
 	}
 }
 
-bool TCBM_Commands::CheckATN(void)
-{
-	bool atnAsserted = TCBM_Bus::IsAtnAsserted();
-	if (atnSequence == ATN_SEQUENCE_RECEIVE_COMMAND_CODE)
-	{
-		// TO CHECK is this case needed? Just let it complete
-		if (!atnAsserted) atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
-		return !atnAsserted;
-	}
-	else
-	{
-		if (atnAsserted) atnSequence = ATN_SEQUENCE_ATN;
-		return atnAsserted;
-	}
-}
-
-// Paraphrasing Jim Butterfield;- https://www.atarimagazines.com/compute/issue38/073_1_HOW_THE_VIC_64_SERIAL_BUS_WORKS.php
-// The talker is asserting the Clock line.
-// The listener is asserting the Data line.
-// There could be more than one listener, in which case all of the listeners are asserting the Data line.
-// When the talker is ready it releases the Clock line.
-// The listener must detect this and respond, but it doesn't have to do so immediately.
-// When the listener is ready to listen, it releases the Data line.
-// The Data line will go "unasserted" only when all listeners have released it - in other words, when all listeners are ready to accept data.
-
-// What happens next is variable. Either the talker will assert the Clock line again in less than 200 microseconds - usually within 60 microseconds - or 
-// it will do nothing. The listener should be watching, and if 200 microseconds pass without the Clock line going to true, it has a special task to perform : note EOI (End Or Identify).
-// If the Ready for Data signal isn't acknowledged by the talker within 200 microseconds, the listener knows that the talker is trying to signal EOI ie, "this character will be the last one."
-
-// So if the listener sees the 200 microsecond time - out, it must signal "OK, I noticed the EOI" back to the talker, I does this by asserting Data line for at least 60 microseconds, and then releasing it.
-// The talker will then revert to transmitting the character in the usual way; within 60 microseconds it will assert Clock line, and transmission will continue.
-// At this point, the Clock line is asserted whether or not we have gone through the EOI sequence; we're back to a common transmission sequence. 
-
-// The talker has eight bits to send. They will go out without handshake; in other words, the listener had better be there to catch them, since the talker won't wait to hear from the listener.
-// At this point, the talker controls both lines, Clock and Data. At the beginning of the sequence, it is asserting the Clock, while the Data line is released.
-// The Data line will change soon, since we'll send the data over it.
-
-// For each bit, we set the Data line true or false according to whether the bit is one or zero.
-// As soon as that's set, the Clock line is released, signalling "data ready."
-// The talker will typically have a bit in place and be signalling ready in 70 microseconds or less. Once the talker has signalled "data ready, "it will hold the two lines steady for at least 20 microseconds timing needs to be increased to 
-// 60 microseconds if the Commodore 64 is listening, since the 64's video chip may interrupt the processor for 42 microseconds at a time, and without the extra wait the 64 might completely miss a bit.
-// The listener plays a passive role here; it sends nothing, and just watches. 
-// As soon as it sees the Clock line false, it grabs the bit from the Data line and puts it away.
-// It then waits for the clock line to go true, in order to prepare for the next bit.
-// When the talker figures the data has been held for a sufficient length of time, it pulls the Clock line true and releases the Data line to false.
-// Then it starts to prepare the next bit.
-
-// After the eighth bit has been sent, it's the listener's turn to acknowledge. At this moment, the Clock line is asserted and the Data line is released.
-// The listener must acknowledge receiving the byte OK by asserting the Data line. The talker is now watching the Data line.
-// If the listener doesn't pull the Data line true within one millisecond it will know that something's wrong and may alarm appropriately. 
-
-// We're finished, and back where we started. The talker is holding the Clock line true, and the listener is holding the Data line true. We're ready for step 1; we may send another character - unless EOI has happened.
-// If EOI was sent or received in this last transmission, both talker and listener "let go." 
-// After a suitable pause, the Clock and Data lines are released to false and transmission stops. 
-
+// this is described in pagetable.com
 bool TCBM_Commands::WriteIECSerialPort(u8 data, bool eoi)
 {
-	TCBM_Bus::WaitMicroSeconds(50); //sidplay64-sd2iec needs this?
+	TCBM_Bus::WaitWhileDAVAsserted();
+	TCBM_Bus::SetData(data);
+	TCBM_Bus::SetStatus(eoi ? 0x03 : 0x00); // TCBM_STATUS_EOI : TCBM_STATUS_OK
+	TCBM_Bus::AssertACK();
+	TCBM_Bus::WaitWhileDAVReleased();
+	TCBM_Bus::SetDataInput();
+	TCBM_Bus::SetStatus(0);
+	TCBM_Bus::ReleaseACK();
+	TCBM_Bus::WaitWhileDAVAsserted();
+	TCBM_Bus::AssertACK();
+	TCBM_Bus::WaitWhileDAVReleased();
 
-	// When the talker is ready it releases the Clock line.
-	TCBM_Bus::ReleaseClock();
-
-	// Wait for all listeners to be ready. They singal this by releasing the Data line.
-	WaitWhile(TCBM_Bus::IsDataAsserted());
-
-	if (eoi) // End Or Identify
-	{
-		WaitWhile(TCBM_Bus::IsDataReleased());
-		WaitWhile(TCBM_Bus::IsDataAsserted());
-	}
-
-	TCBM_Bus::AssertClock();
-	TCBM_Bus::WaitMicroSeconds(40);
-	WaitWhile(TCBM_Bus::IsDataAsserted());
-	TCBM_Bus::WaitMicroSeconds(21);
-
-	// At this point, the talker controls both lines, Clock and Data. At the beginning of the sequence, it is asserting the Clock, while the Data line is released.
-	for (u8 i = 0; i < 8; ++i)
-	{
-		TCBM_Bus::WaitMicroSeconds(45);
-		if (data & 1 << i) TCBM_Bus::ReleaseData();
-		else TCBM_Bus::AssertData();
-		TCBM_Bus::WaitMicroSeconds(22);
-		TCBM_Bus::ReleaseClock();
-		if (usingVIC20) TCBM_Bus::WaitMicroSeconds(34);
-		else TCBM_Bus::WaitMicroSeconds(75);
-		TCBM_Bus::AssertClock();
-		TCBM_Bus::WaitMicroSeconds(22);
-		TCBM_Bus::ReleaseData();
-		TCBM_Bus::WaitMicroSeconds(14);
-	}
-
-	// After the eighth bit has been sent, it's the listener's turn to acknowledge. At this moment, the Clock line is asserted and the Data line is released.
-	WaitWhile(TCBM_Bus::IsDataReleased());
 	return false;
 }
 
-bool TCBM_Commands::ReadIECSerialPort(u8& byte)
+bool TCBM_Commands::ReadIECSerialPort(u8& byte, bool eoi)
 {
 	byte = 0;
+	// called after command byte was received, ACK is released already, DAV is asserted
+	TCBM_Bus::WaitWhileDAVAsserted();
+	byte = TCBM_Bus::GetPI_Data();
+	TCBM_Bus::SetStatus(eoi ? 0x03 : 0x00); // TCBM_STATUS_EOI : TCBM_STATUS_OK
+	TCBM_Bus::AssertACK();
+	TCBM_Bus::WaitWhileDAVReleased();
+	TCBM_Bus::SetStatus(0);
 
-	// When the talker is ready it releases the Clock line.
-	WaitWhile(TCBM_Bus::IsClockAsserted());
-
-	// We release data first
-	TCBM_Bus::ReleaseData();
-	WaitWhile(TCBM_Bus::IsDataAsserted());
-
-	timer.Start(200);
-	do
-	{
-		TCBM_Bus::ReadBrowseMode();
-		if (CheckATN()) return true;
-	}
-	while (TCBM_Bus::IsClockReleased() && !timer.Tick());
-
-	if (timer.TimedOut())
-	{
-		TCBM_Bus::AssertData();
-		TCBM_Bus::WaitMicroSeconds(73);
-		TCBM_Bus::ReleaseData();
-		WaitWhile(TCBM_Bus::IsClockReleased());
-		receivedEOI = true;
-	}
-
-	for (u8 i = 0; i < 8; ++i)
-	{
-		WaitWhile(TCBM_Bus::IsClockAsserted());
-		byte = (byte >> 1) | (!!TCBM_Bus::IsDataReleased() << 7);
-		WaitWhile(TCBM_Bus::IsClockReleased());
-	}
-
-	TCBM_Bus::AssertData();
 	return false;
 }
 
@@ -439,25 +325,18 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 	{
 		case ATN_SEQUENCE_IDLE:
 			TCBM_Bus::ReadBrowseMode();
-			if (TCBM_Bus::IsAtnAsserted()) atnSequence = ATN_SEQUENCE_ATN;
+			if (TCBM_Bus::IsDAVAsserted() && (TCBM_Bus::GetPI_Data() & 0x80)) atnSequence = ATN_SEQUENCE_ATN;
 			else if (selectedImageName[0] != 0) updateAction = IMAGE_SELECTED;
 		break;
 		case ATN_SEQUENCE_ATN:
-			// All devices must release the Clock line as the computer will be the one assering it.
-			TCBM_Bus::ReleaseClock();
-			// Tell computer we are ready to listen by asserting the Data line.
-			TCBM_Bus::AssertData();
-
 			deviceRole = DEVICE_ROLE_PASSIVE;
 			atnSequence = ATN_SEQUENCE_RECEIVE_COMMAND_CODE;
 			receivedEOI = false;
-
-			// Wait until the computer is ready to talk
-			// TODO: should set a timer here and if it times out (before the clock is released) go back to IDLE?
-			while (TCBM_Bus::IsClockReleased())
-			{
-				TCBM_Bus::ReadBrowseMode();
-			}
+			TCBM_Bus::ReadBrowseMode();
+			busCommandCode = TCBM_Bus::GetPI_Data();
+			if (busCommandCode != 0x81 && busCommandCode != 0x82 && busCommandCode != 0x83 && busCommandCode != 0x84) atnSequence = ATN_SEQUENCE_IDLE;
+			else TCBM_Bus::ReleaseACK(); // confirm
+			if (busCommandCode == 0x81) atnSequence = ATN_SEQUENCE_RECEIVE_COMMAND_CODE;
 		break;
 		case ATN_SEQUENCE_RECEIVE_COMMAND_CODE:
 			ReadIECSerialPort(commandCode);
@@ -505,8 +384,7 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 			{
 				secondaryAddress = commandCode & 0x0f;
 				deviceRole = DEVICE_ROLE_LISTEN;
-				if (TCBM_Bus::IsAtnAsserted()) atnSequence = ATN_SEQUENCE_RECEIVE_COMMAND_CODE;
-				else atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
+				atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
 			}
 			else if (commandCode == 0x3f)	// Unlisten
 			{
@@ -517,8 +395,7 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 			{
 				secondaryAddress = commandCode & 0x0f;
 				deviceRole = DEVICE_ROLE_TALK;
-				if (TCBM_Bus::IsAtnAsserted()) atnSequence = ATN_SEQUENCE_RECEIVE_COMMAND_CODE;
-				else atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
+				atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
 			}
 			else if (commandCode == 0x5f)	// Untalk
 			{
@@ -531,9 +408,7 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 				if ((commandCode & 0xf0) == 0xe0)	// Close
 				{
 					CloseFile(secondaryAddress);
-
-					if (TCBM_Bus::IsAtnAsserted()) atnSequence = ATN_SEQUENCE_RECEIVE_COMMAND_CODE;
-					else atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
+					atnSequence = ATN_SEQUENCE_HANDLE_COMMAND_CODE;
 				}
 				else	// Open
 				{
@@ -542,14 +417,10 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 			}
 			else
 			{
-				TCBM_Bus::ReleaseClock();
-				TCBM_Bus::ReleaseData();
-				TCBM_Bus::WaitWhileAtnAsserted();
 				atnSequence = ATN_SEQUENCE_COMPLETE;
 			}
 		break;
 		case ATN_SEQUENCE_HANDLE_COMMAND_CODE:
-			TCBM_Bus::WaitWhileAtnAsserted();
 			if (deviceRole == DEVICE_ROLE_LISTEN)
 			{
 				Listen();
@@ -557,15 +428,11 @@ TCBM_Commands::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 			else if (deviceRole == DEVICE_ROLE_TALK)
 			{
 				// Do the turn around and become the talker
-				TCBM_Bus::ReleaseData();
-				TCBM_Bus::AssertClock();
 				Talk();
 			}
 			atnSequence = ATN_SEQUENCE_COMPLETE;
 		break;
 		case ATN_SEQUENCE_COMPLETE:
-			TCBM_Bus::ReleaseClock();
-			TCBM_Bus::ReleaseData();
 
 			if (receivedCommand)
 			{
@@ -1263,10 +1130,7 @@ void TCBM_Commands::User(void)
 			switch (channel.buffer[2])
 			{
 				case '+':
-					usingVIC20 = true;
-				break;
-				case '-':
-					usingVIC20 = false;
+				case '-': // VIC 20 timing, irrelevant
 				break;
 				default:
 					Error(ERROR_73_DOSVERSION);
@@ -1426,7 +1290,7 @@ void TCBM_Commands::Listen()
 		Channel& channel = channels[15];
 		channel.Close();
 
-		while (!ReadIECSerialPort(byte))
+		while (!ReadIECSerialPort(byte)) // XXX different function that will keep command+byte, return false when command!=TCBM_CODE_RECV
 		{
 			if (!channel.WriteFull())
 			{
@@ -1456,6 +1320,8 @@ void TCBM_Commands::Listen()
 
 void TCBM_Commands::Talk()
 {
+// XXX different function that will keep command+byte, return false when command!=TCBM_CODE_SEND
+
 	if (commandCode == 0x6f)
 	{
 		SendError();
@@ -1889,77 +1755,8 @@ void TCBM_Commands::OpenFile()
 	Channel& channel = channels[secondary];
 	if (channel.command[0] == '#')
 	{
-		Channel& channelCommand = channels[15];
-
 		// Direct acces is unsupported. Without a mounted disk image tracks and sectors have no meaning.
 		//DEBUG_LOG("Driect access\r\n");
-		if (strcmp((char*)channelCommand.buffer, "U1:13 0 01 00") == 0)
-		{
-			// This is a 128 trying to auto boot
-			memset(channel.buffer, 0, 256);
-			channel.cursor = 256;
-
-			if (autoBootFB128)
-			{
-				int index = 0;
-				channel.buffer[0] = 'C';
-				channel.buffer[1] = 'B';
-				channel.buffer[2] = 'M';
-				index += 3;
-				index += 4;
-				channel.buffer[index++] = 'P';
-				channel.buffer[index++] = 'I';
-				channel.buffer[index++] = '1';
-				channel.buffer[index++] = '5';
-				channel.buffer[index++] = '4';
-				channel.buffer[index++] = '1';
-				channel.buffer[index++] = ' ';
-				channel.buffer[index++] = 'F';
-				channel.buffer[index++] = 'B';
-				channel.buffer[index++] = '1';
-				channel.buffer[index++] = '2';
-				channel.buffer[index++] = '8';
-				index++;
-				channel.buffer[index++] = 'F';
-				channel.buffer[index++] = 'B';
-				channel.buffer[index++] = '1';
-				channel.buffer[index++] = '2';
-				channel.buffer[index++] = '8';
-				index++;
-				channel.buffer[index++] = 0xa2;
-				channel.buffer[index] = (index + 5);
-				index++;
-				channel.buffer[index++] = 0xa0;
-				channel.buffer[index++] = 0xb;
-				channel.buffer[index++] = 0x4c;
-				channel.buffer[index++] = 0xa5;
-				channel.buffer[index++] = 0xaf;
-				channel.buffer[index++] = 'R';
-				channel.buffer[index++] = 'U';
-				channel.buffer[index++] = 'N';
-				channel.buffer[index++] = '\"';
-				channel.buffer[index++] = 'F';
-				channel.buffer[index++] = 'B';
-				channel.buffer[index++] = '1';
-				channel.buffer[index++] = '2';
-				channel.buffer[index++] = '8';
-				channel.buffer[index++] = '\"';
-				channel.fileSize = 256;
-			}
-			if (C128BootSectorName)
-			{
-				FIL fpBS;
-				u32 bytes;
-				if (FR_OK == f_open(&fpBS, C128BootSectorName, FA_READ))
-					f_read(&fpBS, channel.buffer, 256, &bytes);
-				else
-					memset(channel.buffer, 0, 256);
-				channel.fileSize = 256;
-			}
-
-			if (SendBuffer(channel, true))
-				return;
-		}
 	}
 	else if (channel.command[0] == '$')
 	{

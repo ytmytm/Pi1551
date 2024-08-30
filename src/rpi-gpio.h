@@ -210,6 +210,8 @@ extern void ClearGpioEvent(rpi_gpio_pin_t gpio);
 
 extern void SetACTLed(int value);
 
+extern void RPI_delay(int32_t count);
+
 #if defined(RPI3)
 extern void RPI_TouchInit(void);
 extern void RPI_UpdateTouch(void);
