@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
+#include "defs.h"
 #include "FileBrowser.h"
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +25,6 @@
 #include <ctype.h>
 #include "debug.h"
 #include "options.h"
-#include "InputMappings.h"
 #include "stb_image.h"
 #include "Petscii.h"
 extern "C"
@@ -32,10 +32,15 @@ extern "C"
 #include "rpi-gpio.h"
 }
 
+#if defined(PI1551SUPPORT)
+#include "tcbm_commands.h"
+extern TCBM_Commands m_TCBM_Commands;
+TCBM_Commands m_IEC_Commands = m_TCBM_Commands;
+#else
 #include "iec_commands.h"
 extern IEC_Commands m_IEC_Commands;
+#endif
 extern Options options;
-
 
 #define PNG_WIDTH 320
 #define PNG_HEIGHT 200

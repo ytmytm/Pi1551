@@ -18,13 +18,9 @@
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
 #include "defs.h"
-#include "InputMappings.h"
+#include "InputMappings1551.h"
 #include "FileBrowser.h"
-#if defined(PI1551SUPPORT)
 #include "tcbm_bus.h"
-#else
-#include "iec_bus.h"
-#endif
 #include "debug.h"
 extern "C"
 {
@@ -58,69 +54,69 @@ bool InputMappings::CheckButtonsBrowseMode()
 {
 	buttonFlags = 0;
 
-	if (IEC_Bus::GetInputButtonHeld(INPUT_BUTTON_INSERT))	// Change DeviceID
+	if (TCBM_Bus::GetInputButtonHeld(INPUT_BUTTON_INSERT))	// Change DeviceID
 	{
-		if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_ENTER))
+		if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_ENTER))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 8;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 9;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 10;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_BACK))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_BACK))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 11;
 		}
 		insertButtonPressedPrev = false;
 	}
-	else if (IEC_Bus::GetInputButtonHeld(INPUT_BUTTON_ENTER))	// Change ROMs
+	else if (TCBM_Bus::GetInputButtonHeld(INPUT_BUTTON_ENTER))	// Change ROMs
 	{
-		if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
+		if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 1;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 2;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_BACK))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_BACK))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 3;
 		}
-		else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_INSERT))
+		else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_INSERT))
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 4;
 		}
 		enterButtonPressedPrev = false;
 	}
-	else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
+	else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		SetButtonFlag(UP_FLAG);
-	else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+	else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
 		SetButtonFlag(DOWN_FLAG);
-	else if (IEC_Bus::GetInputButtonPressed(INPUT_BUTTON_BACK))
+	else if (TCBM_Bus::GetInputButtonPressed(INPUT_BUTTON_BACK))
 		SetButtonFlag(BACK_FLAG);
 	else
 	{
 		// edge detection
-		insertButtonPressed = !IEC_Bus::GetInputButtonReleased(INPUT_BUTTON_INSERT);
+		insertButtonPressed = !TCBM_Bus::GetInputButtonReleased(INPUT_BUTTON_INSERT);
 		if (insertButtonPressedPrev && !insertButtonPressed)
 			SetButtonFlag(INSERT_FLAG);
 		insertButtonPressedPrev = insertButtonPressed;
 
-		enterButtonPressed = !IEC_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
+		enterButtonPressed = !TCBM_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 		if (enterButtonPressedPrev && !enterButtonPressed)
 			SetButtonFlag(ENTER_FLAG);
 		enterButtonPressedPrev = enterButtonPressed;
@@ -135,12 +131,12 @@ void InputMappings::WaitForClearButtons()
 
 	do
 	{
-		IEC_Bus::ReadBrowseMode();
+		TCBM_Bus::ReadBrowseMode();
 
-		insertButtonPressed = !IEC_Bus::GetInputButtonReleased(INPUT_BUTTON_INSERT);
+		insertButtonPressed = !TCBM_Bus::GetInputButtonReleased(INPUT_BUTTON_INSERT);
 		insertButtonPressedPrev = insertButtonPressed;
 
-		enterButtonPressed = !IEC_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
+		enterButtonPressed = !TCBM_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 		enterButtonPressedPrev = enterButtonPressed;
 		
 		usDelay(1);
@@ -151,16 +147,16 @@ void InputMappings::CheckButtonsEmulationMode()
 {
 	buttonFlags = 0;
 
-	if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
+	if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		SetButtonFlag(NEXT_FLAG);
-	else if (IEC_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+	else if (TCBM_Bus::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
 		SetButtonFlag(PREV_FLAG);
-	//else if (IEC_Bus::GetInputButtonPressed(INPUT_BUTTON_BACK))
+	//else if (TCBM_Bus::GetInputButtonPressed(INPUT_BUTTON_BACK))
 	//	SetButtonFlag(BACK_FLAG);
-	//else if (IEC_Bus::GetInputButtonPressed(INPUT_BUTTON_INSERT))
+	//else if (TCBM_Bus::GetInputButtonPressed(INPUT_BUTTON_INSERT))
 	//	SetButtonFlag(INSERT_FLAG);
 	else {
-		enterButtonPressed = !IEC_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
+		enterButtonPressed = !TCBM_Bus::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 		if (enterButtonPressedPrev && !enterButtonPressed)
 			SetButtonFlag(ESC_FLAG);
 		enterButtonPressedPrev = enterButtonPressed;

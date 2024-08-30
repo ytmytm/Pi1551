@@ -34,13 +34,14 @@ extern "C"
 #include <uspi.h>
 #include "rpi-mailbox.h"
 }
-#include "InputMappings.h"
 #include "options.h"
 #include "diskio.h"
 #if defined(PI1551SUPPORT)
+#include "InputMappings1551.h"
 #include "tcbm_commands.h"
 #include "Pi1551.h"
 #else
+#include "InputMappings.h"
 #include "iec_commands.h"
 #include "Pi1541.h"
 #include "Pi1581.h"
