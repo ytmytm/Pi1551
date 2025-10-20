@@ -2106,6 +2106,7 @@ static void CheckOptions()
 		}
 	}
 #endif
+#if defined(PI1551SUPPORT)
 	const char* ROMName1551 = options.GetRomName1551();
 	if (ROMName1551)
 	{
@@ -2133,7 +2134,7 @@ static void CheckOptions()
 			//DEBUG_LOG("Read ROM %s from options\r\n", ROMName);
 		}
 	}
-
+#else
 	const char* ROMName1581 = options.GetRomName1581();
 	if (ROMName1581)
 	{
@@ -2161,7 +2162,7 @@ static void CheckOptions()
 			//DEBUG_LOG("Read ROM %s from options\r\n", ROMName);
 		}
 	}
-
+#endif
 	int ROMIndex;
 
 	for (ROMIndex = ROMs::MAX_ROMS - 1; ROMIndex >= 0; --ROMIndex)
@@ -2204,7 +2205,6 @@ static void CheckOptions()
 			//DEBUG_LOG("Read ROM %s from options\r\n", ROMName);
 		}
 	}
-
 
 	if (roms.ROMValid[0] == false && !(AttemptToLoadROM("d1541.rom") || AttemptToLoadROM("dos1541") || AttemptToLoadROM("d1541II") || AttemptToLoadROM("Jiffy.bin")))
 	{
