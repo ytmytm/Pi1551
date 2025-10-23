@@ -177,8 +177,14 @@ void TCBM_Bus::ReadEmulationMode1551(void)
 			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
 		portA->SetInput(PI_Data);
 	}
+	
+	// Update PI_ACK and PI_Status from TPI port C outputs
+	u8 portCOutput = portC->GetOutput();
+	PI_ACK = (portCOutput & 0x08) != 0;
+	PI_Status = portCOutput & 0x03;
 
-	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));
+    // RESET is active-low on the TCBM bus: asserted when input is 0
+    Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
 /// @brief Set real I/O pins / directions after emulation step in emulation mode

@@ -355,16 +355,17 @@ public:
 
 	static void WaitUntilReset(void)
 	{
-		unsigned gplev0;
-		do
-		{
-			gplev0 = read32(ARM_GPIO_GPLEV0);
-			Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));
+        unsigned gplev0;
+        do
+        {
+            gplev0 = read32(ARM_GPIO_GPLEV0);
+            // RESET is active-low on the TCBM bus: asserted when input is 0
+            Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 
-			if (Resetting)
-				TCBM_Bus::WaitMicroSeconds(100);
-		}
-		while (Resetting);
+            if (Resetting)
+                TCBM_Bus::WaitMicroSeconds(100);
+        }
+        while (Resetting);
 	}
 
 	// Out going
