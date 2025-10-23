@@ -2202,33 +2202,32 @@ static void CheckOptions()
 	}
 #endif
 #if defined(PI1551SUPPORT)
-	const char* ROMName1551 = options.GetRomName1551();
-	if (ROMName1551)
-	{
-		//DEBUG_LOG("%d Rom Name = %s\r\n", ROMIndex, ROMName);
-		if ((FR_OK == f_open(&fp, ROMName1551, FA_READ)))
-		{
-			u32 bytesRead;
-
-			screen.Clear(COLOUR_BLACK);
-			snprintf(tempBuffer, tempBufferSize, "Loading ROM %s\r\n", ROMName1551);
-			screen.MeasureText(false, tempBuffer, &widthText, &heightText);
-			xpos = (widthScreen - widthText) >> 1;
-			ypos = (heightScreen - heightText) >> 1;
-			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-
-			SetACTLed(true);
-			res = f_read(&fp, roms.ROMImage1551, ROMs::ROM1551_SIZE, &bytesRead);
-			SetACTLed(false);
-			if (res == FR_OK && bytesRead == ROMs::ROM1551_SIZE)
-			{
-				strncpy(roms.ROMName1551, ROMName1551, 255);
-				roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
-			}
-			f_close(&fp);
-			//DEBUG_LOG("Read ROM %s from options\r\n", ROMName);
-		}
-	}
+    // In PI1551 builds, only honor ROM1551 (with its default from options).
+    const char* ROMName1551 = options.GetRomName1551();
+    if (ROMName1551)
+    {
+        char ROMName1551_copy[256];
+        strncpy(ROMName1551_copy, ROMName1551, 255);
+        ROMName1551_copy[255] = 0;
+        
+        if (AttemptToLoadROM(ROMName1551_copy))
+        {
+            // Copy the loaded ROM from the generic buffer to the 1551-specific buffer
+            memcpy(roms.ROMImage1551, roms.ROMImages[0], ROMs::ROM_SIZE);
+            strncpy(roms.ROMName1551, ROMName1551, 255);
+            roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
+        }
+        else
+        {
+            snprintf(tempBuffer, tempBufferSize, "No 1551 ROM file found!\r\nExpected '%s' in SD root or /roms.\r\nSet ROM1551 in options.txt if different.", ROMName1551);
+            screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+            xpos = (widthScreen - widthText) >> 1;
+            ypos = (heightScreen - heightText) >> 1;
+            screen.Clear(COLOUR_RED);
+            screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+            do { } while (1);
+        }
+    }
 #else
 	const char* ROMName1581 = options.GetRomName1581();
 	if (ROMName1581)
@@ -2301,17 +2300,14 @@ static void CheckOptions()
 		}
 	}
 
+
+#if not defined(PI1551SUPPORT)
 	if (roms.ROMValid[0] == false && !(AttemptToLoadROM("d1541.rom") || AttemptToLoadROM("dos1541") || AttemptToLoadROM("d1541II") || AttemptToLoadROM("Jiffy.bin")))
 	{
 		snprintf(tempBuffer, tempBufferSize, "No ROM file found!\r\nPlease copy a valid 1541 ROM file in the root folder of the SD card.\r\nThe file needs to be called 'dos1541'.");
 		screen.MeasureText(false, tempBuffer, &widthText, &heightText);
 		xpos = (widthScreen - widthText) >> 1;
 		ypos = (heightScreen - heightText) >> 1;
-#if defined(PI1551SUPPORT)
-		screen.Clear(COLOUR_RED);
-		screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-		do { } while (1);
-#else
 		do
 		{
 			screen.Clear(COLOUR_RED);
@@ -2320,8 +2316,8 @@ static void CheckOptions()
 			IEC_Bus::WaitMicroSeconds(20000);
 		}
 		while (1);
-#endif
 	}
+#endif
 
 	inputMappings->INPUT_BUTTON_ENTER = options.GetButtonEnter();
 	inputMappings->INPUT_BUTTON_UP = options.GetButtonUp();
