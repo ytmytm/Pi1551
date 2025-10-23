@@ -1414,6 +1414,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			emulationHalted = true;
 		}
 
+		// XXXMW this couning to 2 might break emulation, rest of I/O ports seems to run also at 2MHz
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
 			if (pi1551.m6502.SYNC())	// About to start a new instruction.
