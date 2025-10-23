@@ -239,7 +239,7 @@ void TCBM_Bus::RefreshOuts1551(void)
 		u8 pc = portC->GetOutput();
 		if (pc & 0x08) set |= 1 << PIGPIO_OUT_ACK;
 		else clear |= 1 << PIGPIO_OUT_ACK;
-		if (pc & 0x02) set |= 1 << PIGPIO_OUT_DEV;
+		if (pc & 0x04) set |= 1 << PIGPIO_OUT_DEV;
 		else clear |= 1 << PIGPIO_OUT_DEV;
 		if (pc & 0x02) set |= 1 << PIGPIO_OUT_STATUS1;
 		else clear |= 1 << PIGPIO_OUT_STATUS1;
