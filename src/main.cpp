@@ -667,6 +667,22 @@ void UpdateScreen()
 				}
 			}
 
+			if (options.DisplayPC())
+			{
+				u16 currentPC = 0;
+#if defined(PI1551SUPPORT)
+				if (emulating == EMULATING_1551)
+					currentPC = pi1551.m6502.GetPC();
+#else
+				if (emulating == EMULATING_1541)
+					currentPC = pi1541.m6502.GetPC();
+				else if (emulating == EMULATING_1581)
+					currentPC = pi1581.m6502.GetPC();
+#endif
+				snprintf(tempBuffer, tempBufferSize, "PC: $%04X", currentPC);
+				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
+			}
+
 			if (caddyIndexChangedTimer == 0)
 			{
 				if (refreshLCDStatusDisplay)
@@ -2026,6 +2042,8 @@ void DisplayOptions(int y_pos)
 	snprintf(tempBuffer, tempBufferSize, "LcdLogoName = %s\r\n", options.GetLcdLogoName());
 	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 	snprintf(tempBuffer, tempBufferSize, "AutoBaseName = %s\r\n", options.GetAutoBaseName());
+	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+	snprintf(tempBuffer, tempBufferSize, "displayPC = %d\r\n", options.DisplayPC());
 	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 #endif
 }

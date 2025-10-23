@@ -77,6 +77,7 @@ public:
 	inline const char* Get128BootSectorName() const { return C128BootSectorName; }
 
 	inline unsigned int DisplayTemperature() const { return displayTemperature; }
+	inline unsigned int DisplayPC() const { return displayPC; }
 
 	inline unsigned int LowercaseBrowseModeFilenames() const { return lowercaseBrowseModeFilenames; }
 	DiskImage::DiskType GetNewDiskType() const;
@@ -142,6 +143,7 @@ private:
 	unsigned int autoBootFB128;
 
 	unsigned int displayTemperature;
+	unsigned int displayPC;
 
 	unsigned int lowercaseBrowseModeFilenames;
 
