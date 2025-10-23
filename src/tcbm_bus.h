@@ -97,11 +97,11 @@ enum PIGPIO
 	PIGPIO_IN_BUTTON3 = 17,
 	PIGPIO_IN_BUTTON1 = 27,
 	PIGPIO_IN_BUTTON2 = 22,
-	PIGPIO_OUT_LED = 16,
+	PIGPIO_OUT_LED = 10, // was 16
 	PIGPIO_OUT_DEV = 9,
 	PIGPIO_IN_RESET = 11,
 	PIGPIO_IN_BUTTON5 = 5,
-	PIGPIO_OUT_SPI0_RS = 6,
+	PIGPIO_OUT_SPI0_RS = 6, // possibly not used
 	PIGPIO_OUT_SOUND = 13
 };
 #else
@@ -232,11 +232,11 @@ public:
 			//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 			if (TCBM_Bus::rotaryEncoderInvert == true)
 			{ // button 3 / 2 / 1
-				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO17, RPI_GPIO22, RPI_GPIO27);
+				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON1);
 			}
 			else
 			{ // button 2 / 3 / 1
-				TCBM_Bus::rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO17, RPI_GPIO27);
+				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON1);
 			}
 		}
 
@@ -399,6 +399,9 @@ public:
 	static inline bool IsReset() { return Resetting; }
 	static inline bool IsDAVAsserted() { return PI_DAV; }
 	static inline bool IsDAVReleased() { return !PI_DAV; }
+	static inline bool GetPI_DAV() { return PI_DAV; }
+	static inline bool GetPI_ACK() { return PI_ACK; }
+	static inline u8 GetPI_Status() { return PI_Status; }
 
 	static inline void AssertACK() {
 		if (TPI) {
