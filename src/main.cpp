@@ -416,6 +416,13 @@ void UpdateScreen()
 	bool oldCLOCK = false;
 	bool oldSRQ = false;
 	bool refreshLCDStatusDisplay;
+	
+#if defined(PI1551SUPPORT)
+	// TCBM bus signal state variables
+	bool oldDAV = false;
+	bool oldACK = false;
+	u8 oldSTATUS = 0;
+#endif
 
 	u32 oldTrack = 0;
 	u32 textColour = COLOUR_BLACK;
@@ -428,6 +435,13 @@ void UpdateScreen()
 	RGBA clockColour = COLOUR_CYAN;
 	RGBA SRQColour = COLOUR_MAGENTA;
 	RGBA BkColour = FileBrowser::Colour(VIC2_COLOUR_INDEX_BLUE);
+	
+#if defined(PI1551SUPPORT)
+	// TCBM bus signal colors
+	RGBA davColour = COLOUR_RED;
+	RGBA ackColour = COLOUR_MAGENTA;
+	RGBA statusColour = COLOUR_YELLOW;
+#endif
 
 	int height = screen.ScaleY(60);
 	int screenHeight = screen.Height();
@@ -502,7 +516,70 @@ void UpdateScreen()
 			screen.DrawLineV(graphX, top3, bottom, BkColour);
 
 #if defined(PI1551SUPPORT)
-// XXX plot something?
+		// TCBM bus signal plotting
+		// note: numbers below: 29, 35, 41 depend on template text from FileBrowser.cpp:DisplayStatusBar()
+		value = TCBM_Bus::GetPI_DAV();
+		if (options.GraphIEC())
+		{
+			bottom = top2 - 2;
+			if (value ^ oldDAV)
+			{
+				screen.DrawLineV(graphX, top3, bottom, davColour);
+			}
+			else
+			{
+				if (value) screen.PlotPixel(graphX, top3, davColour);
+				else screen.PlotPixel(graphX, bottom, davColour);
+			}
+		}
+		if (value != oldDAV)
+		{
+			oldDAV = value;
+			snprintf(tempBuffer, tempBufferSize, "%d", value);
+			screen.PrintText(false, 29 * 8, y, tempBuffer, textColour, bgColour);
+		}
+
+		value = TCBM_Bus::GetPI_ACK();
+		if (options.GraphIEC())
+		{
+			bottom = top - 2;
+			if (value ^ oldACK)
+			{
+				screen.DrawLineV(graphX, top2, bottom, ackColour);
+			}
+			else
+			{
+				if (value) screen.PlotPixel(graphX, top2, ackColour);
+				else screen.PlotPixel(graphX, bottom, ackColour);
+			}
+		}
+		if (value != oldACK)
+		{
+			oldACK = value;
+			snprintf(tempBuffer, tempBufferSize, "%d", value);
+			screen.PrintText(false, 35 * 8, y, tempBuffer, textColour, bgColour);
+		}
+
+		u8 statusValue = TCBM_Bus::GetPI_Status();
+		if (options.GraphIEC())
+		{
+			bottom = screenHeight - 1;
+			if (statusValue != oldSTATUS)
+			{
+				screen.DrawLineV(graphX, top, bottom, statusColour);
+			}
+			else
+			{
+				if (statusValue) screen.PlotPixel(graphX, top, statusColour);
+				else screen.PlotPixel(graphX, bottom, statusColour);
+			}
+		}
+		if (statusValue != oldSTATUS)
+		{
+			oldSTATUS = statusValue;
+			snprintf(tempBuffer, tempBufferSize, "%d", statusValue);
+			screen.PrintText(false, 41 * 8, y, tempBuffer, textColour, bgColour);
+		}
 #else
 		value = IEC_Bus::GetPI_Atn();
 		if (options.GraphIEC())

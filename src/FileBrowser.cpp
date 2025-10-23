@@ -1414,12 +1414,18 @@ void FileBrowser::DisplayStatusBar()
 #if not defined(EXPERIMENTALZERO)
 	u32 x = 0;
 	u32 y = screenMain->ScaleY(STATUS_BAR_POSITION_Y);
-
 	char bufferOut[128];
+#if defined(PI1551SUPPORT)
+	if (options.DisplayTemperature())
+		snprintf(bufferOut, 128, "LED 0 Motor 0 Track 18.0 DAV 0 ACK 0 ST0 0 00%cC", 248);
+	else
+		snprintf(bufferOut, 128, "LED 0 Motor 0 Track 18.0 DAV 0 ACK 0 ST0 0");
+#else
 	if (options.DisplayTemperature())
 		snprintf(bufferOut, 128, "LED 0 Motor 0 Track 18.0 ATN 0 DAT 0 CLK 0 00%cC", 248);
 	else
 		snprintf(bufferOut, 128, "LED 0 Motor 0 Track 18.0 ATN 0 DAT 0 CLK 0");
+#endif
 
 	screenMain->PrintText(false, x, y, bufferOut, RGBA(0, 0, 0, 0xff), RGBA(0xff, 0xff, 0xff, 0xff));
 #endif
