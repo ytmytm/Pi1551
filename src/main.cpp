@@ -91,6 +91,11 @@ enum EmulatingMode
 
 volatile EmulatingMode emulating;
 
+// Emulation control state
+volatile bool emulationHalted = false;
+volatile bool emulationStepping = false;
+volatile bool emulationRunning = true;
+
 typedef void(*func_ptr)();
 
 const long int tempBufferSize = 1024;
@@ -747,16 +752,59 @@ void UpdateScreen()
 			if (options.DisplayPC())
 			{
 				u16 currentPC = 0;
+				u8 currentA = 0, currentX = 0, currentY = 0, currentSP = 0, currentStatus = 0;
 #if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
+				{
 					currentPC = pi1551.m6502.GetPC();
+					currentA = pi1551.m6502.GetA();
+					currentX = pi1551.m6502.GetX();
+					currentY = pi1551.m6502.GetY();
+					pi1551.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+				}
 #else
 				if (emulating == EMULATING_1541)
+				{
 					currentPC = pi1541.m6502.GetPC();
+					currentA = pi1541.m6502.GetA();
+					currentX = pi1541.m6502.GetX();
+					currentY = pi1541.m6502.GetY();
+					pi1541.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+				}
 				else if (emulating == EMULATING_1581)
+				{
 					currentPC = pi1581.m6502.GetPC();
+					currentA = pi1581.m6502.GetA();
+					currentX = pi1581.m6502.GetX();
+					currentY = pi1581.m6502.GetY();
+					pi1581.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+				}
 #endif
-				snprintf(tempBuffer, tempBufferSize, "PC: $%04X", currentPC);
+				// Get 3 memory bytes at current PC
+				u8 memByte1 = 0, memByte2 = 0, memByte3 = 0;
+#if defined(PI1551SUPPORT)
+				if (emulating == EMULATING_1551)
+				{
+					memByte1 = read6502_1551(currentPC);
+					memByte2 = read6502_1551(currentPC + 1);
+					memByte3 = read6502_1551(currentPC + 2);
+				}
+#else
+				if (emulating == EMULATING_1541)
+				{
+					memByte1 = read6502(currentPC);
+					memByte2 = read6502(currentPC + 1);
+					memByte3 = read6502(currentPC + 2);
+				}
+				else if (emulating == EMULATING_1581)
+				{
+					memByte1 = read6502_1581(currentPC);
+					memByte2 = read6502_1581(currentPC + 1);
+					memByte3 = read6502_1581(currentPC + 2);
+				}
+#endif
+				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X]", 
+					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 			}
 
@@ -1017,6 +1065,61 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 		if (refreshOutsAfterCPUStep)
 			IEC_Bus::ReadEmulationMode1541();
 
+		// Always check keyboard input first, even when halted
+		IEC_Bus::ReadGPIOUserInput();
+
+		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
+#if not defined(EXPERIMENTALZERO)
+		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+		inputMappings->CheckButtonsEmulationMode();
+
+		// Handle emulation control keys:
+		// H - Halt emulation
+		// S - Step one instruction then halt
+		// R - Run emulation continuously
+		// E - Reset emulation (preserves current state: running/halted/stepping)
+		if (inputMappings->Halt())
+		{
+			emulationHalted = true;
+			emulationRunning = false;
+			emulationStepping = false;
+		}
+		if (inputMappings->Step())
+		{
+			emulationHalted = false;
+			emulationRunning = false;
+			emulationStepping = true;
+		}
+		if (inputMappings->Run())
+		{
+			emulationHalted = false;
+			emulationRunning = true;
+			emulationStepping = false;
+		}
+		if (inputMappings->ResetEmulation())
+		{
+			// Reset the emulated system but preserve emulation state
+			pi1541.Reset();
+			// Keep current emulation state (running/halted/stepping)
+		}
+
+		// Handle emulation control states BEFORE CPU execution
+		if (emulationHalted)
+		{
+			// Emulation is halted - don't execute any CPU steps
+			// Just wait and check for input
+			usDelay(1000); // Wait 1ms to avoid busy waiting
+			continue;
+		}
+		
+		if (emulationStepping)
+		{
+			// Step mode - execute one instruction then halt
+			emulationStepping = false;
+			emulationHalted = true;
+		}
+
 		if (pi1541.m6502.SYNC())	// About to start a new instruction.
 		{
 			pc = pi1541.m6502.GetPC();
@@ -1070,14 +1173,6 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 #endif
 			}
 		}
-
-		IEC_Bus::ReadGPIOUserInput();
-
-		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
-#if not defined(EXPERIMENTALZERO)
-		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
-#endif
-		inputMappings->CheckButtonsEmulationMode();
 
 		bool exitEmulation = inputMappings->Exit();
 		bool exitDoAutoLoad = inputMappings->AutoLoad();
@@ -1264,6 +1359,61 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	{
 		TCBM_Bus::ReadEmulationMode1551();
 
+		// Always check keyboard input first, even when halted
+		TCBM_Bus::ReadGPIOUserInput();
+
+		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
+#if not defined(EXPERIMENTALZERO)
+		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+		inputMappings->CheckButtonsEmulationMode();
+
+		// Handle emulation control keys:
+		// H - Halt emulation
+		// S - Step one instruction then halt
+		// R - Run emulation continuously
+		// E - Reset emulation (preserves current state: running/halted/stepping)
+		if (inputMappings->Halt())
+		{
+			emulationHalted = true;
+			emulationRunning = false;
+			emulationStepping = false;
+		}
+		if (inputMappings->Step())
+		{
+			emulationHalted = false;
+			emulationRunning = false;
+			emulationStepping = true;
+		}
+		if (inputMappings->Run())
+		{
+			emulationHalted = false;
+			emulationRunning = true;
+			emulationStepping = false;
+		}
+		if (inputMappings->ResetEmulation())
+		{
+			// Reset the emulated system but preserve emulation state
+			pi1551.Reset();
+			// Keep current emulation state (running/halted/stepping)
+		}
+
+		// Handle emulation control states BEFORE CPU execution
+		if (emulationHalted)
+		{
+			// Emulation is halted - don't execute any CPU steps
+			// Just wait and check for input
+			usDelay(1000); // Wait 1ms to avoid busy waiting
+			continue;
+		}
+		
+		if (emulationStepping)
+		{
+			// Step mode - execute one instruction then halt
+			emulationStepping = false;
+			emulationHalted = true;
+		}
+
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
 			if (pi1551.m6502.SYNC())	// About to start a new instruction.
@@ -1313,14 +1463,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 #endif
 			}
 		}
-
-		TCBM_Bus::ReadGPIOUserInput();
-
-		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
-#if not defined(EXPERIMENTALZERO)
-		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
-#endif
-		inputMappings->CheckButtonsEmulationMode();
 
 		bool exitEmulation = inputMappings->Exit();
 		bool exitDoAutoLoad = inputMappings->AutoLoad();
@@ -1479,6 +1621,61 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 	{
 		IEC_Bus::ReadEmulationMode1581();
 
+		// Always check keyboard input first, even when halted
+		IEC_Bus::ReadGPIOUserInput();
+
+		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
+#if not defined(EXPERIMENTALZERO)
+		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+		inputMappings->CheckButtonsEmulationMode();
+
+		// Handle emulation control keys:
+		// H - Halt emulation
+		// S - Step one instruction then halt
+		// R - Run emulation continuously
+		// E - Reset emulation (preserves current state: running/halted/stepping)
+		if (inputMappings->Halt())
+		{
+			emulationHalted = true;
+			emulationRunning = false;
+			emulationStepping = false;
+		}
+		if (inputMappings->Step())
+		{
+			emulationHalted = false;
+			emulationRunning = false;
+			emulationStepping = true;
+		}
+		if (inputMappings->Run())
+		{
+			emulationHalted = false;
+			emulationRunning = true;
+			emulationStepping = false;
+		}
+		if (inputMappings->ResetEmulation())
+		{
+			// Reset the emulated system but preserve emulation state
+			pi1581.Reset();
+			// Keep current emulation state (running/halted/stepping)
+		}
+
+		// Handle emulation control states BEFORE CPU execution
+		if (emulationHalted)
+		{
+			// Emulation is halted - don't execute any CPU steps
+			// Just wait and check for input
+			usDelay(1000); // Wait 1ms to avoid busy waiting
+			continue;
+		}
+		
+		if (emulationStepping)
+		{
+			// Step mode - execute one instruction then halt
+			emulationStepping = false;
+			emulationHalted = true;
+		}
+
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
 			if (pi1581.m6502.SYNC())	// About to start a new instruction.
@@ -1529,16 +1726,9 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 			}
 		}
 
-		IEC_Bus::ReadGPIOUserInput();
-
-		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
-#if not defined(EXPERIMENTALZERO)
-		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
-#endif
-		inputMappings->CheckButtonsEmulationMode();
-
 		bool exitEmulation = inputMappings->Exit();
 		bool exitDoAutoLoad = inputMappings->AutoLoad();
+
 
 
 		bool reset = IEC_Bus::IsReset();

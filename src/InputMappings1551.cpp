@@ -345,6 +345,14 @@ void InputMappings::CheckKeyboardEmulationMode(unsigned numberOfImages, unsigned
 		SetKeyboardFlag(AUTOLOAD_FLAG);
 	else if (keyboard->KeyHeld(KEY_R) && keyboard->KeyEitherAlt() )
 		SetKeyboardFlag(FAKERESET_FLAG);
+		else if (keyboard->KeyHeld(KEY_H))
+			SetKeyboardFlag(HALT_FLAG);
+		else if (keyboard->KeyHeld(KEY_S))
+			SetKeyboardFlag(STEP_FLAG);
+		else if (keyboard->KeyHeld(KEY_R))
+			SetKeyboardFlag(RUN_FLAG);
+		else if (keyboard->KeyHeld(KEY_E))
+			SetKeyboardFlag(RESET_FLAG);
 	else if (numberOfImages > 1)
 	{
 		unsigned index;

@@ -46,6 +46,10 @@
 #define END_FLAG		(1 << 20)
 
 #define FUNCTION_FLAG		(1 << 21)
+#define HALT_FLAG		(1 << 22)
+#define STEP_FLAG		(1 << 23)
+#define RUN_FLAG		(1 << 24)
+#define RESET_FLAG		(1 << 25)
 // dont exceed 32!!
 
 
@@ -201,6 +205,11 @@ public:
 
 	inline char getKeyboardNumLetter() { return keyboardNumLetter; }
 	inline unsigned getROMOrDevice() { return inputROMOrDevice; }
+
+	inline bool Halt() { return KeyboardFlag(HALT_FLAG) | ButtonFlag(HALT_FLAG); }
+	inline bool Step() { return KeyboardFlag(STEP_FLAG) | ButtonFlag(STEP_FLAG); }
+	inline bool Run() { return KeyboardFlag(RUN_FLAG) | ButtonFlag(RUN_FLAG); }
+	inline bool ResetEmulation() { return KeyboardFlag(RESET_FLAG) | ButtonFlag(RESET_FLAG); }
 
 	// Used by the 2 cores so need to be volatile
 	//volatile static unsigned directDiskSwapRequest;
