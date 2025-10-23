@@ -559,7 +559,7 @@ FileBrowser::FileBrowser(InputMappings* inputMappings, DiskCaddy* diskCaddy, ROM
 		folder.AddView(screenLCD, inputMappings, columns, rows, positionX, positionY, true);
 	}
 
-	f_chdir("/1541");
+    f_chdir(DEFAULT_BROWSE_DIR);
 	RefreshFolderEntries();
 }
 
@@ -711,7 +711,7 @@ void FileBrowser::FolderChanged()
 
 void FileBrowser::DisplayRoot()
 {
-	f_chdir("/1541");
+    f_chdir(DEFAULT_BROWSE_DIR);
 	FolderChanged();
 }
 
@@ -1753,7 +1753,7 @@ void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForI
 
 void FileBrowser::SelectAutoMountImage(const char* image)
 {
-	f_chdir("/1541");
+    f_chdir(DEFAULT_BROWSE_DIR);
 	RefreshFolderEntries();
 
 	if (SelectLST(image))

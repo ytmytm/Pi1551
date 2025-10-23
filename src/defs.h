@@ -71,4 +71,10 @@
 #define TEST3_MASK   (1 << TEST3_PIN)
 #endif
 
+#if defined(PI1551SUPPORT)
+#define DEFAULT_BROWSE_DIR "/1551"
+#else
+#define DEFAULT_BROWSE_DIR "/1541"
+#endif
+
 #endif
