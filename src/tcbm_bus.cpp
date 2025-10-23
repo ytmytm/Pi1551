@@ -149,7 +149,8 @@ void TCBM_Bus::ReadBrowseMode(void)
 			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
 	}
 
-	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) == (PIGPIO_MASK_IN_RESET));
+    // RESET is active-low on the TCBM bus: asserted when input is 0
+    Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
 /// @brief read real I/O pins before emulation step in emulation mode
