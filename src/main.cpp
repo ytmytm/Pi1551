@@ -2096,7 +2096,7 @@ static void LoadOptions()
 	}
 }
 
-void DisplayOptions(int y_pos)
+int DisplayOptions(int y_pos)
 {
 #if not defined(EXPERIMENTALZERO)
 	// print confirmation of parsed options
@@ -2123,6 +2123,7 @@ void DisplayOptions(int y_pos)
 	snprintf(tempBuffer, tempBufferSize, "displayPC = %d\r\n", options.DisplayPC());
 	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 #endif
+	return y_pos;
 }
 
 void DisplayI2CScan(int y_pos)
@@ -2152,7 +2153,6 @@ void DisplayI2CScan(int y_pos)
 	screen.PrintText(false, 0, y_pos+16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 #endif
 }
-
 static void CheckOptions()
 {
 	FIL fp;
@@ -2522,7 +2522,7 @@ extern "C"
 			DisplayI2CScan(y_pos+=32);
 
 		if (options.ShowOptions())
-			DisplayOptions(y_pos+=32);
+			y_pos = DisplayOptions(y_pos+=32);
 
 #endif
 		headSoundFreq = 1000000 / options.SoundOnGPIOFreq();	// 1200Hz = 1/1200 * 10^6;
@@ -2541,12 +2541,18 @@ extern "C"
 
 		numberOfUSBMassStorageDevices = USPiMassStorageDeviceAvailable();
 		DEBUG_LOG("%d USB Mass Storage Devices found\r\n", numberOfUSBMassStorageDevices);
+		snprintf(tempBuffer, tempBufferSize, "%d USB Mass Storage Devices found", numberOfUSBMassStorageDevices);
+		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 
 		USBKeyboardDetected = USPiKeyboardAvailable();
-		if (!USBKeyboardDetected)
+		if (!USBKeyboardDetected) {
 			DEBUG_LOG("Keyboard not found\r\n");
-		else
+			snprintf(tempBuffer, tempBufferSize, "Keyboard not found");
+		} else {
 			DEBUG_LOG("Keyboard found\r\n");
+			snprintf(tempBuffer, tempBufferSize, "Keyboard found");
+		}
+		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 
 		//if (!USPiMouseAvailable())
 		//	DEBUG_LOG("Mouse not found\r\n");
@@ -2601,6 +2607,10 @@ extern "C"
 		pi1551.drive.SetTPI(&pi1551.TPI);
 		pi1551.TPI.GetPortA()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
 		TCBM_Bus::Initialise();
+
+		// Add 5 second pause after logo and options are shown
+		if (!options.QuickBoot())
+			TCBM_Bus::WaitMicroSeconds(5 * 1000000);
 #else
 		IEC_Bus::SetSplitIECLines(options.SplitIECLines());
 		IEC_Bus::SetInvertIECInputs(options.InvertIECInputs());
@@ -2621,6 +2631,7 @@ extern "C"
 		pi1541.VIA[0].GetPortB()->SetPortOut(0, IEC_Bus::PortB_OnPortOut);
 		IEC_Bus::Initialise();
 #endif
+
 		if (screenLCD)
 			screenLCD->ClearInit(0);
 
