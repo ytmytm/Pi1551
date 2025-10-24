@@ -526,6 +526,8 @@ private:
 	static u32 inputRepeatThreshold[5];
 	static u32 inputRepeat[5];
 	static u32 inputRepeatPrev[5];
+	static u8 lastDirA;
+	static u8 lastDirC;
 
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 	static RotaryEncoder rotaryEncoder;
