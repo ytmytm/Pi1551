@@ -46,6 +46,9 @@ extern "C"
 #include "Pi1541.h"
 #include "Pi1581.h"
 #endif
+
+// Global overrun counter for 1us timing overruns
+unsigned long long g_overrunCounter = 0;
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
 #include "SpinLock.h"
@@ -803,8 +806,8 @@ void UpdateScreen()
 					memByte3 = read6502_1581(currentPC + 2);
 				}
 #endif
-				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X]", 
-					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3);
+				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu", 
+					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3, g_overrunCounter);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 			}
 
@@ -1205,14 +1208,14 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 #else
 		do	// Sync to the 1MHz clock
 		{
-			ctAfter = read32(ARM_SYSTIMER_CLO);
-			unsigned ct = ctAfter - ctBefore;
-			if (ct > 1)
-			{
-				// If this ever occurs then we have taken too long (ie >1us) and lost a cycle.
-				// Cycle accuracy is now in jeopardy. If this occurs during critical communication loops then emulation can fail!
-				//DEBUG_LOG("!");
-			}
+            ctAfter = read32(ARM_SYSTIMER_CLO);
+            unsigned ct = ctAfter - ctBefore;
+            if (ct > 1)
+            {
+                // If this ever occurs then we have taken too long (ie >1us) and lost a cycle.
+                // Cycle accuracy is now in jeopardy. If this occurs during critical communication loops then emulation can fail!
+                ++g_overrunCounter;
+            }
 		} while (ctAfter == ctBefore);
 #endif
 		ctBefore = ctAfter;
