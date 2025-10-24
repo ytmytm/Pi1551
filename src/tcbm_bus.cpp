@@ -70,6 +70,12 @@ bool TCBM_Bus::rotaryEncoderEnable;
 bool TCBM_Bus::rotaryEncoderInvert;
 u8 TCBM_Bus::lastDirA = 0xff; // force initial programming of pin functions
 u8 TCBM_Bus::lastDirC = 0xff; // force initial programming of Port C functions
+u32 TCBM_Bus::lastSet = 0;
+u32 TCBM_Bus::lastClear = 0;
+u8 TCBM_Bus::lastOutA = 0xff; // invalid
+u8 TCBM_Bus::lastOutC = 0xff; // invalid
+bool TCBM_Bus::lastOutputLED = false;
+bool TCBM_Bus::lastOutputSound = false;
 
 void TCBM_Bus::ReadGPIOUserInput()
 {
@@ -150,19 +156,19 @@ void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
 	PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
 	portC -> SetInput(0x80, PI_DAV); // DAV is bit 7
 
-	IOPort* portA = TPI->GetPortA();
-	DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
-	if (!DataSetToOut) {
-		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
-			(gplev0 & PIGPIO_DIO2 ? 0x02 : 0x00) |
-			(gplev0 & PIGPIO_DIO3 ? 0x04 : 0x00) |
-			(gplev0 & PIGPIO_DIO4 ? 0x08 : 0x00) |
-			(gplev0 & PIGPIO_DIO5 ? 0x10 : 0x00) |
-			(gplev0 & PIGPIO_DIO6 ? 0x20 : 0x00) |
-			(gplev0 & PIGPIO_DIO7 ? 0x40 : 0x00) |
-			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
-		portA->SetInput(PI_Data);
-	}
+    IOPort* portA = TPI->GetPortA();
+    DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
+    if (!DataSetToOut) {
+        PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
+        portA->SetInput(PI_Data);
+    }
 	
 	if (updateTIAStatus)
 	{
@@ -185,45 +191,62 @@ void TCBM_Bus::RefreshOuts1551(void)
 
 	if (TPI && port)
 	{
-		// port A
+		// port A (tightened loop)
 		u8 dir = port->GetDirection();
 		u8 out = port->GetOutput();
+		IOPort* portC = TPI->GetPortC();
+		u8 ddrC = portC->GetDirection();
+		u8 pc = portC->GetOutput();
+		// Early exit if nothing changed since last time (including LED/Sound)
+		if (dir == lastDirA && out == lastOutA && ddrC == lastDirC && pc == lastOutC && OutputLED == lastOutputLED && OutputSound == lastOutputSound)
+			return;
 		u8 changed = dir ^ lastDirA;
-		if (changed & 0x01) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, (dir & 0x01) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x01) { if (out & 0x01) set |= 1 << PIGPIO_DIO1; else clear |= 1 << PIGPIO_DIO1; }
-		if (changed & 0x02) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, (dir & 0x02) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x02) { if (out & 0x02) set |= 1 << PIGPIO_DIO2; else clear |= 1 << PIGPIO_DIO2; }
-		if (changed & 0x04) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, (dir & 0x04) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x04) { if (out & 0x04) set |= 1 << PIGPIO_DIO3; else clear |= 1 << PIGPIO_DIO3; }
-		if (changed & 0x08) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, (dir & 0x08) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x08) { if (out & 0x08) set |= 1 << PIGPIO_DIO4; else clear |= 1 << PIGPIO_DIO4; }
-		if (changed & 0x10) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, (dir & 0x10) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x10) { if (out & 0x10) set |= 1 << PIGPIO_DIO5; else clear |= 1 << PIGPIO_DIO5; }
-		if (changed & 0x20) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, (dir & 0x20) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x20) { if (out & 0x20) set |= 1 << PIGPIO_DIO6; else clear |= 1 << PIGPIO_DIO6; }
-		if (changed & 0x40) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, (dir & 0x40) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x40) { if (out & 0x40) set |= 1 << PIGPIO_DIO7; else clear |= 1 << PIGPIO_DIO7; }
-		if (changed & 0x80) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, (dir & 0x80) ? FS_OUTPUT : FS_INPUT);
-		if (dir & 0x80) { if (out & 0x80) set |= 1 << PIGPIO_DIO8; else clear |= 1 << PIGPIO_DIO8; }
+		static const u8 masksA[8] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80 };
+		static const rpi_gpio_pin_t pinsA[8] = {
+			(rpi_gpio_pin_t)PIGPIO_DIO1,(rpi_gpio_pin_t)PIGPIO_DIO2,(rpi_gpio_pin_t)PIGPIO_DIO3,(rpi_gpio_pin_t)PIGPIO_DIO4,
+			(rpi_gpio_pin_t)PIGPIO_DIO5,(rpi_gpio_pin_t)PIGPIO_DIO6,(rpi_gpio_pin_t)PIGPIO_DIO7,(rpi_gpio_pin_t)PIGPIO_DIO8
+		};
+		static const u32 gpioMasksA[8] = {
+			PIGPIO_MASK_DIO1,PIGPIO_MASK_DIO2,PIGPIO_MASK_DIO3,PIGPIO_MASK_DIO4,
+			PIGPIO_MASK_DIO5,PIGPIO_MASK_DIO6,PIGPIO_MASK_DIO7,PIGPIO_MASK_DIO8
+		};
+		for (int i = 0; i < (int)(sizeof(masksA) / sizeof(masksA[0])); ++i)
+		{
+			u8 m = masksA[i];
+			if (changed & m)
+				RPI_SetGpioPinFunction(pinsA[i], (dir & m) ? FS_OUTPUT : FS_INPUT);
+			if (dir & m)
+			{
+				if (out & m) set |= gpioMasksA[i]; else clear |= gpioMasksA[i];
+			}
+		}
 		lastDirA = dir;
 
 		// Port C (1551 TIA): PC3..0 default to outputs (ACK, DEV, STATUS1, STATUS0) but emulated code may reprogram DDRC.
 		// Honour DDRC and only drive pins configured as outputs; set GPIO function only when DDR changes.
-		IOPort* portC = TPI->GetPortC();
-		u8 ddrC = portC->GetDirection();
 		u8 changedC = ddrC ^ lastDirC;
-        if (changedC & 0x80) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DAV,      (ddrC & 0x80) ? FS_OUTPUT : FS_INPUT);
-		if (changedC & 0x08) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ACK,     (ddrC & 0x08) ? FS_OUTPUT : FS_INPUT);
-		if (changedC & 0x04) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DEV,     (ddrC & 0x04) ? FS_OUTPUT : FS_INPUT);
-		if (changedC & 0x02) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS1, (ddrC & 0x02) ? FS_OUTPUT : FS_INPUT);
-		if (changedC & 0x01) RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS0, (ddrC & 0x01) ? FS_OUTPUT : FS_INPUT);
-		u8 pc = portC->GetOutput();
-        if (ddrC & 0x80) { if (pc & 0x80) set |= 1 << PIGPIO_IN_DAV; else clear |= 1 << PIGPIO_IN_DAV; }
-		if (ddrC & 0x08) { if (pc & 0x08) set |= 1 << PIGPIO_OUT_ACK; else clear |= 1 << PIGPIO_OUT_ACK; }
-		if (ddrC & 0x04) { if (pc & 0x04) set |= 1 << PIGPIO_OUT_DEV; else clear |= 1 << PIGPIO_OUT_DEV; }
-		if (ddrC & 0x02) { if (pc & 0x02) set |= 1 << PIGPIO_OUT_STATUS1; else clear |= 1 << PIGPIO_OUT_STATUS1; }
-		if (ddrC & 0x01) { if (pc & 0x01) set |= 1 << PIGPIO_OUT_STATUS0; else clear |= 1 << PIGPIO_OUT_STATUS0; }
+		static const u8 masksC[5] = { 0x01,0x02,0x04,0x08,0x80 };
+		static const rpi_gpio_pin_t pinsC[5] = {
+			(rpi_gpio_pin_t)PIGPIO_OUT_STATUS0,(rpi_gpio_pin_t)PIGPIO_OUT_STATUS1,(rpi_gpio_pin_t)PIGPIO_OUT_DEV,(rpi_gpio_pin_t)PIGPIO_OUT_ACK,(rpi_gpio_pin_t)PIGPIO_IN_DAV
+		};
+		static const u32 gpioMasksC[5] = {
+			PIGPIO_MASK_OUT_STATUS0,PIGPIO_MASK_OUT_STATUS1,PIGPIO_MASK_OUT_DEV,PIGPIO_MASK_OUT_ACK,PIGPIO_MASK_IN_DAV
+		};
+		for (int i = 0; i < (int)(sizeof(masksC) / sizeof(masksC[0])); ++i)
+		{
+			u8 m = masksC[i];
+			if (changedC & m)
+				RPI_SetGpioPinFunction(pinsC[i], (ddrC & m) ? FS_OUTPUT : FS_INPUT);
+			if (ddrC & m)
+			{
+				if (pc & m) set |= gpioMasksC[i]; else clear |= gpioMasksC[i];
+			}
+		}
 		lastDirC = ddrC;
+		lastOutA = out;
+		lastOutC = pc;
+		lastOutputLED = OutputLED;
+		lastOutputSound = OutputSound;
 	}
 
 	if (OutputLED) set |= 1 << PIGPIO_OUT_LED;
@@ -232,8 +255,15 @@ void TCBM_Bus::RefreshOuts1551(void)
 	if (OutputSound) set |= 1 << PIGPIO_OUT_SOUND;
 	else clear |= 1 << PIGPIO_OUT_SOUND;
 
-	write32(ARM_GPIO_GPCLR0, clear);
-	write32(ARM_GPIO_GPSET0, set);
+	// Avoid redundant writes; also skip zero writes but keep cache correct
+	if (clear != lastClear) {
+		if (clear) write32(ARM_GPIO_GPCLR0, clear);
+		lastClear = clear;
+	}
+	if (set != lastSet) {
+		if (set) write32(ARM_GPIO_GPSET0, set);
+		lastSet = set;
+	}
 }
 
 // called whenever someone calls SetOutput on PortA
