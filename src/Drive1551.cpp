@@ -456,7 +456,8 @@ bool Drive::Update()
 	}
 	else if (diskImage && motor)
 	{
-		bool writing = m_pTPI->GetPortC()->GetInput() & 0x10; // XXXMW: negated or not?
+		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
+		bool writing = !(m_pTPI->GetPortC()->GetInput() & 0x10);
 
 		if (SO)
 		{
@@ -554,7 +555,7 @@ bool Drive::Update()
 				else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 				{
 					UE3Counter = 0;
-					SO = true;
+					SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
 					if (writing) 
 					{
 						writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
@@ -622,7 +623,8 @@ void Drive::DriveLoopReadNoFluxNoCycles()
 		else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 		{
 			UE3Counter = 0;
-			SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
+			// 1541: SO = (m_pVIA->GetFCR() & m6522::FCR_CA2_OUTPUT_MODE0) != 0;
+			SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
 //			writeShiftRegister = readShiftRegister;
 			m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 		}
@@ -694,7 +696,7 @@ void Drive::DriveLoopReadNoFlux()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = true;
+				SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
 	//			writeShiftRegister = readShiftRegister;
 				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
@@ -747,7 +749,7 @@ void Drive::DriveLoopReadNoCycles()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = true;
+				SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
 	//			writeShiftRegister = readShiftRegister;
 				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
@@ -812,7 +814,7 @@ void Drive::DriveLoopRead()
 			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 			{
 				UE3Counter = 0;
-				SO = true;
+				SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
 	//			writeShiftRegister = readShiftRegister;
 				m_pTPI->GetPortB()->SetInput(readShiftRegister & 0xff);
 			}
@@ -850,12 +852,12 @@ void Drive::DriveLoopWrite()
 			// Note: SYNC can only trigger during reading as R/!W line is one of UC2's inputs.
 			UE3Counter++;
 		}
-		// UC5B (NOR used to invert UF4's output B serial clock) output high when UF4 counts 0,1,4,5,8,9,12 and 13
-		else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
-		{
-			UE3Counter = 0;
-			SO = true;
-			writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
+	// UC5B (NOR used to invert UF4's output B serial clock) output high when UF4 counts 0,1,4,5,8,9,12 and 13
+	else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
+	{
+		UE3Counter = 0;
+		SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
+		writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
 		}
 	}
 }
