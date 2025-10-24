@@ -351,7 +351,7 @@ public:
 	static void Reset(void);
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
-	static void ReadEmulationMode1551(void);
+	static void ReadEmulationMode1551(bool updateTIAStatus = true);
 
 	static void WaitUntilReset(void)
 	{

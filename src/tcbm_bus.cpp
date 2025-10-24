@@ -135,29 +135,13 @@ void TCBM_Bus::ReadGPIOUserInput()
 /// @param  
 void TCBM_Bus::ReadBrowseMode(void)
 {
-	gplev0 = read32(ARM_GPIO_GPLEV0);
+	ReadEmulationMode1551(false);
 	ReadGPIOUserInput();
-
-	PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
-
-	if (!DataSetToOut) { // we treat port A on byte level, not bit level
-		PI_Data = (gplev0 & PIGPIO_DIO1 ? 0x01 : 0x00) |
-			(gplev0 & PIGPIO_DIO2 ? 0x02 : 0x00) |
-			(gplev0 & PIGPIO_DIO3 ? 0x04 : 0x00) |
-			(gplev0 & PIGPIO_DIO4 ? 0x08 : 0x00) |
-			(gplev0 & PIGPIO_DIO5 ? 0x10 : 0x00) |
-			(gplev0 & PIGPIO_DIO6 ? 0x20 : 0x00) |
-			(gplev0 & PIGPIO_DIO7 ? 0x40 : 0x00) |
-			(gplev0 & PIGPIO_DIO8 ? 0x80 : 0x00);
-	}
-
-    // RESET is active-low on the TCBM bus: asserted when input is 0
-    Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
 /// @brief read real I/O pins before emulation step in emulation mode
 /// @param  
-void TCBM_Bus::ReadEmulationMode1551(void)
+void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
 {
 	IOPort* portC = TPI->GetPortC();
 
@@ -180,10 +164,13 @@ void TCBM_Bus::ReadEmulationMode1551(void)
 		portA->SetInput(PI_Data);
 	}
 	
-	// Update PI_ACK and PI_Status from TPI port C outputs
-	u8 portCOutput = portC->GetOutput();
-	PI_ACK = (portCOutput & 0x08) != 0;
-	PI_Status = portCOutput & 0x03;
+	if (updateTIAStatus)
+	{
+		// Update PI_ACK and PI_Status from TPI port C outputs
+		u8 portCOutput = portC->GetOutput();
+		PI_ACK = (portCOutput & 0x08) != 0;
+		PI_Status = portCOutput & 0x03;
+	}
 
     // RESET is active-low on the TCBM bus: asserted when input is 0
     Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
