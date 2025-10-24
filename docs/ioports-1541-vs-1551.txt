@@ -265,3 +265,19 @@ The code mapping section (lines 159-207) matches the hardware description (lines
 
 **Verification Date:** 2025-10-24
 **Status:** All critical issues fixed, implementation verified correct
+
+---
+
+# Independent Cross-Check Summary (2025-10-24)
+
+- SYNC: 1541 VIA#2 PB7 (active low) ↔ 1551 TIA PC6 (active low). Code asserts/deasserts the correct bits accordingly during SYNC detection.
+- MODE (read/write): 1551 TIA PC4 selects mode; 0=write, 1=read. `writing` computed from PC4 low matches hardware.
+- Head data I/O: 1541 uses VIA#2 PA; 1551 uses TIA PB for both read and write paths. Implementations mirror this.
+- Byte latch flag: 1541 drives VIA CA1 with inverted SO; 1551 exposes SO on CPU P7 non-inverted. Implementations reflect this polarity difference.
+- Write-protect sensor: 1541 VIA#2 PB4 ↔ 1551 CPU P4. Disk swap timing toggles the correct bit in each case.
+- Stepper/Motor/LED/Density: Control decoding identical on both: bits 0–1 step, bit 2 motor, bit 3 LED, bits 5–6 density; handled in `OnPortOut`.
+
+Notes vs mapping section:
+- Mappings above match the hardware description. Minor note: on 1541 the FCR constants are from `m6522`, not `m6523`.
+
+Result: Hardware-to-code mappings align for all critical lines and polarities.
