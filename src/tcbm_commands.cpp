@@ -237,7 +237,7 @@ void TCBM_Commands::CloseAllChannels()
 	}
 }
 
-// this is described in pagetable.com
+// this is described in https://www.pagetable.com/?p=1324
 bool TCBM_Commands::WriteIECSerialPort(u8 data, bool eoi)
 {
 	TCBM_Bus::WaitWhileDAVAsserted();
