@@ -148,6 +148,46 @@ Notes
 
 - Current code sets both `STATUS0` and `LED` to GPIO16, which conflicts. Move LED to GPIO10 by changing `PIGPIO_OUT_LED` in `src/tcbm_bus.h`. *possibly corrected*
 
+### TCBM2SD - TCBM Connector
+
+
+```
+GND	     1	2	DEV
+DIO1	   3	4	DIO2
+DIO3	   5	6	DIO4
+DIO5	   7	8	DIO6
+DIO7	   9	10	DIO8
+DAV	    11	12	STATUS0
+ACK	    13	14	STATUS1
+/RESET	15	16	ALT_A6/GND
+```
+
+/RESET - CAN'T BE CONNECTED on tcbm2sd 1.3 boards - it's 5V system /RESET
+cut the wire or trace and patch manually to join with /RESET_3_3V from JP1 (one side of it)
+
+Pi1551 hat *MUST* have a jumper for that with instruction that a jumper *MUST* be open for
+tcbm2sd 1.3 boards unless there was a manual patch
+
+Pi1551 hat fix option (TODO: test that on falstad):
+
+```
+                +3.3V
+                  |
+                  Rp  (10k typ.)
+                  |
+/RESET_IN  ---|<|-+-> /RESET_OUT
+               D
+```
+
+Rp - 10K
+D - BAT54/BAS40
+- Katoda diody (|<|) jest po stronie /RESET_IN (wejście 3.3 V/5 V).
+- Anoda diody jest w węźle wyjściowym /RESET_out (z pull-upem do 3.3 V).
+
+/RESET_IN = LOW (aktywny) → dioda przewodzi → /RESET_out ≈ 0 V.
+/RESET_IN = HIGH (3.3 V lub 5 V) → dioda zaporowo → /RESET_out podciągnięty do 3.3 V przez Rp.
+
+
 ### Build instructions (Raspberry Pi 3, PI1551)
 
 Prereqs (on build host): `arm-none-eabi` toolchain in PATH.
