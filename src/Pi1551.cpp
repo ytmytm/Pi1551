@@ -200,4 +200,6 @@ void Pi1551::Reset()
 	TPI.Reset();
 	drive.Reset();
 	TCBM_Bus::Reset();
+	// Ensure the CPU also performs a hardware reset so the reset vector is fetched
+	m6502.Reset();
 }
