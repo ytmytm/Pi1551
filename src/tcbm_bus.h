@@ -404,6 +404,32 @@ public:
 	static inline bool GetPI_ACK() { return PI_ACK; }
 	static inline u8 GetPI_Status() { return PI_Status; }
 
+	//  set DEV (PC bit 2) via TPI and refresh, when TPI is available
+	static inline void SetDEV(bool high)
+	{
+		if (TPI) {
+			IOPort* portC = TPI->GetPortC();
+			u8 value = portC->GetOutput();
+			if (high) value |= 0x04; else value &= ~0x04;
+			portC->SetOutput(value);
+			RefreshOuts1551();
+		}
+		else
+		{
+			// Fallback when TPI is detached (browse mode)
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_DEV, FS_OUTPUT);
+			if (high) write32(ARM_GPIO_GPSET0, PIGPIO_MASK_OUT_DEV);
+			else write32(ARM_GPIO_GPCLR0, PIGPIO_MASK_OUT_DEV);
+		}
+	}
+
+	// Convenience: apply device id mapping to DEV output (bit 2)
+	// id&1 == 0 -> drive 8 -> DEV=1, id&1 == 1 -> drive 9 -> DEV=0
+	static inline void ForceDevFromDeviceId(u8 id)
+	{
+		SetDEV((id & 1) == 0);
+	}
+
 	static inline void AssertACK() {
 		if (TPI) {
 			IOPort* portC = TPI->GetPortC();

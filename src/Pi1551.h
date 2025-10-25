@@ -63,8 +63,8 @@ public:
 
 	inline void SetDeviceID(u8 id)
 	{
-		// bit 5 = 0 for #8, 1 for #9
-		TPI.GetPortC()->SetInput(0x20, !(id & 1));
+		// bit 5 = 0 for #8, 1 for #9, this is inverted by ROM and put into bit 2 (DEV line - 0 for #9, 1 for #8)
+		TPI.GetPortC()->SetInput(0x20, (id & 1) != 0);
 	}
 
 private:

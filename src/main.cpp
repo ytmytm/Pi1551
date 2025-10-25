@@ -950,8 +950,9 @@ void GlobalSetDeviceID(u8 id)
 {
 	deviceID = id;
 #if defined(PI1551SUPPORT)
-	// XXXMW SETUP DEV LINE
-	pi1551.SetDeviceID(id);
+	pi1551.SetDeviceID(id); // sets PC bit 5 (DEVNUM virtual input) according to id
+	// In browse mode, directly drive the DEV GPIO level to match the selected device id.
+	if (emulating == IEC_COMMANDS) TCBM_Bus::ForceDevFromDeviceId(id);
 #else
 	m_IEC_Commands.SetDeviceId(id);
 	pi1541.SetDeviceID(id);
@@ -2793,10 +2794,11 @@ extern "C"
 		f_chdir("/1551");
 
 		m_TCBM_Commands.SetStarFileName(options.GetStarFileName());
-		GlobalSetDeviceID(deviceID);
 		pi1551.drive.SetTPI(&pi1551.TPI);
 		pi1551.TPI.GetPortA()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
 		TCBM_Bus::Initialise();
+		// Ensure DEV line reflects current device ID after GPIO init clears outputs
+		GlobalSetDeviceID(deviceID);
 
 		// Add 5 second pause after logo and options are shown
 		if (!options.QuickBoot())
