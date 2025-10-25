@@ -405,7 +405,7 @@ void Drive::OnPortOut(void* pThis, unsigned char status)
 		pDrive->MoveHead(status & 3);
 	pDrive->motor = (status & 4) != 0;
 	pDrive->CLOCK_SEL_AB = ((status >> 5) & 3);
-	pDrive->LED = (status & 8) != 0;
+	pDrive->LED = (status & 8) == 0;
 }
 
 bool Drive::Update()

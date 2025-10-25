@@ -32,7 +32,7 @@ zp01 = $01 ;(65) cpu port, FDC control register             on 1541:
 ; bit 0: drive head stepper 0 (STP)                         $1C00-0
 ; bit 1: drive head stepper 1 (STP)                         $1C00-1
 ; bit 2: drive motor on/off (MTR)                           $1C00-2
-; bit 3: drive LED (ACT)                                    $1C00-3
+; bit 3: drive LED (ACT) (0 - on, 1 - off)                  $1C00-3
 ; bit 4: write protect sensor (WPS)                         $1C00-4
 ; bit 5: density select #0 (DS0)                            $1C00-5
 ; bit 6: density select #1 (DS1)                            $1C00-6
@@ -100,7 +100,7 @@ GATE           1541                       1551
 16:      DS1 - PB6 VIA#2                - CPU P6
 2:9       YB - PA  VIA#2                - TIA PB
 -        WPS - PB4 VIA#2                - CPU P4
--        LED - PB3 VIA#2                - CPU P3               
+-        LED - PB3 VIA#2                - CPU P3 (0 = LED on, 1=LED off, reversed comparing to 1541)              
 
 # TIA - triport interface 
 
