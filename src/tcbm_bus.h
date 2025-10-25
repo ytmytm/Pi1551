@@ -437,6 +437,11 @@ public:
 			portC->SetOutput(value | 0x08);
 			RefreshOuts1551();
 		}
+		else
+		{
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ACK, FS_OUTPUT);
+			write32(ARM_GPIO_GPSET0, PIGPIO_MASK_OUT_ACK);
+		}
 	}
 
 	static inline void ReleaseACK() {
@@ -445,6 +450,11 @@ public:
 			u8 value = portC->GetOutput();
 			portC->SetOutput(value & ~0x08);
 			RefreshOuts1551();
+		}
+		else
+		{
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_ACK, FS_OUTPUT);
+			write32(ARM_GPIO_GPCLR0, PIGPIO_MASK_OUT_ACK);
 		}
 	}
 
@@ -455,6 +465,17 @@ public:
 			portC->SetOutput((value & ~0x03) | (status & 0x03));
 			RefreshOuts1551();
 		}
+		else
+		{
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS0, FS_OUTPUT);
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_STATUS1, FS_OUTPUT);
+			u32 set = 0;
+			u32 clear = 0;
+			set  |= (status & 0x01) ? PIGPIO_MASK_OUT_STATUS0 : 0; clear |= (status & 0x01) ? 0 : PIGPIO_MASK_OUT_STATUS0;
+			set  |= (status & 0x02) ? PIGPIO_MASK_OUT_STATUS1 : 0; clear |= (status & 0x02) ? 0 : PIGPIO_MASK_OUT_STATUS1;
+			if (clear) write32(ARM_GPIO_GPCLR0, clear);
+			if (set)   write32(ARM_GPIO_GPSET0, set);
+		}
 	}
 
 	static inline void SetData(u8 data) {
@@ -463,12 +484,35 @@ public:
 			port->SetOutput(data);
 			RefreshOuts1551();
 		}
+		else
+		{
+			// Drive DIO lines directly via GPIO
+			SetDIODirectionInput(false);
+			unsigned set = 0;
+			unsigned clear = 0;
+			set  |= (data & 0x01) ? PIGPIO_MASK_DIO1 : 0; clear |= (data & 0x01) ? 0 : PIGPIO_MASK_DIO1;
+			set  |= (data & 0x02) ? PIGPIO_MASK_DIO2 : 0; clear |= (data & 0x02) ? 0 : PIGPIO_MASK_DIO2;
+			set  |= (data & 0x04) ? PIGPIO_MASK_DIO3 : 0; clear |= (data & 0x04) ? 0 : PIGPIO_MASK_DIO3;
+			set  |= (data & 0x08) ? PIGPIO_MASK_DIO4 : 0; clear |= (data & 0x08) ? 0 : PIGPIO_MASK_DIO4;
+			set  |= (data & 0x10) ? PIGPIO_MASK_DIO5 : 0; clear |= (data & 0x10) ? 0 : PIGPIO_MASK_DIO5;
+			set  |= (data & 0x20) ? PIGPIO_MASK_DIO6 : 0; clear |= (data & 0x20) ? 0 : PIGPIO_MASK_DIO6;
+			set  |= (data & 0x40) ? PIGPIO_MASK_DIO7 : 0; clear |= (data & 0x40) ? 0 : PIGPIO_MASK_DIO7;
+			set  |= (data & 0x80) ? PIGPIO_MASK_DIO8 : 0; clear |= (data & 0x80) ? 0 : PIGPIO_MASK_DIO8;
+			if (clear) write32(ARM_GPIO_GPCLR0, clear);
+			if (set)   write32(ARM_GPIO_GPSET0, set);
+			DataSetToOut = true;
+		}
 	}
 
 	static inline void SetDataInput() {
 		if (TPI && port) {
 			port->SetDirection(0x00);
 			RefreshOuts1551();
+		}
+		else
+		{
+			SetDIODirectionInput(true);
+			DataSetToOut = false;
 		}
 	}
 

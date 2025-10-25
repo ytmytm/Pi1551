@@ -237,6 +237,7 @@ void TCBM_Commands::CloseAllChannels()
 	}
 }
 
+// XXXMW: this would have no chance of working as TPI is NULL in browse mode, need to add fallbacks for all of these
 // this is described in https://www.pagetable.com/?p=1324
 bool TCBM_Commands::WriteIECSerialPort(u8 data, bool eoi)
 {
@@ -255,6 +256,7 @@ bool TCBM_Commands::WriteIECSerialPort(u8 data, bool eoi)
 	return false;
 }
 
+// XXXMW: this has no chance of working as TPI is NULL in browse mode, FIXME!
 bool TCBM_Commands::ReadIECSerialPort(u8& byte, bool eoi)
 {
 	byte = 0;
@@ -274,6 +276,9 @@ void TCBM_Commands::SimulateIECBegin(void)
 	SetHeaderVersion();
 	Reset();
 	TCBM_Bus::ReadBrowseMode();
+    // Initialize bus like tcbm2sd: STATUS=OK, ACK=1 (ready)
+    TCBM_Bus::SetStatus(0);
+    TCBM_Bus::AssertACK();
 }
 
 // Paraphrasing Jim Butterfield

@@ -149,34 +149,53 @@ void TCBM_Bus::ReadBrowseMode(void)
 /// @param  
 void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
 {
-	IOPort* portC = TPI->GetPortC();
+    gplev0 = read32(ARM_GPIO_GPLEV0);
 
-	gplev0 = read32(ARM_GPIO_GPLEV0);
+    if (TPI)
+    {
+        IOPort* portC = TPI->GetPortC();
 
-	PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
-	portC -> SetInput(0x80, PI_DAV); // DAV is bit 7
+        PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
+        portC->SetInput(0x80, PI_DAV); // DAV is bit 7
 
-    IOPort* portA = TPI->GetPortA();
-    DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
-    if (!DataSetToOut) {
-        PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
-            ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
-        portA->SetInput(PI_Data);
+        IOPort* portA = TPI->GetPortA();
+        DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
+        if (!DataSetToOut) {
+            PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
+            portA->SetInput(PI_Data);
+        }
+
+        if (updateTIAStatus)
+        {
+            // Update PI_ACK and PI_Status from TPI port C outputs
+            u8 portCOutput = portC->GetOutput();
+            PI_ACK = (portCOutput & 0x08) != 0;
+            PI_Status = portCOutput & 0x03;
+        }
     }
-	
-	if (updateTIAStatus)
-	{
-		// Update PI_ACK and PI_Status from TPI port C outputs
-		u8 portCOutput = portC->GetOutput();
-		PI_ACK = (portCOutput & 0x08) != 0;
-		PI_Status = portCOutput & 0x03;
-	}
+    else
+    {
+        // Browse mode: read GPIO directly, do not touch TPI ports
+        PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
+        if (!DataSetToOut)
+        {
+            PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
+                ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
+        }
+    }
 
     // RESET is active-low on the TCBM bus: asserted when input is 0
     Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
