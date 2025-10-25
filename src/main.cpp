@@ -430,6 +430,7 @@ void UpdateScreen()
 	bool oldDAV = false;
 	bool oldACK = false;
 	u8 oldSTATUS = 0;
+	bool oldDIO = false;
 #endif
 
 	u32 oldTrack = 0;
@@ -449,6 +450,7 @@ void UpdateScreen()
 	RGBA davColour = COLOUR_RED;
 	RGBA ackColour = COLOUR_MAGENTA;
 	RGBA statusColour = COLOUR_YELLOW;
+	RGBA dio8Colour = COLOUR_GREEN;
 #endif
 
 	int height = screen.ScaleY(60);
@@ -526,6 +528,27 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		// TCBM bus signal plotting
 		// note: numbers below: 29, 35, 41 depend on template text from FileBrowser.cpp:DisplayStatusBar()
+        // DIO8 input (bit 7)
+        value = TCBM_Bus::GetPI_Data();
+        if (options.GraphIEC())
+        {
+            bottom = top2 - 2;
+            if ((value & 0x80) != (oldDIO & 0x80))
+            {
+                screen.DrawLineV(graphX, top3, bottom, dio8Colour);
+            }
+            else
+            {
+                if (value) screen.PlotPixel(graphX, top3, dio8Colour);
+                else screen.PlotPixel(graphX, bottom, dio8Colour);
+            }
+        }
+        if (value != oldDIO)
+        {
+            oldDIO = value;
+            snprintf(tempBuffer, tempBufferSize, "DIO:%0x", value);
+            screen.PrintText(false, 47 * 8, y-18, tempBuffer, textColour, bgColour);
+        }
 		value = TCBM_Bus::GetPI_DAV();
 		if (options.GraphIEC())
 		{
@@ -757,6 +780,11 @@ void UpdateScreen()
 				u16 currentPC = 0;
 				u8 currentA = 0, currentX = 0, currentY = 0, currentSP = 0, currentStatus = 0;
 #if defined(PI1551SUPPORT)
+				u8 mem4000[6] = {0,0,0,0,0,0};
+#else
+				u8 mem4000[6] = {0,0,0,0,0,0};
+#endif
+#if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
 				{
 					currentPC = pi1551.m6502.GetPC();
@@ -764,6 +792,13 @@ void UpdateScreen()
 					currentX = pi1551.m6502.GetX();
 					currentY = pi1551.m6502.GetY();
 					pi1551.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+					// Read drive memory at 0x4000-0x4005
+					mem4000[0] = read6502_1551(0x4000);
+					mem4000[1] = read6502_1551(0x4001);
+					mem4000[2] = read6502_1551(0x4002);
+					mem4000[3] = read6502_1551(0x4003);
+					mem4000[4] = read6502_1551(0x4004);
+					mem4000[5] = read6502_1551(0x4005);
 				}
 #else
 				if (emulating == EMULATING_1541)
@@ -773,6 +808,13 @@ void UpdateScreen()
 					currentX = pi1541.m6502.GetX();
 					currentY = pi1541.m6502.GetY();
 					pi1541.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+					// Read drive memory at 0x4000-0x4005
+					mem4000[0] = read6502(0x4000);
+					mem4000[1] = read6502(0x4001);
+					mem4000[2] = read6502(0x4002);
+					mem4000[3] = read6502(0x4003);
+					mem4000[4] = read6502(0x4004);
+					mem4000[5] = read6502(0x4005);
 				}
 				else if (emulating == EMULATING_1581)
 				{
@@ -781,6 +823,13 @@ void UpdateScreen()
 					currentX = pi1581.m6502.GetX();
 					currentY = pi1581.m6502.GetY();
 					pi1581.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+					// Read drive memory at 0x4000-0x4005
+					mem4000[0] = read6502_1581(0x4000);
+					mem4000[1] = read6502_1581(0x4001);
+					mem4000[2] = read6502_1581(0x4002);
+					mem4000[3] = read6502_1581(0x4003);
+					mem4000[4] = read6502_1581(0x4004);
+					mem4000[5] = read6502_1581(0x4005);
 				}
 #endif
 				// Get 3 memory bytes at current PC
@@ -809,6 +858,38 @@ void UpdateScreen()
 				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu", 
 					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3, g_overrunCounter);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
+
+				// Display drive memory 0x4000-0x4005 above CPU state line
+				snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X",
+					mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5]);
+				screen.PrintText(false, 49*8, y-18, tempBuffer, textColour, bgColour);
+
+#if defined(PI1551SUPPORT)
+				if (emulating == EMULATING_1551)
+				{
+					// Hardware pin status line above memory line
+					bool pinDAV = TCBM_Bus::GetPI_DAV();
+					bool pinACK = TCBM_Bus::GetPI_ACK();
+					u8 pinSTATUS = TCBM_Bus::GetPI_Status();
+					int pinST0 = (pinSTATUS & 0x01) ? 1 : 0;
+					int pinST1 = (pinSTATUS & 0x02) ? 1 : 0;
+					int pinDEV = 0;
+					int pinDEV5 = 0; // virtual input (DEVNUM) bit 5
+					if (TCBM_Bus::TPI)
+					{
+						IOPort* pc = TCBM_Bus::TPI->GetPortC();
+						if (pc)
+						{
+							pinDEV = (pc->GetOutput() & 0x04) ? 1 : 0;      // real output, bit 2
+							pinDEV5 = (pc->GetInput() & 0x20) ? 1 : 0;       // virtual input, bit 5 (SetDeviceID)
+						}
+					}
+					u8 pinDIO = TCBM_Bus::GetPI_Data();
+					snprintf(tempBuffer, tempBufferSize, "DAV:%d DEV:%d DEV5:%d@SetDevID ACK:%d ST0:%d ST1:%d DIO:%02X",
+						pinDAV ? 1 : 0, pinDEV, pinDEV5, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
+					screen.PrintText(false, 49*8, y-36, tempBuffer, textColour, bgColour);
+				}
+#endif
 			}
 
 			if (caddyIndexChangedTimer == 0)
