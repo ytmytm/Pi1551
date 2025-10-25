@@ -155,6 +155,30 @@ https://datasheets.raspberrypi.com/bcm2835/bcm2835-peripherals.pdf
 
 ostrożnie z funkcjami - LCD i SND (buzzer) chyba są zafiksowane na GPIO
 
+# Pi1551 device number 
+
+Bit 5 input of $4002 (port C) - 0 -- drive 8, 1 -- drive 9 (so J1 is open on https://www.zimmers.net/anonftp/pub/cbm/schematics/drives/new/1551/251860.gif )
+
+.8:f14f  AD 02 40    LDA $4002
+.8:f152  29 20       AND #$20
+.8:f154  D0 03       BNE $F159
+.8:f156  A9 08       LDA #$08
+.8:f158  2C          BIT $09A9
+.8:f159  A9 09       LDA #$09
+.8:f15b  85 66       STA $66
+                     JSR $C20D
+
+.8:c20d  0A          ASL A      ; $08 -> $10  ; $09 -> $12
+.8:c20e  0A          ASL A      ; $10 -> $20  ; $12 -> $24
+.8:c20f  29 04       AND #$04   ; $00         ; $04
+.8:c211  49 04       EOR #$04   ; $04         ; $00
+.8:c213  85 97       STA $97
+.8:c215  AD 02 40    LDA $4002
+.8:c218  29 FB       AND #$FB
+.8:c21a  05 97       ORA $97
+.8:c21c  8D 02 40    STA $4002
+.8:c21f  60          RTS
+
 
 # Pi1551 code mapping between 1541 (VIA#2) and 1551 (TPI+CPU)
 
