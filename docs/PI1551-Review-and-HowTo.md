@@ -119,10 +119,10 @@ Recommendation to align with the plan:
   GND           (25) |  o  |                                        (26)  o  | GPIO7   DIO8
   ID_SD         (27) |  o  |                                        (28)  o  | ID_SC
   GPIO5     SW5 (29) |  o  |                                        (30)  o  | GND
-  GPIO6 SPI0_RS (31) |  o  |                                        (32)  o  | GPIO12  DAV
+  GPIO6 SPI0_RS (31) |  o  |                                        (32)  o  | GPIO12  ACK (drive) --> DAV (tcbm2sd pin 11)
   GPIO13  SOUND (33) |  o  |                                        (34)  o  | GND
   GPIO19        (35) |  o  |                                        (36)  o  | GPIO16  STATUS0
-  GPIO26        (37) |  o  |                                        (38)  o  | GPIO20  ACK
+  GPIO26        (37) |  o  |                                        (38)  o  | GPIO20  DAV (drive) <-- ACK (tcbm2sd pin 13)
   GND           (39) |  o  |                                        (40)  o  | GPIO21  STATUS1
                      +-------------------------------------------------------+
 ```
@@ -131,8 +131,8 @@ Legend
 
 - TCBM bus:
   - `DIO1..DIO8`: GPIO14,15,18,23,24,25,8,7 (bidirectional data bus)
-  - `DAV` (input): GPIO12
-  - `ACK` (output): GPIO20
+  - `DAV` (input): GPIO20
+  - `ACK` (output): GPIO12
   - `STATUS0` (output): GPIO16
   - `STATUS1` (output): GPIO21
   - `DEV` (output): GPIO9
@@ -161,6 +161,13 @@ DAV	    11	12	STATUS0
 ACK	    13	14	STATUS1
 /RESET	15	16	ALT_A6/GND
 ```
+
+##### ACK / DAV
+
+** IMPORTANT **
+
+ACK here is controller's ACK! It is an output and goes to cable pin 13 (drive's DAV input)
+DAV here is controller's DAV! It is an input and goes to cable pin 11 (drive's ACK output)
 
 /RESET - CAN'T BE CONNECTED on tcbm2sd 1.3 boards - it's 5V system /RESET
 cut the wire or trace and patch manually to join with /RESET_3_3V from JP1 (one side of it)

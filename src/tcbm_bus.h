@@ -88,10 +88,10 @@ enum PIGPIO
 	PIGPIO_DIO7 = 8,
 	PIGPIO_DIO8 = 7,
 
-	PIGPIO_IN_DAV = 12,
+	PIGPIO_IN_DAV = 20, // not 12! tcbm2sd ACK output (13) goes to drive DAV input (here)
 	PIGPIO_OUT_STATUS0 = 16,
 	PIGPIO_OUT_STATUS1 = 21,
-	PIGPIO_OUT_ACK = 20,
+	PIGPIO_OUT_ACK = 12, // not 20! tcbm2sd DAV input (11) goes to drive ACK output (here)
 
 	PIGPIO_IN_BUTTON4 = 4,
 	PIGPIO_IN_BUTTON3 = 17,
