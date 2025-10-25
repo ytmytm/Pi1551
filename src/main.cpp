@@ -1518,8 +1518,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				}
 			}
 			pi1551.m6502.Step();
-			pi1551.Update();
 		}
+		pi1551.Update(); // XXXMW: out of the loop - one update per 1MHz cycle
+		// XXXMW: this doesn't work yet - with pi1551.Update() in the loop, the drive doesn't work at all - gets stuck in ROM code
+		// XXXMW: when it's out of the loop and 'I'nitialized it goes to track 1 and back to 18, shows OK but diR yields 20, read error, 18, 01 
+		// XXXMW: don't know if this should be called twice, if some constants in Drive1551.cpp should be changed, etc.
 
 		TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
 
@@ -1552,10 +1555,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		bool exitEmulation = inputMappings->Exit();
 		bool exitDoAutoLoad = inputMappings->AutoLoad();
-
-		// We have now output so HERE is where the next phi2 cycle starts.
-		pi1551.Update();
-
 
 		bool reset = TCBM_Bus::IsReset();
 		if (reset)
