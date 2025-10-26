@@ -1,4 +1,7 @@
 
+(this is outdated, correct chart is in Pi1551-Review-and-HowTo.md )
+
+```
 01	02
 ...
 39	40
@@ -108,3 +111,4 @@ GPIO: 02/03/04/17/27/22/10/09/11/05/06/13/19/26
 +DEV 09
 +/RESET 11 (was 20)
 +GND
+```

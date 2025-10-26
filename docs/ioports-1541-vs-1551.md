@@ -2,6 +2,7 @@
 
 ## VIA #1 $1800
 
+```
 $1800 PB
 7   ATN IN
 6-5 device number
@@ -10,9 +11,11 @@ $1800 PB
 2   CLOCK IN
 1   DATA OUT
 0   DATA IN
+```
 
 ## VIA #2 $1C00
 
+```
 $1C00 PB
 7   SYNC
 6-5 bit rate/density
@@ -22,11 +25,13 @@ $1C00 PB
 1-0 STEP MOTOR (HEAD)
 $1C01 PA
 7-0 data from HEAD
+```
 
 # 1551
 
 # CPU port
 
+```
 zp00 = $00 ;(9)  cpu data direction register
 zp01 = $01 ;(65) cpu port, FDC control register             on 1541:
 ; bit 0: drive head stepper 0 (STP)                         $1C00-0
@@ -37,6 +42,7 @@ zp01 = $01 ;(65) cpu port, FDC control register             on 1541:
 ; bit 5: density select #0 (DS0)                            $1C00-5
 ; bit 6: density select #1 (DS1)                            $1C00-6
 ; bit 7: byte latched (1 - yes, 0 - no)                     SO (VIA-CA1, CPU-SO, w 1571 - VIA1 PB-7) (gate array #26? 41?
+```
 
 # Sector read example
 
@@ -48,12 +54,15 @@ https://www.zimmers.net/anonftp/pub/cbm/schematics/drives/new/1571/1571_Service_
 
 Sector reading - waiting until drive head shifted in whole data:
 on 1551 - check bit 7 of zp1
+
+```
 B_F2AD	BIT zp01
-	BPL B_F2AD          ; czekaj az 1
+	BPL B_F2AD          ; wait until high
 	BIT V_4000
 	LDA V_4001
 	CMP #$52	; header magic value
 	BNE B_F2FD
+```
 
 ### Implementation
 
@@ -69,24 +78,29 @@ B_F2AD	BIT zp01
 
 same as on 1571 - bit 7 of $180f (reversed polarity)
 
+```
 !:		bit $180f
-		bmi !-          ; czekaj az 0
+		bmi !-          ; wait until low
 		lda $1c01
+```
 
 ## 1541
 
 on 1541 this is connected to CPU overflow input line
 
+```
 !:		bvc !-
 		clv
 		lda $1c01
 		cmp #$52			// is that a header?
+```
 
 # Sector write example
 
 ## 1541
 
-(zapis sektora z 1541 - zmienia stan CB2 i DDR PA)
+```
+(sector save from 1541 - changes state of  CB2 i DDR PA)
 F594: A9 FF     LDA #$FF
 F596: 8D 03 1C  STA $1C03       ; port A (read/write head) to output
 F599: AD 0C 1C  LDA $1C0C
@@ -99,9 +113,11 @@ F5CF: 09 E0     ORA #$E0        ; PCR to input again     111 = High output CB2
 F5D1: 8D 0C 1C  STA $1C0C
 F5D4: A9 00     LDA #$00
 F5D6: 8D 03 1C  STA $1C03       ; port A (read/write head) to input
+```
 
 # Mapping singnals from 1541 to 1551
 
+```
 GATE           1541                       1551
 19:OE - MODE - CB2 VIA#2                - TIA PC-4
 17:     SYNC - PB7 VIA#2                - TIA PC-6
@@ -109,15 +125,17 @@ GATE           1541                       1551
 11:    STEP0 - PB1 VIA#2                - CPU P1
 13:      MTR - PB2 VIA#2                - CPU P2
 41:     SOE  - CA2 VIA#2 + CPU SO
-42:     BYTE - CA1 VIA#2                - CPU P7 (42->25 (ATNIN), ATNOUT 26->CPU P7) (1571:CA1 VIA#2, CPU SO, 1571:PA7 VIA#1) *stad zanegowane w por. do 1571
+42:     BYTE - CA1 VIA#2                - CPU P7 (42->25 (ATNIN), ATNOUT 26->CPU P7) (1571:CA1 VIA#2, CPU SO, 1571:PA7 VIA#1) that's why negated comparing to 1571
 15:      DS0 - PB5 VIA#2                - CPU P5
 16:      DS1 - PB6 VIA#2                - CPU P6
 2:9       YB - PA  VIA#2                - TIA PB
 -        WPS - PB4 VIA#2                - CPU P4
 -        LED - PB3 VIA#2                - CPU P3 (0 = LED on, 1=LED off, reversed comparing to 1541)              
+```
 
 # TIA - triport interface 
 
+```
 PA - TCBM port
 PB - HEAD data
 PC - control drive/TCBM
@@ -154,25 +172,27 @@ V_4002 = $4002	; drive control, status and sync register
 V_4003 = $4003
 V_4004 = $4004
 V_4005 = $4005
+```
 
 # 1551 IRQ
 
 https://www.softwolves.com/arkiv/cbm-hackers/15/15949.html
 
-1551 IRQ z oscylatora 10 msec == 100Hz == 20000 cykli (2MHz) albo 10000 cykli (1MHz)
-nie ma NMI (ale 1541 też nie ma)
+1551 IRQ from NE555 oscillator, every 10 msec == 100Hz == 20000 cycles (2MHz) or 10000 cycles (1MHz)
+
+No NMI source (1541 doesn't have either)
 
 # RPi3 GPIO
 
 GPIO
-https://datasheets.raspberrypi.com/bcm2835/bcm2835-peripherals.pdf
 
-ostrożnie z funkcjami - LCD i SND (buzzer) chyba są zafiksowane na GPIO
+https://datasheets.raspberrypi.com/bcm2835/bcm2835-peripherals.pdf
 
 # Pi1551 device number 
 
 Bit 5 input of $4002 (port C) - 0 -- drive 8, 1 -- drive 9 (so J1 is open on https://www.zimmers.net/anonftp/pub/cbm/schematics/drives/new/1551/251860.gif )
 
+```
 .8:f14f  AD 02 40    LDA $4002
 .8:f152  29 20       AND #$20
 .8:f154  D0 03       BNE $F159
@@ -192,130 +212,77 @@ Bit 5 input of $4002 (port C) - 0 -- drive 8, 1 -- drive 9 (so J1 is open on htt
 .8:c21a  05 97       ORA $97
 .8:c21c  8D 02 40    STA $4002
 .8:c21f  60          RTS
-
+```
 
 # Pi1551 code mapping between 1541 (VIA#2) and 1551 (TPI+CPU)
 
 ## SYNC
 
-bylo:
+```
+was:
 m_pVIA->GetPortB()->SetInput(0x80)
-jest:
+is:
 m_pTPI->GetPortC()->SetInput(0x40)
+```
 
 ## WRITING
 
-bylo:
+```
+was:
 bool writing = ((FCR & m6523::FCR_CB2_OUTPUT_MODE0) == 0) && ((FCR & m6523::FCR_CB2_IO) != 0);
-jest:
-bool writing = !(m_pTPI->GetPortC()->GetInput() & 0x10); // TIA PC bit 4 MODE: 0=write, 1=read
+is:
+bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10); // TIA PC bit 4 MODE: 0=write, 1=read (read from Port C output)
+```
+
+Additional:
+
+```
+was:
+SYNC reported whenever last 10 bits are 1s
+is:
+SYNC (PC6) asserted only when reading; forced high while writing (UC2 gated by R/!W)
+```
 
 ## HEAD PORT WRITE
 
-bylo (write):
+```
+was (write):
 writeShiftRegister = m_pVIA->GetPortA()->GetOutput();
-jest:
+is:
 writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
+```
 
 ## HEAD PORT READ
 
-bylo (read):
+```
+was (read):
 m_pVIA->GetPortA()->SetInput(writeShiftRegister);
-jest:
+is:
 m_pTPI->GetPortB()->SetInput(writeShiftRegister);
+```
 
 ## SO - byte latch flag
 
-bylo:
+```
+was:
 SO = (m_pVIA->GetFCR() & m6523::FCR_CA2_OUTPUT_MODE0) != 0;	// bit 2 of the FCR indicates "Byte Ready Active" turned on or not.
-jest:
+is:
 SO = true;  // 1551 has no FCR register; byte ready is always active in hardware
+```
 
+```
 CA1 (bytelatch)
-bylo:
+was:
 m_pVIA->InputCA1(!SO);
-jest:
+is:
 m_pTPI->GetPortCPU()->SetInput(0x80, SO);
+```
 
 ## WRITE PROTECT sensor
 
-bylo:
+```
+was:
 m_pVIA->GetPortB()->SetInput(0x10, !diskImage->GetReadOnly())
 jest:
 m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly())
-
----
-
-# Implementation Verification Summary
-
-## Cross-Checked Against Drive.cpp (1541 Implementation)
-
-### Issues Found and Fixed:
-
-1. **CRITICAL: Inverted MODE bit logic** (Drive1551.cpp:459)
-   - **Problem:** `writing = m_pTPI->GetPortC()->GetInput() & 0x10` was backwards
-   - **Fix:** `writing = !(m_pTPI->GetPortC()->GetInput() & 0x10)`
-   - **Reason:** TIA PC bit 4 MODE: 0=write mode, 1=read mode
-
-2. **CRITICAL: Wrong variable in EXPERIMENTALZERO code** (Drive1551.cpp:625)
-   - **Problem:** Referenced `m_pVIA` which doesn't exist in Drive1551
-   - **Fix:** Simplified to `SO = true` with original 1541 code in comment
-   - **Reason:** 1551 doesn't have VIA#2, uses simplified byte ready logic
-
-### Verified Correct Implementations:
-
-✓ **SYNC Signal Mapping**
-  - 1541: VIA#2 PB7 (bit 7) → `m_pVIA->GetPortB()->SetInput(0x80, false)`
-  - 1551: TIA PC6 (bit 6) → `m_pTPI->GetPortC()->SetInput(0x40, false)`
-  - Active low in both cases
-
-✓ **HEAD Data Read**
-  - 1541: VIA#2 PA → `m_pVIA->GetPortA()->SetInput(writeShiftRegister)`
-  - 1551: TIA PB → `m_pTPI->GetPortB()->SetInput(writeShiftRegister)`
-
-✓ **HEAD Data Write**
-  - 1541: VIA#2 PA → `writeShiftRegister = m_pVIA->GetPortA()->GetOutput()`
-  - 1551: TIA PB → `writeShiftRegister = m_pTPI->GetPortB()->GetOutput()`
-
-✓ **Write Protect Sensor**
-  - 1541: VIA#2 PB4 → `m_pVIA->GetPortB()->SetInput(0x10, !diskImage->GetReadOnly())`
-  - 1551: CPU P4 → `m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly())`
-
-✓ **SO/BYTE Latch Flag** (with correct polarity difference)
-  - 1541: VIA#2 CA1 (inverted) → `m_pVIA->InputCA1(!SO)`
-  - 1551: CPU P7 (not inverted) → `m_pTPI->GetPortCPU()->SetInput(0x80, SO)`
-  - Note: Polarity difference documented - 1551 signal is negated compared to 1571
-
-✓ **Motor/LED/Stepper Control via OnPortOut() callback**
-  - Both implementations decode CPU port / VIA PB the same way:
-    - bits 0-1: stepper motor (head movement)
-    - bit 2: motor on/off
-    - bit 3: LED
-    - bits 5-6: density select (CLOCK_SEL_AB)
-
-### Hardware Description Consistency:
-
-The code mapping section (lines 159-207) matches the hardware description (lines 26-104):
-- Gate array signal mappings are correctly translated
-- I/O port bit assignments are consistent
-- TIA port usage matches 6523 specifications
-- CPU port functionality correctly replaces VIA#2 drive control signals
-
-**Verification Date:** 2025-10-24
-**Status:** All critical issues fixed, implementation verified correct
-
----
-
-# Independent Cross-Check Summary (2025-10-24)
-
-- SYNC: 1541 VIA#2 PB7 (active low) ↔ 1551 TIA PC6 (active low). Code asserts/deasserts the correct bits accordingly during SYNC detection.
-- MODE (read/write): 1551 TIA PC4 selects mode; 0=write, 1=read. `writing` computed from PC4 low matches hardware.
-- Head data I/O: 1541 uses VIA#2 PA; 1551 uses TIA PB for both read and write paths. Implementations mirror this.
-- Byte latch flag: 1541 drives VIA CA1 with inverted SO; 1551 exposes SO on CPU P7 non-inverted. Implementations reflect this polarity difference.
-- Write-protect sensor: 1541 VIA#2 PB4 ↔ 1551 CPU P4. Disk swap timing toggles the correct bit in each case.
-- Stepper/Motor/LED/Density: Control decoding identical on both: bits 0–1 step, bit 2 motor, bit 3 LED, bits 5–6 density; handled in `OnPortOut`.
-
-Notes vs mapping section:
-- Mappings above match the hardware description. Minor note: on 1541 the FCR constants are from `m6522`, not `m6523`.
-
-Result: Hardware-to-code mappings align for all critical lines and polarities.
+```
