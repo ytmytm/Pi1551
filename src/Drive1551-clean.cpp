@@ -104,7 +104,7 @@ bool Drive1551Clean::Update()
         return false;
 
     // MODE bit from TPI Port C bit4: 0=write, 1=read
-    bool writing = !(m_pTPI->GetPortC()->GetInput() & 0x10);
+    bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10);
 
     // Simulate 16 internal clocks per CPU cycle group (16 MHz / 1 MHz CPU base)
     for (int i = 0; i < 16; ++i)
