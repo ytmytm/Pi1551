@@ -203,11 +203,11 @@ private:
 	int UF4Counter;
 	int UE3Counter;
 	int CLOCK_SEL_AB;
-	bool SO;
 	unsigned char lastHeadDirection;
 	u32 bitsInTrack;
 	float cyclesPerBit;
 	bool motor;
 	bool LED;
+
 };
 #endif

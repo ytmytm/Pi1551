@@ -61,12 +61,18 @@ unsigned char m6523::Read(unsigned int address)
 	{
 		case PA:
 			value = ReadPortA();
+			// Clear CPU port bit 7 (DAV/SO) on any TPI port access
+			portCPU.SetInput(0x80, false);
 		break;
 		case PB:
 			value = ReadPortB();
+			// Clear CPU port bit 7 (DAV/SO) on any TPI port access
+			portCPU.SetInput(0x80, false);
 		break;
 		case PC:
 			value = ReadPortC();
+			// Clear CPU port bit 7 (DAV/SO) on any TPI port access
+			portCPU.SetInput(0x80, false);
 		break;
 		case DDRA:
 			value = portA.GetDirection();

@@ -780,7 +780,8 @@ void UpdateScreen()
 				u16 currentPC = 0;
 				u8 currentA = 0, currentX = 0, currentY = 0, currentSP = 0, currentStatus = 0;
 #if defined(PI1551SUPPORT)
-				u8 mem4000[6] = {0,0,0,0,0,0};
+                u8 mem4000[6] = {0,0,0,0,0,0};
+                u8 cpuPort1551 = 0;
 #else
 				u8 mem4000[6] = {0,0,0,0,0,0};
 #endif
@@ -799,6 +800,8 @@ void UpdateScreen()
 					mem4000[3] = read6502_1551(0x4003);
 					mem4000[4] = read6502_1551(0x4004);
 					mem4000[5] = read6502_1551(0x4005);
+                    // Read CPU port value
+                    cpuPort1551 = pi1551.TPI.PeekCPUPort();
 				}
 #else
 				if (emulating == EMULATING_1541)
@@ -859,9 +862,19 @@ void UpdateScreen()
 					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3, g_overrunCounter);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 
-				// Display drive memory 0x4000-0x4005 above CPU state line
-				snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X",
-					mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5]);
+                // Display drive memory 0x4000-0x4005 above CPU state line (+ CPU port on 1551)
+#if defined(PI1551SUPPORT)
+                if (emulating == EMULATING_1551)
+                {
+                    snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X CPU:%02X",
+                        mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5], cpuPort1551);
+                }
+                else
+#endif
+                {
+                    snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X",
+                        mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5]);
+                }
 				screen.PrintText(false, 49*8, y-18, tempBuffer, textColour, bgColour);
 
 #if defined(PI1551SUPPORT)

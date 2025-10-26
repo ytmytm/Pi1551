@@ -367,7 +367,6 @@ void Drive::Reset()
 	UpdateHeadSectorPosition();
 	lastHeadDirection = 0;
 	motor = false;
-	SO = false;
 	readShiftRegister = 0;
 	writeShiftRegister = 0;
 	UE3Counter = 0;
@@ -437,8 +436,6 @@ bool Drive::Update()
 
 #endif
 
-	bool dataReady = false;
-	
 	// When swapping some lame loaders monitor the write protect flag.
 	// Bit 4 of PortB (WP - write protect) should be;
 	// X Write protect status of D1
@@ -459,11 +456,6 @@ bool Drive::Update()
 		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
 		bool writing = !(m_pTPI->GetPortC()->GetInput() & 0x10);
 
-		if (SO)
-		{
-			dataReady = true;
-			SO = false;
-		}
 		// UE6 provides the CPU's clock by dividing the 16Mhz clock by 16.
 		// UE7 (a 74ls193 4bit counter) counts up on the falling edge of the 16Mhz clock. UE7 drives the Encoder/Decoder clock.
 		// So we need to simulate 16 cycles for every 1 CPU cycle
@@ -555,7 +547,7 @@ bool Drive::Update()
 				else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
 				{
 					UE3Counter = 0;
-					SO = true;	// 1551 has no FCR register; byte ready is always active in hardware
+					m_pTPI->GetPortCPU()->SetInput(0x80, true);			// byte latched 1=yes, 0=no; 1551 does not couple SO to CPU V flag
 					if (writing) 
 					{
 						writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
@@ -570,14 +562,13 @@ bool Drive::Update()
 		}
 #endif
 	}
-	m_pTPI->GetPortCPU()->SetInput(0x80, SO);			// byte latched 1=yes, 0=no
 
 #if defined(PROFILE)
 	read_performance_counters(&pct);
 	print_performance_counters(&pct);
 #endif
 
-	return dataReady;
+	return true;
 }
 
 

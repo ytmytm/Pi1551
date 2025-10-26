@@ -186,9 +186,10 @@ void Pi1551::Update()
 {
 	if (drive.Update())
 	{
+		// 1551: keep SO internal; do not touch CPU V flag
 		//This pin sets the overflow flag on a negative transition from TTL one to TTL zero.
 		// SO is sampled at the trailing edge of P1, the cpu V flag is updated at next P1.
-		m6502.SO(); //XXXMW not used in 1551
+		//m6502.SO(); //XXXMW not used in 1551
 	}
 
 	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
