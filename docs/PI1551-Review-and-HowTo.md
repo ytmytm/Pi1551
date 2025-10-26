@@ -23,10 +23,6 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   - `Pi1541.code-workspace` added
   - `src/defs.h` defines `PI1551SUPPORT 1` by default
 
-Uncommitted changes
-
-- Modified files: `src/tcbm_bus.cpp`, `src/tcbm_bus.h` (tracked as modified)
-
 ### Potential issues and recommendations
 
 - PI1551SUPPORT globally enabled
@@ -35,21 +31,9 @@ Uncommitted changes
 - ROM read source in 1551 bus functions
   - In `read6502_1551` the ROM path returns `roms.Read(address)` for 0xA000+ ranges. 1551 has a dedicated 16 KiB ROM; consider using `roms.Read1551(address)` for clarity and to avoid selecting a 1541 slot accidentally if misconfigured.
 
-- Extra RAM address masking *probably already correct*
-  - 1551 RAM path uses `s_u8Memory[address & 0x7ff]` (2 KiB). Verify against real 1551 address map. If extra RAM mode is on, the extra variants use `& 0x7fff`. Ensure consistency and correctness for the non-extra mode masks.
-
-- TCBM Port C bit mappings *possibly corrected*
-  - `RefreshOuts1551` maps Port C: sets ACK, DEV, STATUS1, STATUS0. There are two consecutive checks for `pc & 0x02` (DEV) mapped to two pins (`PIGPIO_OUT_DEV` and `PIGPIO_OUT_STATUS1`). Confirm mapping: STATUS1 likely comes from `pc & 0x02` is correct only if bit1 is STATUS1 and bit2 is DEV; double-check which bit goes to which output.
-
-- DDR changes for Port A and real GPIO direction
-  - `m6523.cpp` notes: "DDR change here must change real GPIO DDR (TCBM data bus) too". Currently `PortA_OnPortOut` updates direction based on `port->GetDirection()` and `RefreshOuts1551` sets mode per-bit, but DDR writes occur elsewhere too (DDRA writes). Ensure that writes to DDRA will immediately propagate GPIO mode (they will once `RefreshOuts1551` is called; consider an explicit update hook on DDRA changes to avoid 1-frame latency).
-  Note: direction will be chanegd from the loop when `RefreshOuts1551` is called, change is needed only for
-  zero-latency GPIO mode update
-
 - Timing and double-rate CPU stepping
-  - `Emulate1551` runs `for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)` then refreshes outputs once per microsecond. This mirrors a 2 MHz 6502. Review that handshake lines (DAV/ACK) are sampled in the right half-cycles and that any race-sensitive code that previously relied on phi2 edges in Pi1541 is adapted.
+  - `Emulate1551` runs `for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)` then refreshes outputs and calls drive update (GCR) once per microsecond. This mirrors a 2 MHz 6502 but I/O running at 1 MHz. Not sure if this breaks some software.
   Note: CPU really runs at 2MHz, see https://www.softwolves.com/arkiv/cbm-hackers/15/15949.html
-  Note2: It's possible that all hardware runs at 2MHz, without clock-stretching (so cycle2MHz is redundant)
 
 - EOI and command parsing on TCBM
   - `ReadIECSerialPort`/`WriteIECSerialPort` carry `STATUS` with EOI bits, but `Listen` and `Talk` contain TODOs to specialize for command/data phase codes. Consider refactoring to stateful read/write that also verifies busCommandCode framing to harden against edge cases.
@@ -64,41 +48,13 @@ Uncommitted changes
   - `main.cpp` `f_chdir("/1551");` under PI1551. Ensure SD card root contains `/1551` and that file browser, auto-mount, and ROM discovery expect this path. Consider falling back to `/` if the folder is missing.
 
 - Device selection and DEV line behavior
-  - `Pi1551::SetDeviceID` inverts bit5 to generate DEV. Confirm against real hardware conventions and verify that `GlobalSetDeviceID` updates TCBM bus and file browser consistently.
+  - verify that changing the device number to 9 works in browser and in emulation modes
 
 - GPIO pin allocations and pull-ups
   - `tcbm_bus.h` defines a set of pins and masks; verify collisions with LED, SOUND, and SPI0_RS for your specific HAT/wiring. Ensure no overlap with I2C pins used by LCD if enabled.
 
 - Error message text
   - Some error strings and version banners still say PI1541; consider PI1551-specific wording where shown on directory header and error channel 73.
-
-### Verification against docs/rpi-pinmapping.md
-
-Plan summary (from `docs/rpi-pinmapping.md`):
-
-- DIO lines: `DIO1..DIO8 = GPIO14,15,18,23,24,25,8,7`
-- Handshake/status: `DAV = GPIO12`, `STATUS0 = GPIO16`, `ACK = GPIO20`, `STATUS1 = GPIO21`
-- Device select and reset: `DEV = GPIO09`, `RESET IN = GPIO11`
-- Buttons: `SW1 = GPIO27`, `SW2 = GPIO22`, `SW3 = GPIO17`, `SW4 = GPIO4`, `SW5 = GPIO5`
-- LED: `GPIO10`
-
-Implementation (from `src/tcbm_bus.h`) vs plan:
-
-- DIO1..DIO8: matches plan exactly
-- DAV: matches (`GPIO12`)
-- STATUS0: matches (`GPIO16`)
-- ACK: matches (`GPIO20`)
-- STATUS1: matches (`GPIO21`)
-- DEV: matches (`GPIO9`)
-- RESET IN: matches (`GPIO11`)
-- Buttons SW1..SW5: match (`27,22,17,4,5`)
-- LED: mismatch
-  - Code sets `PIGPIO_OUT_LED = GPIO16`, which collides with `STATUS0 = GPIO16` and conflicts with the plan (LED should be `GPIO10`).
-
-Recommendation to align with the plan:
-
-- Change `PIGPIO_OUT_LED` from `16` to `10` in `src/tcbm_bus.h` and rebuild.
-- No other mapping changes are required; all remaining signals match the documented plan.
 
 ### Raspberry Pi 3 GPIO 40-pin header (ASCII pinout) with project signals
 
@@ -142,11 +98,7 @@ Legend
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
   - Sound (PWM): GPIO13
   - SPI0_RS (if used): GPIO6
-  - LED: recommended GPIO10 (see note) *possibly corrected*
-
-Notes
-
-- Current code sets both `STATUS0` and `LED` to GPIO16, which conflicts. Move LED to GPIO10 by changing `PIGPIO_OUT_LED` in `src/tcbm_bus.h`. *possibly corrected*
+  - LED: GPIO10
 
 ### TCBM2SD - TCBM Connector
 
@@ -164,7 +116,7 @@ ACK	    13	14	STATUS1
 
 ##### ACK / DAV
 
-** IMPORTANT **
+* IMPORTANT *
 
 ACK here is controller's ACK! It is an output and goes to cable pin 13 (drive's DAV input)
 DAV here is controller's DAV! It is an input and goes to cable pin 11 (drive's ACK output)
@@ -202,7 +154,7 @@ Prereqs (on build host): `arm-none-eabi` toolchain in PATH.
 Build steps from repository root `Pi1541/`:
 
 ```bash
-make RASPPI=3 V=1
+make clean && make RASPPI=3 USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
 ```
 
 Notes:

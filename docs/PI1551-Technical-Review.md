@@ -32,8 +32,13 @@ Summary assessment
     - PC2 (0x04) DEV → output to `DEV` select line
     - PC1 (0x02) STATUS1 → output
     - PC0 (0x01) STATUS0 → output
-    - PC7 (bit 7) is fed from external `DAV` into input (via `SetInput`), as observed in `ReadEmulationMode1551`.
+    - PC6 (0x40) SYNC → active-low; asserted only during read; deasserted during write (UC2 gated by R/!W). Implemented.
+    - PC4 (0x10) MODE → 0=write, 1=read; drive code reads Port C output latch for this (not input). Implemented.
+    - PC7 (bit 7) is fed from external `DAV` into input (via `SetInput`) for TCBM handshake.
   - These assignments agree with available descriptions of C1551 TCBM: Port C low bits carry status encoding, `DEV` selects mapping, `ACK` provides handshake back to the host, and `DAV` is sampled as input.
+
+- Byte-ready (CPU port)
+  - CPU port bit 7 indicates “byte latched” (1=yes). The drive sets it when a byte is latched on Port B at the byte boundary. It is cleared by hardware on any TPI port access; implemented in `m6523::Read()` by clearing CPU port bit 7 after a read of any TPI port.
 
 - Device number selection
   - `Pi1551::SetDeviceID` drives PC5 (DEVNUM) using inverse of LSB: 0 → drive 8, 1 → drive 9. That matches common jumper semantics for 8/9 select.
@@ -47,6 +52,7 @@ Areas confirmed correct
 - Active-low `RESET` sense, with internal pull-up; wait loop treats low as asserted.
 - Handshake timing structure: poll `DAV`, assert/release `ACK`, write status flags; data direction swapped by Port A DDR.
 - Two-step 2 MHz emulation cadence per 1 µs and batched GPIO writes via GPCLR/GPSET.
+- SYNC/Byte-ready/MODE: SYNC asserted only when reading and 10x1s detected; byte-ready set on latch and cleared by any TPI access; MODE read from Port C output latch (0=write, 1=read).
 
 Open questions / recommended verifications
 
@@ -54,7 +60,7 @@ Open questions / recommended verifications
   - 1551 bus read uses `roms.Read(address)`; recommend switching to `ROMs::Read1551()` to avoid accidental coupling with 1541 slots and to reflect 1551’s distinct ROM image unambiguously.
 
 - TPI register mirroring and side-effects
-  - Confirm exact mirroring range and any undocumented read-modify-write quirks for 6523 reads/writes used by the ROM, especially around the SYNC/byte-ready signaling path.
+  - Confirm exact mirroring range and any undocumented read-modify-write quirks for 6523 reads/writes used by the ROM. SYNC/byte-ready/MODE semantics are now implemented as per docs.
 
 - IRQ cadence
   - The 100 Hz IRQ model is plausible; verify against 1551 ROM expectations (e.g., timer-driven routines) to ensure rate and phase do not disrupt command loops.
@@ -72,11 +78,10 @@ Hardware pin plan cross-check
 Action items
 
 - Switch 1551 ROM reads to dedicated accessor (Read1551) and keep current default filename via options.
-- Keep Port C bit usage as now fixed (DEV=0x04) and add a brief comment summarizing mapping with a doc link.
 - Note in docs that browse commands are SD2IEC-like convenience and out of scope of original 1551 DOS protocol.
 
 Conclusion
 
-The current PI1551 implementation aligns well with documented 1551/TCBM behavior in core areas: memory map, TPI port usage, handshake lines, and timing cadence. The main correctness tweak already applied is DEV bit mapping (now 0x04). The largest conceptual difference is the added browse/SD2IEC layer (intended), which is acceptable for user experience. With minor clarifications (ROM accessor, comments) the implementation appears sound.
+The current PI1551 implementation aligns well with documented 1551/TCBM behavior in core areas: memory map, TPI port usage, handshake lines, and timing cadence. Recent correctness tweaks include sourcing MODE from Port C output, asserting SYNC only during read, and clearing byte-ready on any TPI access; DEV bit mapping (0x04) is correct. The largest conceptual difference is the added browse/SD2IEC layer (intended), which is acceptable for user experience. With minor clarifications (ROM accessor, comments) the implementation appears sound.
 
 
