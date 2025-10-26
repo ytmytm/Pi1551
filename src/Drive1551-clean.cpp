@@ -147,15 +147,24 @@ bool Drive1551Clean::Update()
                 }
                 writeShiftRegister <<= 1;
 
-                // SYNC detection (active-low on PC6)
-                bool inSync = ((readShiftRegister & 0x3ff) == 0x3ff);
-                m_pTPI->GetPortC()->SetInput(0x40, !inSync);
-                if (inSync)
+                // SYNC detection (active-low on PC6) only during reading
+                if (!writing)
                 {
-                    UE3Counter = 0;
+                    bool inSync = ((readShiftRegister & 0x3ff) == 0x3ff);
+                    m_pTPI->GetPortC()->SetInput(0x40, !inSync);
+                    if (inSync)
+                    {
+                        UE3Counter = 0;
+                    }
+                    else
+                    {
+                        UE3Counter++;
+                    }
                 }
                 else
                 {
+                    // While writing, UC2 input prevents SYNC; keep PC6 deasserted (high)
+                    m_pTPI->GetPortC()->SetInput(0x40, true);
                     UE3Counter++;
                 }
             }
