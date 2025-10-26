@@ -270,6 +270,9 @@ extern u8 read6502_1551(u16 address);
 extern void write6502_1551(u16 address, const u8 value);
 extern u8 read6502ExtraRAM_1551(u16 address);
 extern void write6502ExtraRAM_1551(u16 address, const u8 value);
+extern u8 peek6502_1551(u16 address);
+extern u8 peek6502(u16 address);
+extern u8 peek6502_1581(u16 address);
 
 void InitialiseHardware()
 {
@@ -794,12 +797,12 @@ void UpdateScreen()
 					currentY = pi1551.m6502.GetY();
 					pi1551.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
 					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = read6502_1551(0x4000);
-					mem4000[1] = read6502_1551(0x4001);
-					mem4000[2] = read6502_1551(0x4002);
-					mem4000[3] = read6502_1551(0x4003);
-					mem4000[4] = read6502_1551(0x4004);
-					mem4000[5] = read6502_1551(0x4005);
+					mem4000[0] = peek6502_1551(0x4000);
+					mem4000[1] = peek6502_1551(0x4001);
+					mem4000[2] = peek6502_1551(0x4002);
+					mem4000[3] = peek6502_1551(0x4003);
+					mem4000[4] = peek6502_1551(0x4004);
+					mem4000[5] = peek6502_1551(0x4005);
                     // Read CPU port value
                     cpuPort1551 = pi1551.TPI.PeekCPUPort();
 				}
@@ -812,12 +815,12 @@ void UpdateScreen()
 					currentY = pi1541.m6502.GetY();
 					pi1541.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
 					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = read6502(0x4000);
-					mem4000[1] = read6502(0x4001);
-					mem4000[2] = read6502(0x4002);
-					mem4000[3] = read6502(0x4003);
-					mem4000[4] = read6502(0x4004);
-					mem4000[5] = read6502(0x4005);
+					mem4000[0] = peek6502(0x4000);
+					mem4000[1] = peek6502(0x4001);
+					mem4000[2] = peek6502(0x4002);
+					mem4000[3] = peek6502(0x4003);
+					mem4000[4] = peek6502(0x4004);
+					mem4000[5] = peek6502(0x4005);
 				}
 				else if (emulating == EMULATING_1581)
 				{
@@ -827,12 +830,12 @@ void UpdateScreen()
 					currentY = pi1581.m6502.GetY();
 					pi1581.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
 					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = read6502_1581(0x4000);
-					mem4000[1] = read6502_1581(0x4001);
-					mem4000[2] = read6502_1581(0x4002);
-					mem4000[3] = read6502_1581(0x4003);
-					mem4000[4] = read6502_1581(0x4004);
-					mem4000[5] = read6502_1581(0x4005);
+					mem4000[0] = peek6502_1581(0x4000);
+					mem4000[1] = peek6502_1581(0x4001);
+					mem4000[2] = peek6502_1581(0x4002);
+					mem4000[3] = peek6502_1581(0x4003);
+					mem4000[4] = peek6502_1581(0x4004);
+					mem4000[5] = peek6502_1581(0x4005);
 				}
 #endif
 				// Get 3 memory bytes at current PC
@@ -840,22 +843,22 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
 				{
-					memByte1 = read6502_1551(currentPC);
-					memByte2 = read6502_1551(currentPC + 1);
-					memByte3 = read6502_1551(currentPC + 2);
+					memByte1 = peek6502_1551(currentPC);
+					memByte2 = peek6502_1551(currentPC + 1);
+					memByte3 = peek6502_1551(currentPC + 2);
 				}
 #else
 				if (emulating == EMULATING_1541)
 				{
-					memByte1 = read6502(currentPC);
-					memByte2 = read6502(currentPC + 1);
-					memByte3 = read6502(currentPC + 2);
+					memByte1 = peek6502(currentPC);
+					memByte2 = peek6502(currentPC + 1);
+					memByte3 = peek6502(currentPC + 2);
 				}
 				else if (emulating == EMULATING_1581)
 				{
-					memByte1 = read6502_1581(currentPC);
-					memByte2 = read6502_1581(currentPC + 1);
-					memByte3 = read6502_1581(currentPC + 2);
+					memByte1 = peek6502_1581(currentPC);
+					memByte2 = peek6502_1581(currentPC + 1);
+					memByte3 = peek6502_1581(currentPC + 2);
 				}
 #endif
 				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu", 
