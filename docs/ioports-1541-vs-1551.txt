@@ -40,6 +40,10 @@ zp01 = $01 ;(65) cpu port, FDC control register             on 1541:
 
 # Sector read example
 
+# gate array pins
+
+https://www.zimmers.net/anonftp/pub/cbm/schematics/drives/new/1571/1571_Service_Manual_Preliminary_314002-04_(1986_Oct)_Alternate.pdf
+
 ## 1551
 
 Sector reading - waiting until drive head shifted in whole data:
@@ -50,6 +54,14 @@ B_F2AD	BIT zp01
 	LDA V_4001
 	CMP #$52	; header magic value
 	BNE B_F2FD
+
+### Implementation
+
+Drive1551.cpp - returns error 20, READ ERROR, 18, 1 - no sector found at all?
+
+Drive1551-clean.cpp - returns error 21, READ ERROR, 18, 0 - no sync - no sync at all on track?
+
+`make clean && make USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
 
 ## 1571
 

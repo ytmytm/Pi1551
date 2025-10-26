@@ -39,7 +39,11 @@ extern "C"
 #if defined(PI1551SUPPORT)
 #include "InputMappings1551.h"
 #include "tcbm_commands.h"
+#if defined(USE_PI1551_CLEAN)
+#include "Pi1551-clean.h"
+#else
 #include "Pi1551.h"
+#endif
 #else
 #include "InputMappings.h"
 #include "iec_commands.h"

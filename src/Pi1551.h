@@ -19,7 +19,13 @@
 #ifndef PI1551_H
 #define PI1551_H
 
+#if defined(USE_DRIVE1551_CLEAN)
+#include "Drive1551-clean.h"
+typedef Drive1551Clean Drive1551Impl;
+#else
 #include "Drive1551.h"
+typedef Drive Drive1551Impl;
+#endif
 #include "m6502.h"
 #include "tcbm_bus.h"
 
@@ -56,7 +62,7 @@ public:
 
 	//void ConfigureOfExtraRAM(bool extraRAM);
 
-	Drive drive;
+    Drive1551Impl drive;
 	m6523 TPI;
 
 	M6502 m6502;
