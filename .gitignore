@@ -5,4 +5,5 @@
 *.lst
 *.map
 *.swp
-
+sdcard/demos
+.source.txt
