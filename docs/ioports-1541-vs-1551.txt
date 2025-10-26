@@ -57,11 +57,13 @@ B_F2AD	BIT zp01
 
 ### Implementation
 
-Drive1551.cpp - returns error 20, READ ERROR, 18, 1 - no sector found at all?
-
-Drive1551-clean.cpp - returns error 21, READ ERROR, 18, 0 - no sync - no sync at all on track?
+** Working! **
 
 `make clean && make USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
+
+** untested **
+
+`make clean && make V=1`
 
 ## 1571
 
