@@ -275,8 +275,6 @@ extern void write6502_1551(u16 address, const u8 value);
 extern u8 read6502ExtraRAM_1551(u16 address);
 extern void write6502ExtraRAM_1551(u16 address, const u8 value);
 extern u8 peek6502_1551(u16 address);
-extern u8 peek6502(u16 address);
-extern u8 peek6502_1581(u16 address);
 
 void InitialiseHardware()
 {
@@ -398,7 +396,9 @@ void UpdateLCD(const char* track, unsigned temperature)
 		core0RefreshingScreen.Acquire();
 #endif
 
-#if not defined(PI1551SUPPORT)
+#if defined(PI1551SUPPORT)
+		TCBM_Bus::WaitMicroSeconds(100);
+#else
 		IEC_Bus::WaitMicroSeconds(100);
 #endif
 
@@ -410,7 +410,9 @@ void UpdateLCD(const char* track, unsigned temperature)
 		screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 		screenLCD->RefreshRows(0, 1);
 
-#if not defined(PI1551SUPPORT)
+#if defined(PI1551SUPPORT)
+		TCBM_Bus::WaitMicroSeconds(100);
+#else
 		IEC_Bus::WaitMicroSeconds(100);
 #endif
 #if not defined(EXPERIMENTALZERO)
