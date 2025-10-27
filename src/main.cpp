@@ -437,7 +437,6 @@ void UpdateScreen()
 	bool oldDAV = false;
 	bool oldACK = false;
 	u8 oldSTATUS = 0;
-	bool oldDIO = false;
 #endif
 
 	u32 oldTrack = 0;
@@ -457,7 +456,6 @@ void UpdateScreen()
 	RGBA davColour = COLOUR_RED;
 	RGBA ackColour = COLOUR_MAGENTA;
 	RGBA statusColour = COLOUR_YELLOW;
-	RGBA dio8Colour = COLOUR_GREEN;
 #endif
 
 	int height = screen.ScaleY(60);
@@ -535,41 +533,20 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		// TCBM bus signal plotting
 		// note: numbers below: 29, 35, 41 depend on template text from FileBrowser.cpp:DisplayStatusBar()
-        // DIO8 input (bit 7)
-        value = TCBM_Bus::GetPI_Data();
+        value = TCBM_Bus::GetPI_DAV();
         if (options.GraphIEC())
         {
             bottom = top2 - 2;
-            if ((value & 0x80) != (oldDIO & 0x80))
+            if (value ^ oldDAV)
             {
-                screen.DrawLineV(graphX, top3, bottom, dio8Colour);
+                screen.DrawLineV(graphX, top3, bottom, davColour);
             }
             else
             {
-                if (value) screen.PlotPixel(graphX, top3, dio8Colour);
-                else screen.PlotPixel(graphX, bottom, dio8Colour);
+                if (value) screen.PlotPixel(graphX, top3, davColour);
+                else screen.PlotPixel(graphX, bottom, davColour);
             }
         }
-        if (value != oldDIO)
-        {
-            oldDIO = value;
-            snprintf(tempBuffer, tempBufferSize, "DIO:%0x", value);
-            screen.PrintText(false, 47 * 8, y-18, tempBuffer, textColour, bgColour);
-        }
-		value = TCBM_Bus::GetPI_DAV();
-		if (options.GraphIEC())
-		{
-			bottom = top2 - 2;
-			if (value ^ oldDAV)
-			{
-				screen.DrawLineV(graphX, top3, bottom, davColour);
-			}
-			else
-			{
-				if (value) screen.PlotPixel(graphX, top3, davColour);
-				else screen.PlotPixel(graphX, bottom, davColour);
-			}
-		}
 		if (value != oldDAV)
 		{
 			oldDAV = value;
@@ -786,12 +763,8 @@ void UpdateScreen()
 			{
 				u16 currentPC = 0;
 				u8 currentA = 0, currentX = 0, currentY = 0, currentSP = 0, currentStatus = 0;
-#if defined(PI1551SUPPORT)
                 u8 mem4000[6] = {0,0,0,0,0,0};
                 u8 cpuPort1551 = 0;
-#else
-				u8 mem4000[6] = {0,0,0,0,0,0};
-#endif
 #if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
 				{
@@ -810,37 +783,6 @@ void UpdateScreen()
                     // Read CPU port value
                     cpuPort1551 = pi1551.TPI.PeekCPUPort();
 				}
-#else
-				if (emulating == EMULATING_1541)
-				{
-					currentPC = pi1541.m6502.GetPC();
-					currentA = pi1541.m6502.GetA();
-					currentX = pi1541.m6502.GetX();
-					currentY = pi1541.m6502.GetY();
-					pi1541.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
-					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = peek6502(0x4000);
-					mem4000[1] = peek6502(0x4001);
-					mem4000[2] = peek6502(0x4002);
-					mem4000[3] = peek6502(0x4003);
-					mem4000[4] = peek6502(0x4004);
-					mem4000[5] = peek6502(0x4005);
-				}
-				else if (emulating == EMULATING_1581)
-				{
-					currentPC = pi1581.m6502.GetPC();
-					currentA = pi1581.m6502.GetA();
-					currentX = pi1581.m6502.GetX();
-					currentY = pi1581.m6502.GetY();
-					pi1581.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
-					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = peek6502_1581(0x4000);
-					mem4000[1] = peek6502_1581(0x4001);
-					mem4000[2] = peek6502_1581(0x4002);
-					mem4000[3] = peek6502_1581(0x4003);
-					mem4000[4] = peek6502_1581(0x4004);
-					mem4000[5] = peek6502_1581(0x4005);
-				}
 #endif
 				// Get 3 memory bytes at current PC
 				u8 memByte1 = 0, memByte2 = 0, memByte3 = 0;
@@ -851,37 +793,14 @@ void UpdateScreen()
 					memByte2 = peek6502_1551(currentPC + 1);
 					memByte3 = peek6502_1551(currentPC + 2);
 				}
-#else
-				if (emulating == EMULATING_1541)
-				{
-					memByte1 = peek6502(currentPC);
-					memByte2 = peek6502(currentPC + 1);
-					memByte3 = peek6502(currentPC + 2);
-				}
-				else if (emulating == EMULATING_1581)
-				{
-					memByte1 = peek6502_1581(currentPC);
-					memByte2 = peek6502_1581(currentPC + 1);
-					memByte3 = peek6502_1581(currentPC + 2);
-				}
 #endif
 				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu", 
 					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3, g_overrunCounter);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 
                 // Display drive memory 0x4000-0x4005 above CPU state line (+ CPU port on 1551)
-#if defined(PI1551SUPPORT)
-                if (emulating == EMULATING_1551)
-                {
-                    snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X CPU:%02X",
-                        mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5], cpuPort1551);
-                }
-                else
-#endif
-                {
-                    snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X",
-                        mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5]);
-                }
+				snprintf(tempBuffer, tempBufferSize, "4000:%02X %02X %02X %02X %02X %02X CPU:%02X",
+					mem4000[0], mem4000[1], mem4000[2], mem4000[3], mem4000[4], mem4000[5], cpuPort1551);
 				screen.PrintText(false, 49*8, y-18, tempBuffer, textColour, bgColour);
 
 #if defined(PI1551SUPPORT)
@@ -893,20 +812,9 @@ void UpdateScreen()
 					u8 pinSTATUS = TCBM_Bus::GetPI_Status();
 					int pinST0 = (pinSTATUS & 0x01) ? 1 : 0;
 					int pinST1 = (pinSTATUS & 0x02) ? 1 : 0;
-					int pinDEV = 0;
-					int pinDEV5 = 0; // virtual input (DEVNUM) bit 5
-					if (TCBM_Bus::TPI)
-					{
-						IOPort* pc = TCBM_Bus::TPI->GetPortC();
-						if (pc)
-						{
-							pinDEV = (pc->GetOutput() & 0x04) ? 1 : 0;      // real output, bit 2
-							pinDEV5 = (pc->GetInput() & 0x20) ? 1 : 0;       // virtual input, bit 5 (SetDeviceID)
-						}
-					}
 					u8 pinDIO = TCBM_Bus::GetPI_Data();
-					snprintf(tempBuffer, tempBufferSize, "DAV:%d DEV:%d DEV5:%d@SetDevID ACK:%d ST0:%d ST1:%d DIO:%02X",
-						pinDAV ? 1 : 0, pinDEV, pinDEV5, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
+					snprintf(tempBuffer, tempBufferSize, "DAV:%d ACK:%d ST0:%d ST1:%d DIO:%02X",
+						pinDAV ? 1 : 0, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
 					screen.PrintText(false, 49*8, y-36, tempBuffer, textColour, bgColour);
 				}
 #endif
@@ -1519,7 +1427,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			emulationHalted = true;
 		}
 
-		// XXXMW this couning to 2 might break emulation, rest of I/O ports seems to run also at 2MHz
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
 			if (pi1551.m6502.SYNC())	// About to start a new instruction.
@@ -1539,11 +1446,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			}
 			pi1551.m6502.Step();
 		}
-		pi1551.Update(); // XXXMW: out of the loop - one update per 1MHz cycle
-		// XXXMW: this doesn't work yet - with pi1551.Update() in the loop, the drive doesn't work at all - gets stuck in ROM code
-		// XXXMW: when it's out of the loop and 'I'nitialized it goes to track 1 and back to 18, shows OK but diR yields 20, read error, 18, 01 
-		// XXXMW: don't know if this should be called twice, if some constants in Drive1551.cpp should be changed, etc.
-
+		// CPU does 2 cycles (2MHz), drive hardware is updated only once per 1MHz cycle
+		// TCBM outputs are outputted also only once per 1MHz cycle, hopefully this doesn't break any software
+		pi1551.Update();
 		TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
 
 		TCBM_Bus::OutputLED = pi1551.drive.IsLEDOn();
