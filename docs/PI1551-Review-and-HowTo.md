@@ -154,7 +154,7 @@ Prereqs (on build host): `arm-none-eabi` toolchain in PATH.
 Build steps from repository root `Pi1541/`:
 
 ```bash
-make clean && make RASPPI=3 USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
+make clean && make RASPPI=3 V=1`
 ```
 
 Notes:

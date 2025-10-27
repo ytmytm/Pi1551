@@ -75,7 +75,7 @@ VICE clears `byte_ready_level` on access of any TPI register, but I couldn't fin
 
 ** Working! **
 
-`make clean && make USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
+`make clean && make V=1`
 
 ** Working! **
 

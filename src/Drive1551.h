@@ -174,14 +174,6 @@ private:
 	// Emulate this by asserting the write protect signal for a few cycles before inserting the new disk image.
 	u32	newDiskImageQueuedCylesRemaining;
 
-	// CA1 (input)
-	//	- !BYTE SYNC
-	// CA2 (output)
-	//	- BYTE SYNC enable
-	// CB1 (NC)
-	//	- check pulled H/L
-	// CB2 (output)
-	//	- R/!W
 	m6523* m_pTPI;
 #if defined(EXPERIMENTALZERO)
 	unsigned int cyclesLeftForBit;
@@ -192,22 +184,23 @@ private:
 	unsigned int cyclesPerBitErrorConstant;
 	unsigned int cyclesPerBitInt;
 #else
-	int UE7Counter;
-	u8 writeShiftRegister;
+	int UE7Counter;				// encoder/decoder clock preload/counter (0..15)
+	u8 writeShiftRegister;		// latched output byte
 #endif
-	float cyclesForBit;
-	u32 readShiftRegister;
-	unsigned headTrackPos;
-	u32 headBitOffset;
-	float randomFluxReversalTime;
-	int UF4Counter;
-	int UE3Counter;
-	int CLOCK_SEL_AB;
-	unsigned char lastHeadDirection;
-	u32 bitsInTrack;
-	float cyclesPerBit;
-	bool motor;
-	bool LED;
+	float cyclesForBit;			// accumulator
+	u32 readShiftRegister;		// 10-bit window for SYNC recognition (low 10 bits)
+	unsigned headTrackPos;		// half-tracks
+	u32 headBitOffset;			// bit offset into track
+	float randomFluxReversalTime;	// microseconds
+	int UF4Counter;				// 4-bit counter (0..15)
+	int UE3Counter;				// byte bit counter (0..8)
+	int CLOCK_SEL_AB;			// density select (CPU P5..P6)
+	u32 bitsInTrack;			// total bits
+	float cyclesPerBit;			// 16MHz ticks per bit
+
+	unsigned char lastHeadDirection; // CPU P5..P6 quadrature
+	bool motor;					// CPU P2 (0=off, 1=on)
+	bool LED;					// CPU P3 (0=on, 1=off)
 
 };
 #endif

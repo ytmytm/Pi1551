@@ -19,13 +19,7 @@
 #ifndef PI1551_H
 #define PI1551_H
 
-#if defined(USE_DRIVE1551_CLEAN)
-#include "Drive1551-clean.h"
-typedef Drive1551Clean Drive1551Impl;
-#else
 #include "Drive1551.h"
-typedef Drive Drive1551Impl;
-#endif
 #include "m6502.h"
 #include "tcbm_bus.h"
 
@@ -33,15 +27,15 @@ typedef Drive Drive1551Impl;
 // PA 0:7 DATA:TCBM - not
 // PB 0:7 (head) - yes, Drive1551.cpp
 // PC 7:DAV:TCBM - not
-// PC 6:SYNC - yes, Drive1551.cpp (active low) ($1C00 bit 7, VIA#2 port B) ??? zanegowac
+// PC 6:SYNC - yes, Drive1551.cpp
 // PC 5:DEVNUM - yes, Pi1551.h SetDeviceID
-// PC 4:MODE - yes, Drive1551.cpp 'writing' ??? zanegowane
+// PC 4:MODE - yes, Drive1551.cpp 'writing'
 // PC 3:ACK:TCBM - not
 // PC 2:DEV:TCBM - not
 // PC 01:STATUS:TCBM - not
 
 // CPU ~ $1C00 (VIA#2 port B) GetPortCPU
-// CPU 7:byte latch - yes, Drive1551.cpp (SO, VIA - CA1, ale chyba zanegowane bo 1=latched, 0=nie)
+// CPU 7:byte latch - yes, Drive1551.cpp
 // CPU 56:density - yes, Drive1551.h OnPortOut
 // CPU 4:wps - yes, Drive1551.cpp disk change
 // CPU 3:led - yes, Drive1551.h OnPortOut
@@ -62,7 +56,7 @@ public:
 
 	//void ConfigureOfExtraRAM(bool extraRAM);
 
-    Drive1551Impl drive;
+    Drive drive;
 	m6523 TPI;
 
 	M6502 m6502;

@@ -363,13 +363,20 @@ void Drive::Reset()
 	UE7Counter = 16;
 #endif
 	headTrackPos = 18*2;		// Start with the head over track 19 (Very later Vorpal ie Cakifornia Games) need to have had the last head movement -ve
-	CLOCK_SEL_AB = 3;		// Track 18 will use speed zone 3 (encoder/decoder (ie UE7Counter) clocked at 1.2307Mhz)
-	UpdateHeadSectorPosition();
+	CLOCK_SEL_AB = 3;			// Track 18 will use speed zone 3 (encoder/decoder (ie UE7Counter) clocked at 1.2307Mhz)
 	lastHeadDirection = 0;
 	motor = false;
 	readShiftRegister = 0;
 	writeShiftRegister = 0;
 	UE3Counter = 0;
+	UF4Counter = 0;
+	headBitOffset = 0;
+	bitsInTrack = 0;
+	cyclesPerBit = 0;
+	cyclesForBit = 0;
+	randomFluxReversalTime = 0;
+	motor = false;
+	LED = false;
 #if defined(EXPERIMENTALZERO)
 	ResetEncoderDecoder(18 * 16, 4 * 16);
 	cyclesLeftForBit = ceil(cyclesPerBit - cyclesForBit);
@@ -377,6 +384,7 @@ void Drive::Reset()
 	ResetEncoderDecoder(18.0f, 22.0f);
 #endif
 	newDiskImageQueuedCylesRemaining = DISK_SWAP_CYCLES_DISK_EJECTING + DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING;
+	UpdateHeadSectorPosition();
 }
 
 void Drive::Insert(DiskImage* diskImage)
@@ -402,9 +410,9 @@ void Drive::OnPortOut(void* pThis, unsigned char status)
 	Drive* pDrive = (Drive*)pThis;
 	if (pDrive->motor)
 		pDrive->MoveHead(status & 3);
-	pDrive->motor = (status & 4) != 0;
-	pDrive->CLOCK_SEL_AB = ((status >> 5) & 3);
-	pDrive->LED = (status & 8) == 0;
+	pDrive->motor = (status & 4) != 0;		// CPU P2 (0=off, 1=on)
+	pDrive->CLOCK_SEL_AB = ((status >> 5) & 3);	// CPU P5..P6
+	pDrive->LED = (status & 8) == 0;			// CPU P3 (0=on, 1=off)
 }
 
 bool Drive::Update()
@@ -446,13 +454,21 @@ bool Drive::Update()
 	if (newDiskImageQueuedCylesRemaining > 0)
 	{
 		newDiskImageQueuedCylesRemaining--;
-		if (newDiskImageQueuedCylesRemaining == 0) m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly()); // X Write protect status of D2
-		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
-		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_DISK_INSERTING) m_pTPI->GetPortCPU()->SetInput(0x10, true); // 1 Not write protected (no disk)
-		else m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D2 inserting)
+        if (!m_pTPI) return false;
+		if (newDiskImageQueuedCylesRemaining == 0)
+			m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly()); // X Write protect status of D2
+		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING)
+			m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D1 ejecting)
+		else if (newDiskImageQueuedCylesRemaining > DISK_SWAP_CYCLES_DISK_INSERTING)
+			m_pTPI->GetPortCPU()->SetInput(0x10, true); // 1 Not write protected (no disk)
+		else
+			m_pTPI->GetPortCPU()->SetInput(0x10, false); // 0 Write protected (D2 inserting)
+		return false;
 	}
-	else if (diskImage && motor)
-	{
+
+	if (!(diskImage && motor && m_pTPI))
+		return false;
+
 		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
         bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10);
 
@@ -561,7 +577,6 @@ bool Drive::Update()
 			}
 		}
 #endif
-	}
 
 #if defined(PROFILE)
 	read_performance_counters(&pct);
