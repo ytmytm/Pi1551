@@ -64,13 +64,20 @@ B_F2AD	BIT zp01
 	BNE B_F2FD
 ```
 
+No one knows for sure how this flag is cleared. It's certain that this line (called in VICE `byte_ready_level` from `rotation.c`) is set by the serial shift register. On 1541 this is latched in two places - oVerflow input of 6502 latches on edge, and also VIA does it.
+On 1541 this is cleared by `CLV` instruction, on 1571 this is cleared in VIA by reading `$180f` register.
+
+But on 1551 it's just a guess that it's latched somewhere (gate array is the only place) and cleared by reading any of the TPI registers.
+From 1551 disassembly it's clear that it's not only access to `$4001` and not only access to `$4000` but at least both of them.
+VICE clears `byte_ready_level` on access of any TPI register, but I couldn't find any documentation why. But it works. It's just more puzzling *how* it works because as I understand the gate arrays from 1541 and 1551 are the same.
+
 ### Implementation
 
 ** Working! **
 
 `make clean && make USE_DRIVE1551_CLEAN=1 USE_PI1551_CLEAN=1 V=1`
 
-** untested **
+** Working! **
 
 `make clean && make V=1`
 
@@ -283,6 +290,6 @@ m_pTPI->GetPortCPU()->SetInput(0x80, SO);
 ```
 was:
 m_pVIA->GetPortB()->SetInput(0x10, !diskImage->GetReadOnly())
-jest:
+is:
 m_pTPI->GetPortCPU()->SetInput(0x10, !diskImage->GetReadOnly())
 ```
