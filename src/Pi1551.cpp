@@ -189,7 +189,7 @@ void Pi1551::Update()
 		// 1551: keep SO internal; do not touch CPU V flag
 		//This pin sets the overflow flag on a negative transition from TTL one to TTL zero.
 		// SO is sampled at the trailing edge of P1, the cpu V flag is updated at next P1.
-		//m6502.SO(); //XXXMW not used in 1551
+		//m6502.SO(); // not used in 1551 - latched when byte is ready, cleared when any TIA port is read
 	}
 
 	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
@@ -202,5 +202,6 @@ void Pi1551::Reset()
 	drive.Reset();
 	TCBM_Bus::Reset();
 	// Ensure the CPU also performs a hardware reset so the reset vector is fetched
-	m6502.Reset();
+	// 1541/1581 don't reset the CPU, only the hardware
+	//m6502.Reset();
 }
