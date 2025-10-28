@@ -97,7 +97,7 @@ Legend
   - Buttons: `SW1`=GPIO27, `SW2`=GPIO22, `SW3`=GPIO17, `SW4`=GPIO4, `SW5`=GPIO5
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
   - Sound (PWM): GPIO13
-  - SPI0_RS (if used): GPIO6
+  - SPI0_RS (unused): GPIO6
   - LED: GPIO10
 
 ### TCBM2SD - TCBM Connector
@@ -105,10 +105,10 @@ Legend
 
 ```
 GND	     1	2	DEV
-DIO1	   3	4	DIO2
-DIO3	   5	6	DIO4
-DIO5	   7	8	DIO6
-DIO7	   9	10	DIO8
+DIO1	     3	4	DIO2
+DIO3	     5	6	DIO4
+DIO5	     7	8	DIO6
+DIO7	     9	10	DIO8
 DAV	    11	12	STATUS0
 ACK	    13	14	STATUS1
 /RESET	15	16	ALT_A6/GND
@@ -116,36 +116,36 @@ ACK	    13	14	STATUS1
 
 ##### ACK / DAV
 
-* IMPORTANT *
+**IMPORTANT**
 
 ACK here is controller's ACK! It is an output and goes to cable pin 13 (drive's DAV input)
+
 DAV here is controller's DAV! It is an input and goes to cable pin 11 (drive's ACK output)
 
-/RESET - CAN'T BE CONNECTED on tcbm2sd 1.3 boards - it's 5V system /RESET
-cut the wire or trace and patch manually to join with /RESET_3_3V from JP1 (one side of it)
+##### RESET
 
-Pi1551 hat *MUST* have a jumper for that with instruction that a jumper *MUST* be open for
+**IMPORTANT**
+
+`/RESET` CAN'T BE DIRECTLY CONNECTED to TCBM on tcbm2sd 1.3 boards - it's a 5V system /RESET, not 3.3V /RESET_3_3_V from CPLD.
+
+Cut the trace on tcbm2sd and (optionally) add a wire to join pin 16 of TCBM connector with /RESET_3_3V from JP1 - the one side of it that then goes to Arduino RESET.
+
+Pi1551 hat **MUST** have a jumper for that with instruction that a jumper *MUST* be open for
 tcbm2sd 1.3 boards unless there was a manual patch
 
-Pi1551 hat fix option (TODO: test that on falstad):
+Pi1551 hat fix option with a diode:
 
 ```
                 +3.3V
                   |
                   Rp  (10k typ.)
                   |
-/RESET_IN  ---|<|-+-> /RESET_OUT
+/RESET_IN  ---|<--+-> /RESET_OUT
                D
 ```
 
 Rp - 10K
 D - BAT54/BAS40
-- Katoda diody (|<|) jest po stronie /RESET_IN (wejście 3.3 V/5 V).
-- Anoda diody jest w węźle wyjściowym /RESET_out (z pull-upem do 3.3 V).
-
-/RESET_IN = LOW (aktywny) → dioda przewodzi → /RESET_out ≈ 0 V.
-/RESET_IN = HIGH (3.3 V lub 5 V) → dioda zaporowo → /RESET_out podciągnięty do 3.3 V przez Rp.
-
 
 ### Build instructions (Raspberry Pi 3, PI1551)
 
