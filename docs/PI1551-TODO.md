@@ -7,6 +7,9 @@
     - only on safe tcbm2sd > 1.3 without diode because it won't pass the reset back into tcbm2sd
     - control line #16 from RPi - switch all lines to input (it will be pulled up as unconnected) except for reset to restart arduino/system
 - TAP support - header for tape recorder? how U2+ does it? how Arduino does it?
+    - RPi circuit https://github.com/RhinoDevel/cbmtapepi
+    - Tapuino (TAP) https://github.com/sweetlilmre/tapuino
+    - needs 4 GPIO, motor goes through optocoupler 4N35; but we have 2 GPIOs left (force rotary encoder and free SW4/5?)
 
 # Browser mode
 
