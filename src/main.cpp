@@ -36,12 +36,11 @@ extern "C"
 }
 #include "options.h"
 #include "diskio.h"
+#include "InputMappings.h"
 #if defined(PI1551SUPPORT)
-#include "InputMappings1551.h"
 #include "tcbm_commands.h"
 #include "Pi1551.h"
 #else
-#include "InputMappings.h"
 #include "iec_commands.h"
 #include "Pi1541.h"
 #include "Pi1581.h"

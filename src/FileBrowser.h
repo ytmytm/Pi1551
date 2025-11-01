@@ -27,11 +27,7 @@
 #include "DiskCaddy.h"
 #include "ROMs.h"
 #include "ScreenBase.h"
-#if defined(PI1551SUPPORT)
-#include "InputMappings1551.h"
-#else
 #include "InputMappings.h"
-#endif
 
 #define VIC2_COLOUR_INDEX_BLACK		0
 #define VIC2_COLOUR_INDEX_WHITE		1
