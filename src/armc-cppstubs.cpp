@@ -40,3 +40,10 @@ namespace std
 	{
 	}
 }
+
+extern "C" void __cxa_pure_virtual()
+{
+	// Pure virtual function called - this should never happen in a properly designed system
+	// In embedded systems, we just loop forever or halt
+	while(1);
+}

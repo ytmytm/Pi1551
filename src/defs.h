@@ -73,8 +73,10 @@
 
 #if defined(PI1551SUPPORT)
 #define DEFAULT_BROWSE_DIR "/1551"
+#define PI_DRIVE_NAME "PI1551"
 #else
 #define DEFAULT_BROWSE_DIR "/1541"
+#define PI_DRIVE_NAME "PI1541"
 #endif
 
 #endif

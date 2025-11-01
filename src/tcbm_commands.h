@@ -19,175 +19,55 @@
 #ifndef TCBM_COMMANDS_H
 #define TCBM_COMMANDS_H
 
+#include "commands_base.h"
 #include "tcbm_bus.h"
-#include "ff.h"
-#include "debug.h"
-#include "DiskImage.h"
 
-struct TimerMicroSeconds
-{
-	TimerMicroSeconds()
-	{
-		count = 0;
-		timeout = 0;
-	}
+// TCBM Bus Command Codes (from controller perspective, matching tcbm2sd.ino):
+#define TCBM_CODE_COMMAND 0x81  // Controller sends command byte (0x20 LISTEN, 0x3F UNLISTEN, 0x40 TALK, 0x5F UNTALK)
+#define TCBM_CODE_SECOND  0x82  // Controller sends secondary address (0x60 SECOND, 0xE0 CLOSE, 0xF0 OPEN)
+#define TCBM_CODE_RECV    0x83  // Controller sends data byte (device receives)
+#define TCBM_CODE_SEND    0x84  // Controller receives data byte (device sends)
 
-	void Start(u32 amount)
-	{
-		count = 0;
-		timeout = amount;
-	}
-
-	inline bool TimedOut() { return count >= timeout; }
-
-	bool Tick()
-	{
-		delay_us(1);
-		count++;
-		return TimedOut();
-	}
-
-	u32 count;
-	u32 timeout;
-};
-
-class TCBM_Commands
+class TCBM_Commands : public Commands_Base
 {
 public:
-	enum UpdateAction
-	{
-		NONE,
-		IMAGE_SELECTED,
-		DIR_PUSHED,
-		POP_DIR,
-		POP_TO_ROOT,
-		REFRESH,
-		DEVICEID_CHANGED,
-		DEVICE_SWITCHED,
-		RESET
-	};
-
 	TCBM_Commands();
 	void Initialise();
-
-	void SetDeviceId(u8 id) { deviceID = id; }
-	u8 GetDeviceId() { return deviceID; }
-
-	void SetLowercaseBrowseModeFilenames(bool value) { lowercaseBrowseModeFilenames = value; }
-	void SetNewDiskType(DiskImage::DiskType type) { newDiskType = type; }
 
 	void Reset(void);
 	void SimulateIECBegin(void);
 	UpdateAction SimulateIECUpdate(void);
 
-	const char* GetNameOfImageSelected() const { return selectedImageName; }
-	const FILINFO* GetImageSelected() const { return &filInfoSelectedImage; }
-	void SetStarFileName(const char* fileName) { starFileName = fileName; }
-
-	int CreateNewDisk(char* filenameNew, char* ID, bool automount);
-
-	void SetDisplayingDevices(bool displayingDevices) { this->displayingDevices = displayingDevices; }
-
 protected:
-	enum ATNSequence 
+	bool WriteSerialPortByte(u8 data, bool eoi) override;
+	// ReadSerialPortByte not used by TCBM (uses ReadTCBMDataByte instead), so inherits default stub
+	void ReadBrowseMode() { TCBM_Bus::ReadBrowseMode(); }
+	bool IsReset() { return TCBM_Bus::IsReset(); }
+
+	// Override base class methods to handle TCBM command byte protocol
+	// Note: Listen() and Talk() are not overridden - TCBM uses state machine instead
+	void LoadFile() override;
+	void SaveFile() override;
+	void LoadDirectory() override;
+
+	// TCBM-specific state machine (not using ATN sequences)
+	enum TCBMState
 	{
-		ATN_SEQUENCE_IDLE,
-		ATN_SEQUENCE_ATN,
-		ATN_SEQUENCE_RECEIVE_COMMAND_CODE,
-		ATN_SEQUENCE_HANDLE_COMMAND_CODE,
-		ATN_SEQUENCE_COMPLETE
+		TCBM_STATE_IDLE,      // Waiting for command byte
+		TCBM_STATE_OPEN,      // Receiving filename/command on channel 15
+		TCBM_STATE_LOAD,      // Sending data to computer
+		TCBM_STATE_SAVE,      // Receiving data from computer
+		TCBM_STATE_DIR        // Sending directory listing
 	};
 
-	enum DeviceRole
-	{
-		DEVICE_ROLE_PASSIVE,
-		DEVICE_ROLE_LISTEN,
-		DEVICE_ROLE_TALK
-	};
+	// Helper functions to read TCBM command bytes
+	u8 ReadTCBMCommandByte();      // Non-blocking, returns 0 if no command
+	u8 ReadTCBMCommandByteBlock(); // Blocking until command byte received
+	u8 ReadTCBMDataByte();         // Read data byte following command byte
 
-	struct Channel
-	{
-		u8 buffer[0x1000];
-		u8 command[0x100];
-
-		FILINFO filInfo;
-		FIL file;
-		u32 cursor;
-		u32 bytesSent;
-		u32 open : 1;
-		u32 writing : 1;
-		u32 fileSize;
-
-		void Close();
-		bool WriteFull() const { return cursor >= sizeof(buffer); }
-		bool CanFit(u32 bytes) const { return bytes <= sizeof(buffer) - cursor; }
-	};
-
-	bool WriteIECSerialPort(u8 data, bool eoi);
-	bool ReadIECSerialPort(u8& byte, bool eoi=false);
-
-	void Listen();
-	void Talk();
-	void LoadFile();
-	void SaveFile();
-
-	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType);
-	void LoadDirectory();
-	void OpenFile();
-	void CloseFile(u8 secondary);
-	void CloseAllChannels();
-	void SendError();
-
-
-	bool Enter(DIR& dir, FILINFO& filInfo);
-	bool FindFirst(DIR& dir, const char* matchstr, FILINFO& filInfo);
-
-	void FolderCommand(void);
-	void CD(int partition, char* filename);
-	void MKDir(int partition, char* filename);
-	void RMDir(void);
-
-	void Copy(void);
-	void New(void);
-	void Rename(void);
-	void Scratch(void);
-	void ChangeDevice(void);
-
-	void Memory(void);
-	void User(void);
-	void Extended(void);
-
-	void ProcessCommand(void);
-
-	bool SendBuffer(Channel& channel, bool eoi);
-
-	u8 GetFilenameCharacter(u8 value);
-
-	int WriteNewDiskInRAM(char* filenameNew, bool automount, unsigned length);
-
-	UpdateAction updateAction;
-	u8 commandCode;
-	u8 busCommandCode;
-	bool receivedCommand : 1;
-	bool receivedEOI : 1;	// End Or Identify
-
-	u8 deviceID;
-	u8 secondaryAddress;
-	ATNSequence atnSequence;
-	DeviceRole deviceRole;
-
-	TimerMicroSeconds timer;
-
-	Channel channels[16];
-
-	char selectedImageName[256];
-	FILINFO filInfoSelectedImage;
-
-	const char* starFileName;
-
-	bool displayingDevices;
-	bool lowercaseBrowseModeFilenames;
-	DiskImage::DiskType newDiskType;
+	// TCBM-specific members
+	TCBMState tcbmState;
+	// Note: secondaryAddress (from base class) tracks the currently active channel
 };
 #endif
 
