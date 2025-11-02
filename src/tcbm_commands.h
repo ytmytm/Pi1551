@@ -73,6 +73,7 @@ public:
 
 protected:
 	bool WriteSerialPortByte(u8 data, bool eoi) override;
+	bool WriteSerialPortByteWithStatus(u8 data, u8 status);
 	void LoadFile() override;
 	void SaveFile() override;
 	void LoadDirectory() override;
@@ -84,7 +85,7 @@ protected:
     // Helper functions to read TCBM command/data bytes
     u8   ReadTCBMCommandByte();                  // Non-blocking poll, returns 0 if no command
 	bool ReadTCBMCommandByteBlocking(u8& value); // Blocking with timeout (5s)
-	bool ReadTCBMDataByteBlocking(u8& value);    // Blocking with timeout (5s)
+	bool ReadTCBMDataByteBlocking(u8& value, u8 status = TCBM_STATUS_OK);    // Blocking with timeout (5s)
 
     // Timing helpers (1µs polling, 5s timeout)
     bool WaitForDAVState(bool asserted, const char* stage, u32 timeoutUs = COMMAND_TIMEOUT_US);

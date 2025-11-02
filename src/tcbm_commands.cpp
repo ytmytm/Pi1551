@@ -359,7 +359,7 @@ bool TCBM_Commands::ReadTCBMCommandByteBlocking(u8& value)
     }
 }
 
-bool TCBM_Commands::ReadTCBMDataByteBlocking(u8& value)
+bool TCBM_Commands::ReadTCBMDataByteBlocking(u8& value, u8 status)
 {
     if (!WaitForDAVState(false, "DAV=0 (data ready)"))
         return false;
@@ -367,15 +367,18 @@ bool TCBM_Commands::ReadTCBMDataByteBlocking(u8& value)
     TCBM_Bus::ReadBrowseMode();
     value = TCBM_Bus::GetPI_Data();
 
-    TCBM_Bus::SetStatus(0);
-    TCBM_Bus::AssertACK();
+	TCBM_Bus::SetStatus(status);
+	TCBM_Bus::AssertACK();
 
-    if (!WaitForDAVState(true, "DAV=1 (data ack)"))
-        return false;
+	if (!WaitForDAVState(true, "DAV=1 (data ack)"))
+	{
+		TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+		return false;
+	}
 
-    TCBM_Bus::SetStatus(0);
-    TCBM_Bus::ReadBrowseMode();
-    return true;
+	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+	TCBM_Bus::ReadBrowseMode();
+	return true;
 }
 
 void TCBM_Commands::HandleIdleCommand(u8 commandByte)
@@ -600,7 +603,26 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	if (!ch.open)
 	{
 		Error(ERROR_62_FILE_NOT_FOUND);
-		PrepareStatusResponse(fastMode);
+		ch.cursor = 0;
+		ch.bytesSent = 0;
+		ch.fileSize = 0;
+		statusActive = false;
+		directoryActive = false;
+		if (fastMode)
+		{
+			fastCtx.initialised = false;
+			fastCtx.ackLevel = 1;
+			fastCtx.expectedDav = 0;
+			fastCtx.status = TCBM_STATUS_SEND;
+			tcbmState = TCBM_STATE_FASTLOAD;
+			fastRequest.type = FAST_REQ_NONE;
+			PushDebugLine("FAST LOAD error channel %u", channel);
+		}
+		else
+		{
+			tcbmState = TCBM_STATE_LOAD;
+			PushDebugLine("LOAD error channel %u", channel);
+		}
 		return false;
 	}
 
@@ -637,9 +659,15 @@ bool TCBM_Commands::PrepareSaveChannel(u8 channel)
     OpenFile();
     if (!ch.open)
     {
-        Error(ERROR_25_WRITE_ERROR);
-		PrepareStatusResponse(false);
-        return false;
+		Error(ERROR_25_WRITE_ERROR);
+		ch.cursor = 0;
+		ch.bytesSent = 0;
+		ch.fileSize = 0;
+		statusActive = false;
+		directoryActive = false;
+		tcbmState = TCBM_STATE_SAVE;
+		PushDebugLine("SAVE error channel %u", channel);
+		return false;
     }
 
     tcbmState = TCBM_STATE_SAVE;
@@ -945,7 +973,7 @@ void TCBM_Commands::ServiceLoadState()
         {
             if (!ch.open)
             {
-                WriteSerialPortByte(0x0D, true);
+				WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
                 tcbmState = TCBM_STATE_IDLE;
                 deviceRole = DEVICE_ROLE_PASSIVE;
                 return;
@@ -953,7 +981,16 @@ void TCBM_Commands::ServiceLoadState()
 
             u8 byte = 0;
             u32 bytesRead = 0;
-            f_read(&ch.file, &byte, 1, &bytesRead);
+		FRESULT res = f_read(&ch.file, &byte, 1, &bytesRead);
+		if (res != FR_OK)
+		{
+			WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
+			Error(ERROR_74_DRlVE_NOT_READY);
+			ch.Close();
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+			return;
+		}
 
             if (bytesRead == 0)
             {
@@ -1002,6 +1039,17 @@ void TCBM_Commands::ServiceSaveState()
 
     if (command == TCBM_CODE_RECV)
     {
+		if (!ch.open)
+		{
+			u8 discard;
+			if (!ReadTCBMDataByteBlocking(discard, TCBM_STATUS_RECV))
+				return;
+			PushDebugLine("SAVE rejected byte");
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+			return;
+		}
+
         u8 byte;
         if (!ReadTCBMDataByteBlocking(byte))
             return;
@@ -1328,14 +1376,17 @@ bool TCBM_Commands::PrepareFastBlockWrite()
 
 bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
 {
+    return WriteSerialPortByteWithStatus(data, eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK);
+}
+
+bool TCBM_Commands::WriteSerialPortByteWithStatus(u8 data, u8 status)
+{
     if (captureOutput)
     {
         if (captureLength < sizeof(captureBuffer))
             captureBuffer[captureLength++] = data;
         return false;
     }
-
-    u8 status = eoi ? 0x03 : 0x00;
 
     debugWriteStep = 1;
     std::snprintf(debugWriteBuffer, sizeof(debugWriteBuffer), "$%02X st=$%02X", data, status);
@@ -1354,7 +1405,7 @@ bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
         return true;
 
     TCBM_Bus::SetDataInput();
-    TCBM_Bus::SetStatus(0);
+    TCBM_Bus::SetStatus(TCBM_STATUS_OK);
     TCBM_Bus::ReleaseACK();
 
     debugWriteStep = 3;
