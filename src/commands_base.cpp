@@ -37,8 +37,7 @@ extern void SwitchDrive(const char* drive);
 extern int numberOfUSBMassStorageDevices;
 extern void DisplayMessage(int x, int y, bool LCD, const char* message, u32 textColour, u32 backgroundColour);
 
-#define DRIVE_NAME_OFFSET_IN_DIR_HEADER 7
-#define VERSION_OFFSET_IN_DIR_HEADER 17
+#define DRIVE_NAME_OFFSET_IN_DIR_HEADER 8
 static u8 DirectoryHeader[] =
 {
 	1, 4,	// BASIC start address
@@ -79,40 +78,16 @@ static const u8 filetypes[] = {
 
 // ErrorMessage is now a member variable
 
-static u8* InsertNumber(u8* msg, u8 value)
-{
-	if (value >= 100)
-	{
-		*msg++ = '0' + value / 100;
-		value %= 100;
-	}
-	*msg++ = '0' + value / 10;
-	*msg++ = '0' + value % 10;
-	return msg;
-}
-
 void Commands_Base::SetHeaderVersion()
 {
-	// Set drive name (e.g., "PI1541" or "PI1551")
+	// Build "PI1551 V01.24" (or similar) padded to 16 characters between the quotes
+	char nameField[17];
+	snprintf(nameField, sizeof(nameField), "%s V%02u.%02u", PI_DRIVE_NAME, versionMajor, versionMinor);
+
 	u8* ptr = DirectoryHeader + DRIVE_NAME_OFFSET_IN_DIR_HEADER;
-	const char* driveName = PI_DRIVE_NAME;
-	int i = 0;
-	while (driveName[i] && i < 16)
-	{
-		*ptr++ = driveName[i++];
-	}
-	// Fill remaining space with spaces
-	while (i < 16)
-	{
-		*ptr++ = ' ';
-		i++;
-	}
-	
-	// Set version number
-	ptr = DirectoryHeader + VERSION_OFFSET_IN_DIR_HEADER;
-	ptr = InsertNumber(ptr, versionMajor);
-	*ptr++ = '.';
-	ptr = InsertNumber(ptr, versionMinor);
+	memset(ptr, ' ', 16);
+	size_t len = std::min<size_t>(strlen(nameField), static_cast<size_t>(16));
+	memcpy(ptr, nameField, len);
 }
 
 void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
