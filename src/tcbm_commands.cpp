@@ -178,6 +178,7 @@ void TCBM_Commands::ResetStateMachine()
     captureOutput    = false;
     captureChannel   = 0;
     captureLength    = 0;
+    std::memset(captureBuffer, 0, sizeof(captureBuffer));
     debugWriteStep   = 0;
     debugWriteBuffer[0] = '\0';
     lastTimeoutMessage[0] = '\0';
@@ -660,10 +661,32 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
     Commands_Base::LoadDirectory();
 
     captureOutput = false;
-    ch.cursor = captureLength;
+
+    size_t copyLength = std::min<size_t>(captureLength, sizeof(ch.buffer));
+    if (captureLength > sizeof(ch.buffer))
+    {
+        PushDebugLine("DIR truncated (%u>%zu)", captureLength, sizeof(ch.buffer));
+    }
+
+    std::memcpy(ch.buffer, captureBuffer, copyLength);
+    ch.cursor = static_cast<u32>(copyLength);
     ch.bytesSent = 0;
+    ch.fileSize = ch.cursor;
+    ch.filInfo.fsize = ch.cursor;
     directoryActive = true;
     statusActive = false;
+
+    if (copyLength > 0)
+    {
+        size_t preview = std::min<size_t>(copyLength, static_cast<size_t>(32));
+        char previewBuf[128] = { 0 };
+        size_t offset = 0;
+        for (size_t i = 0; i < preview && offset + 4 < sizeof(previewBuf); ++i)
+        {
+            offset += std::snprintf(previewBuf + offset, sizeof(previewBuf) - offset, "%02X ", ch.buffer[i]);
+        }
+        PushDebugLine("DIR hdr: %s", previewBuf);
+    }
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
@@ -672,12 +695,12 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTDIR;
 		fastRequest.type = FAST_REQ_NONE;
-		PushDebugLine("FAST DIR prepared channel %u bytes:%u", channel, captureLength);
+		PushDebugLine("FAST DIR prepared channel %u bytes:%u", channel, ch.cursor);
 	}
 	else
 	{
 		tcbmState = TCBM_STATE_DIR;
-		PushDebugLine("DIR prepared channel %u bytes:%u", channel, captureLength);
+		PushDebugLine("DIR prepared channel %u bytes:%u", channel, ch.cursor);
 	}
 }
 
@@ -1307,9 +1330,8 @@ bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
 {
     if (captureOutput)
     {
-        Channel& ch = channels[captureChannel];
-        if (captureLength < sizeof(ch.buffer))
-            ch.buffer[captureLength++] = data;
+        if (captureLength < sizeof(captureBuffer))
+            captureBuffer[captureLength++] = data;
         return false;
     }
 

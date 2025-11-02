@@ -151,6 +151,8 @@ protected:
 	bool captureOutput;
 	u8  captureChannel;
 	u32 captureLength;
+	static constexpr size_t CAPTURE_BUFFER_SIZE = 0x1000;
+	u8  captureBuffer[CAPTURE_BUFFER_SIZE];
 
 	struct FastHandshakeContext
 	{
