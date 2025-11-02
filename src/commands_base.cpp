@@ -302,6 +302,67 @@ static int ParsePartition(char** buf)
 	return 0;
 }
 
+static inline char NormaliseCbmChar(char value)
+{
+	unsigned char ch = static_cast<unsigned char>(value);
+	ch &= 0x7f;
+	if (ch >= 'a' && ch <= 'z')
+		ch = static_cast<unsigned char>(ch - ('a' - 'A'));
+	return static_cast<char>(ch);
+}
+
+static bool MatchCbmPatternRecursive(const char* pattern, size_t patternLen, const char* name, size_t nameLen, size_t patternIndex, size_t nameIndex)
+{
+	while (true)
+	{
+		if (patternIndex == patternLen)
+		{
+			return nameIndex >= nameLen;
+		}
+
+		char patternChar = pattern[patternIndex];
+
+		if (patternChar == '*')
+		{
+			while (patternIndex + 1 < patternLen && pattern[patternIndex + 1] == '*')
+				++patternIndex;
+			++patternIndex;
+			if (patternIndex == patternLen)
+				return true;
+
+			for (size_t i = nameIndex; i <= nameLen; ++i)
+			{
+				if (MatchCbmPatternRecursive(pattern, patternLen, name, nameLen, patternIndex, i))
+					return true;
+				if (i == nameLen)
+					break;
+			}
+			return false;
+		}
+
+		if (patternChar == '?')
+		{
+			++patternIndex;
+			if (nameIndex < nameLen)
+				++nameIndex;
+			continue;
+		}
+
+		char nameChar = (nameIndex < nameLen) ? name[nameIndex] : ' ';
+		if (NormaliseCbmChar(patternChar) != NormaliseCbmChar(nameChar))
+			return false;
+
+		++patternIndex;
+		if (nameIndex < nameLen)
+			++nameIndex;
+	}
+}
+
+static bool MatchCbmPattern(const char* pattern, const char* name)
+{
+	return MatchCbmPatternRecursive(pattern, strlen(pattern), name, strlen(name), 0, 0);
+}
+
 bool Commands_Base::Enter(DIR& dir, FILINFO& filInfo)
 {
 	filInfoSelectedImage = filInfo;
@@ -352,18 +413,26 @@ bool Commands_Base::FindFirst(DIR& dir, const char* matchstr, FILINFO& filInfo)
 				pattern[CBM_NAME_LENGTH - 1] = '*';
 		}
 	}
-	//DEBUG_LOG("Pattern %s -> %s\r\n", matchstr, pattern);
-	res = f_findfirst(&dir, &filInfo, ".", (const TCHAR*)pattern);
-	//DEBUG_LOG("found file %s\r\n", filInfo.fname);
-	if (res != FR_OK || filInfo.fname[0] == 0)
-	{
-		//Error(ERROR_62_FILE_NOT_FOUND);
+	for (char* ptr = pattern; *ptr; ++ptr)
+		*ptr = static_cast<char>(toupper(static_cast<unsigned char>(*ptr)));
+
+	res = f_findfirst(&dir, &filInfo, ".", (const TCHAR*)"*");
+	if (res != FR_OK)
 		return false;
-	}
-	else
+
+	while (filInfo.fname[0] != 0)
 	{
-		return true;
+		if (!(filInfo.fname[0] == '.' && (filInfo.fname[1] == 0 || (filInfo.fname[1] == '.' && filInfo.fname[2] == 0))))
+		{
+			if (MatchCbmPattern(pattern, filInfo.fname))
+				return true;
+		}
+
+		res = f_findnext(&dir, &filInfo);
+		if (res != FR_OK)
+			break;
 	}
+	return false;
 }
 
 // Append this to commands_base.cpp - Shared command methods
