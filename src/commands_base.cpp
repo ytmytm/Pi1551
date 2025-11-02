@@ -1419,7 +1419,28 @@ void Commands_Base::OpenFile()
 					text = ParseNextName(text, filemode, true);
 			}
 
-			if (starFileName && starFileName[0] != 0 && filename[0] == '*')
+			bool starRequested = false;
+			if (starFileName && starFileName[0] != 0)
+			{
+				if (filename[0] == '*')
+				{
+					starRequested = true;
+				}
+				else
+				{
+					const char* commandPtr = reinterpret_cast<const char*>(channel.command);
+					if (*commandPtr == '*')
+					{
+						starRequested = true;
+					}
+					else if (isdigit(*commandPtr & 0x7f) && commandPtr[1] == ':' && commandPtr[2] == '*')
+					{
+						starRequested = true;
+					}
+				}
+			}
+
+			if (starRequested)
 			{
 				char cwd[1024];
 				if (f_getcwd(cwd, sizeof(cwd)) == FR_OK)
