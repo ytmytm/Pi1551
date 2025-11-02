@@ -629,6 +629,17 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	ch.bytesSent = 0;
 	statusActive = false;
 	directoryActive = false;
+	if (!fastMode)
+	{
+		u32 size = 0;
+		u32 current = f_tell(&ch.file);
+		if (f_lseek(&ch.file, f_size(&ch.file)) == FR_OK)
+		{
+			size = static_cast<u32>(f_tell(&ch.file));
+			f_lseek(&ch.file, current);
+		}
+		ch.fileSize = size;
+	}
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
