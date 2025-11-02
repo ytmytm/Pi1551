@@ -82,6 +82,9 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 
     updateAction = NONE;
 
+    // Refresh bus snapshot each tick so we see host changes even when idle
+    TCBM_Bus::ReadBrowseMode();
+
     switch (tcbmState)
     {
         case TCBM_STATE_IDLE:
@@ -232,6 +235,7 @@ void TCBM_Commands::SetDebugLine(int index, const char* fmt, ...)
 
 void TCBM_Commands::UpdateDebugOverlay()
 {
+    TCBM_Bus::ReadBrowseMode();
     ClearDebugOverlay();
 
     SetDebugLine(0, "STATE:%-6s ROLE:%-4s DEV:%d SEC:%02u", GetStateName(), RoleToString(deviceRole), deviceID, secondaryAddress);
@@ -303,6 +307,7 @@ bool TCBM_Commands::WaitForDAVState(bool asserted, const char* stage, u32 timeou
 
 u8 TCBM_Commands::ReadTCBMCommandByte()
 {
+    TCBM_Bus::ReadBrowseMode();
     if (!TCBM_Bus::IsDAVAsserted())
         return 0;
 
