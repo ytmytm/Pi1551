@@ -13,10 +13,11 @@
 
 # Browser mode
 
-- browser mode doesn't work
-    - arduino code has that part figured out, maybe rewrite from IEC to TCBM using that - a different state machine
-    - browser mode needs to support tcbm2sd fastloader command & protocol for files anyway
-    - force directory browser from tcbm2sd as '*' in browser mode (already done: option `StarFileName`)
+- somewhat works
+- browser mode is sometimes faulty
+    - `StarFileName` doesn't seem to work
+    - fastload / fastdir mode (tcbm2sd `U0` commands) don't work
+- must support SD2IEC option to list disk images as DIR
 
 # Tests
 
@@ -34,6 +35,7 @@
     - can upload new kernel via wifi (!)
     - with wifi enabled we can download stuff from plus4world (like Assembly64) - download+unzip to /tmp (RAM)
     - do it while 1541/81 code is present
+    - runs much hotter than this legacy code
 - remove irrelevant options, this is pure 1551, no IEC, no VIA, no 1581 - OR keep it but update Makefile/Makefile.rules
     - old code was kept for reference
 - rebrand to Pi1551
@@ -42,4 +44,4 @@
 - on safe tcbm2sd > 1.4 the hat could drive line 16 and /RESET to enable/disable Arduino
 - backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
-- TAP format support (how?)
+- TAP format support (how? IRQ on MOTOR, DMA to pump data)
