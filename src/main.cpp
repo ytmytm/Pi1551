@@ -726,6 +726,39 @@ void UpdateScreen()
 			}
 		}
 #endif
+		// Temperature display (works in both emulation and browse mode)
+		if (options.DisplayTemperature())
+		{
+			if (GetTemperature(temperature))
+			{
+				temperature /= 1000;
+				if (temperature != oldTemperature)
+				{
+					oldTemperature = temperature;
+					//DEBUG_LOG("%0x %d %d\r\n", temp, temp, temp / 1000);
+					snprintf(tempBuffer, tempBufferSize, "%02d", temperature);
+					screen.PrintText(false, 43 * 8, y, tempBuffer, textColour, bgColour);
+					refreshLCDStatusDisplay = true;
+				}
+			}
+		}
+
+#if defined(PI1551SUPPORT)
+		// TCBM browse mode diagnostics (only shown when DisplayPC is enabled)
+		// Place this BEFORE the emulation check so it always runs in browse mode
+		if (emulating == IEC_COMMANDS && options.DisplayPC())
+		{
+			int debugLineCount = 0;
+			const char* const* debugLines = m_TCBM_Commands.GetDebugLines(debugLineCount);
+			int lineSpacing = screen.ScaleY(18);
+			int baseY = static_cast<int>(y) - lineSpacing;
+			for (int i = 0; i < debugLineCount; ++i)
+			{
+				screen.PrintText(false, 49 * 8, baseY - i * lineSpacing, const_cast<char*>(debugLines[i]), textColour, bgColour);
+			}
+		}
+#endif
+
 		if (emulating != IEC_COMMANDS)
 		{
 			// Putting the semaphore around diskCaddy.Update() keeps this core awake and this breaks emulation on option B hardware.
@@ -739,22 +772,6 @@ void UpdateScreen()
 //#if not defined(EXPERIMENTALZERO)
 //			core0RefreshingScreen.Release();
 //#endif
-
-			if (options.DisplayTemperature())
-			{
-				if (GetTemperature(temperature))
-				{
-					temperature /= 1000;
-					if (temperature != oldTemperature)
-					{
-						oldTemperature = temperature;
-						//DEBUG_LOG("%0x %d %d\r\n", temp, temp, temp / 1000);
-						snprintf(tempBuffer, tempBufferSize, "%02d", temperature);
-						screen.PrintText(false, 43 * 8, y, tempBuffer, textColour, bgColour);
-						refreshLCDStatusDisplay = true;
-					}
-				}
-			}
 
 			if (options.DisplayPC())
 			{
@@ -813,6 +830,17 @@ void UpdateScreen()
 					snprintf(tempBuffer, tempBufferSize, "DAV:%d ACK:%d ST0:%d ST1:%d DIO:%02X",
 						pinDAV ? 1 : 0, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
 					screen.PrintText(false, 49*8, y-36, tempBuffer, textColour, bgColour);
+				}
+				else if (emulating == IEC_COMMANDS)
+				{
+				int debugLineCount = 0;
+				const char* const* debugLines = m_TCBM_Commands.GetDebugLines(debugLineCount);
+				int lineSpacing = screen.ScaleY(18);
+				int baseY = static_cast<int>(y) - lineSpacing;
+				for (int i = 0; i < debugLineCount; ++i)
+				{
+					screen.PrintText(false, 49 * 8, baseY - i * lineSpacing, const_cast<char*>(debugLines[i]), textColour, bgColour);
+				}
 				}
 #endif
 			}

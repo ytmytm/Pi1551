@@ -65,6 +65,13 @@ public:
 		RESET
 	};
 
+	enum DeviceRole
+	{
+		DEVICE_ROLE_PASSIVE,
+		DEVICE_ROLE_LISTEN,
+		DEVICE_ROLE_TALK
+	};
+
 	Commands_Base();
 	virtual ~Commands_Base() {}
 
@@ -72,6 +79,8 @@ public:
 
 	void SetDeviceId(u8 id) { deviceID = id; }
 	u8 GetDeviceId() { return deviceID; }
+	u8 GetSecondaryAddress() { return secondaryAddress; }
+	DeviceRole GetDeviceRole() { return deviceRole; }
 
 	void SetLowercaseBrowseModeFilenames(bool value) { lowercaseBrowseModeFilenames = value; }
 	void SetNewDiskType(DiskImage::DiskType type) { newDiskType = type; }
@@ -97,13 +106,6 @@ protected:
 		ATN_SEQUENCE_RECEIVE_COMMAND_CODE,
 		ATN_SEQUENCE_HANDLE_COMMAND_CODE,
 		ATN_SEQUENCE_COMPLETE
-	};
-
-	enum DeviceRole
-	{
-		DEVICE_ROLE_PASSIVE,
-		DEVICE_ROLE_LISTEN,
-		DEVICE_ROLE_TALK
 	};
 
 	struct Channel
