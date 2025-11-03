@@ -175,6 +175,7 @@ public:
 	static bool IsDiskImageD81Extention(const char* diskImageName);
 	static bool IsDiskImageD71Extention(const char* diskImageName);
 	static bool IsLSTExtention(const char* diskImageName);
+	static bool IsTAPExtention(const char* filename);
 
 	bool GetReadOnly() const { return readOnly; }
 	void SetReadOnly(bool readOnly) { this->readOnly = readOnly; }

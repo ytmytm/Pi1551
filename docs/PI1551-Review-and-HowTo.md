@@ -59,10 +59,10 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   GND           (25) |  o  |                                        (26)  o  | GPIO7   DIO8
   ID_SD         (27) |  o  |                                        (28)  o  | ID_SC
   GPIO5     SW5 (29) |  o  |                                        (30)  o  | GND
-  GPIO6 SPI0_RS (31) |  o  |                                        (32)  o  | GPIO12  ACK (drive) --> DAV (tcbm2sd pin 11)
+  GPIO6  TMOTOR (31) |  o  |                                        (32)  o  | GPIO12  ACK (drive) --> DAV (tcbm2sd pin 11)
   GPIO13  SOUND (33) |  o  |                                        (34)  o  | GND
-  GPIO19        (35) |  o  |                                        (36)  o  | GPIO16  STATUS0
-  GPIO26        (37) |  o  |                                        (38)  o  | GPIO20  DAV (drive) <-- ACK (tcbm2sd pin 13)
+  GPIO19  TREAD (35) |  o  |                                        (36)  o  | GPIO16  STATUS0
+  GPIO26 TWRITE (37) |  o  |                                        (38)  o  | GPIO20  DAV (drive) <-- ACK (tcbm2sd pin 13)
   GND           (39) |  o  |                                        (40)  o  | GPIO21  STATUS1
                      +-------------------------------------------------------+
 ```
@@ -83,8 +83,10 @@ Legend
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
   - Sound (PWM): GPIO13
   - LED: GPIO10
-- TAP (future):
-  - GPIO6, 19, 26 reserved for tape MOTOR, `READ`, `WRITE` with `SENSE` grounded
+- Tape interface:
+  - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
+  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
+  - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
 
 ### TCBM2SD - TCBM Connector
 

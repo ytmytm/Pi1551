@@ -1460,6 +1460,16 @@ bool DiskImage::IsLSTExtention(const char* diskImageName)
 	return false;
 }
 
+bool DiskImage::IsTAPExtention(const char* filename)
+{
+	char* ext = strrchr((char*)filename, '.');
+
+	if (ext && 
+			(toupper((char)ext[1]) == 'T' && toupper((char)ext[2]) == 'A' && toupper((char)ext[3]) == 'P'))
+		return true;
+	return false;
+}
+
 bool DiskImage::ConvertSector(unsigned track, unsigned sector, unsigned char* data)
 {
 	unsigned char buffer[SECTOR_LENGTH_WITH_CHECKSUM];

@@ -51,6 +51,7 @@ unsigned long long g_overrunCounter = 0;
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
 #include "SpinLock.h"
+#include "tape_player.h"
 
 #include "logo.h"
 #include "sample.h"
@@ -92,6 +93,9 @@ enum EmulatingMode
 };
 
 volatile EmulatingMode emulating;
+
+// Global tape player instance
+TapePlayer* g_tapePlayer = nullptr;
 
 // Emulation control state
 volatile bool emulationHalted = false;
@@ -435,6 +439,13 @@ void UpdateScreen()
 	bool oldACK = false;
 	u8 oldSTATUS = 0;
 #endif
+	// Tape player signal state variables
+	bool oldTapeMotor = false;
+	bool oldTapeRead = false;
+	u32 oldTapeCounter = 0;
+	char oldTapeFilename[256] = {0};
+	bool oldTapeAtEnd = false;
+	u32 oldTapeCurrentTimeMs = 0;
 
 	u32 oldTrack = 0;
 	u32 textColour = COLOUR_BLACK;
@@ -442,7 +453,9 @@ void UpdateScreen()
 	u32 oldTemperature = 0;
 	u32 caddyIndexChangedTimer = 0;
 
-	RGBA atnColour = COLOUR_YELLOW;
+		RGBA atnColour = COLOUR_YELLOW;
+		RGBA tapeMotorColour = COLOUR_GREEN;
+		RGBA tapeReadColour = COLOUR_MAGENTA;
 	RGBA dataColour = COLOUR_GREEN;
 	RGBA clockColour = COLOUR_CYAN;
 	RGBA SRQColour = COLOUR_MAGENTA;
@@ -591,6 +604,42 @@ void UpdateScreen()
 			oldSTATUS = statusValue;
 			snprintf(tempBuffer, tempBufferSize, "%d", statusValue);
 			screen.PrintText(false, 41 * 8, y, tempBuffer, textColour, bgColour);
+		}
+
+		// Tape motor and READ signal plotting
+		if (g_tapePlayer && options.GraphIEC())
+		{
+			bool tapeMotor = g_tapePlayer->GetMotorActive();
+			bool tapeRead = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_READ_GPIO) == RPI_IO_HI);
+			
+			// Plot motor signal (above READ line)
+			u32 motorTop = top - 40;
+			u32 motorBottom = top - 20;
+			if (tapeMotor != oldTapeMotor)
+			{
+				screen.DrawLineV(graphX, motorTop, motorBottom, tapeMotorColour);
+			}
+			else
+			{
+				if (tapeMotor) screen.PlotPixel(graphX, motorTop, tapeMotorColour);
+				else screen.PlotPixel(graphX, motorBottom, tapeMotorColour);
+			}
+			
+			// Plot READ signal (above motor line)
+			u32 readTop = top - 60;
+			u32 readBottom = top - 42;
+			if (tapeRead != oldTapeRead)
+			{
+				screen.DrawLineV(graphX, readTop, readBottom, tapeReadColour);
+			}
+			else
+			{
+				if (tapeRead) screen.PlotPixel(graphX, readTop, tapeReadColour);
+				else screen.PlotPixel(graphX, readBottom, tapeReadColour);
+			}
+			
+			oldTapeMotor = tapeMotor;
+			oldTapeRead = tapeRead;
 		}
 #else
 		value = IEC_Bus::GetPI_Atn();
@@ -744,6 +793,81 @@ void UpdateScreen()
 		}
 
 #if defined(PI1551SUPPORT)
+		// Tape player status display (browse and emulation modes)
+		if (g_tapePlayer)
+		{
+			g_tapePlayer->Tick10ms();
+			
+			TapeUIState tapeState;
+			g_tapePlayer->GetUIState(tapeState);
+			
+			// Display tape filename (truncated if too long)
+			if (tapeState.isLoaded && strcmp(tapeState.filename, oldTapeFilename) != 0)
+			{
+				strncpy(oldTapeFilename, tapeState.filename, sizeof(oldTapeFilename) - 1);
+				oldTapeFilename[sizeof(oldTapeFilename) - 1] = '\0';
+				
+				char displayName[32];
+				const char* nameOnly = strrchr(tapeState.filename, '/');
+				if (!nameOnly) nameOnly = tapeState.filename;
+				else nameOnly++;
+				
+				strncpy(displayName, nameOnly, 28);
+				displayName[28] = '\0';
+				if (strlen(nameOnly) > 28)
+					strcpy(displayName + 25, "...");
+				
+				screen.PrintText(false, 0, y - 18, displayName, textColour, bgColour);
+			}
+			
+			// Display tape counter (3 digits)
+			if (tapeState.isLoaded && tapeState.tapeCounter != oldTapeCounter)
+			{
+				oldTapeCounter = tapeState.tapeCounter;
+				snprintf(tempBuffer, tempBufferSize, "%03d", tapeState.tapeCounter);
+				screen.PrintText(false, 0, y - 36, tempBuffer, textColour, bgColour);
+			}
+			
+			// Display motor status
+			if (tapeState.isLoaded)
+			{
+				if (tapeState.motorActive != oldTapeMotor)
+				{
+					oldTapeMotor = tapeState.motorActive;
+					char motorText[4];
+					strcpy(motorText, tapeState.motorActive ? "ON " : "OFF");
+					screen.PrintText(false, 4 * 8, y - 36, motorText, textColour, bgColour);
+				}
+				
+				// Display END if at end of tape
+				if (tapeState.atEnd != oldTapeAtEnd)
+				{
+					oldTapeAtEnd = tapeState.atEnd;
+					char endText[4];
+					strcpy(endText, tapeState.atEnd ? "END" : "   ");
+					screen.PrintText(false, 8 * 8, y - 36, endText, textColour, bgColour);
+				}
+				
+				// Display position/total and percentage (only update when time changes)
+				if (tapeState.currentTimeMs != oldTapeCurrentTimeMs)
+				{
+					oldTapeCurrentTimeMs = tapeState.currentTimeMs;
+					
+					// Format: "MM:SS / MM:SS (XX%)"
+					u32 currentMin = tapeState.currentTimeMs / 60000;
+					u32 currentSec = (tapeState.currentTimeMs / 1000) % 60;
+					u32 totalMin = tapeState.totalTimeMs / 60000;
+					u32 totalSec = (tapeState.totalTimeMs / 1000) % 60;
+					
+					snprintf(tempBuffer, tempBufferSize, "%02lu:%02lu / %02lu:%02lu (%d%%)",
+						(unsigned long)currentMin, (unsigned long)currentSec,
+						(unsigned long)totalMin, (unsigned long)totalSec,
+						(int)tapeState.percentage);
+					screen.PrintText(false, 12 * 8, y - 36, tempBuffer, textColour, bgColour);
+				}
+			}
+		}
+
 		// TCBM browse mode diagnostics (only shown when DisplayPC is enabled)
 		// Place this BEFORE the emulation check so it always runs in browse mode
 		if (emulating == IEC_COMMANDS && options.DisplayPC())
@@ -1870,6 +1994,10 @@ void emulator()
 	diskCaddy.SetScreen(&screen, screenLCD, &roms);
 	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
 
+	// Initialize tape player
+	g_tapePlayer = new TapePlayer();
+	g_tapePlayer->InitializeGPIO();
+
 	pi1551.Initialise();
 
 	m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
@@ -1935,7 +2063,18 @@ void emulator()
 
 							fileBrowserSelectedName = m_TCBM_Commands.GetNameOfImageSelected();
 
-							if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
+							if (DiskImage::IsTAPExtention(fileBrowserSelectedName))
+							{
+								// TAP files don't enter emulation, just load into tape player
+								const FILINFO* filInfoSelected = m_TCBM_Commands.GetImageSelected();
+								if (filInfoSelected && g_tapePlayer)
+								{
+									g_tapePlayer->LoadTap(filInfoSelected);
+								}
+								fileBrowserSelectedName = 0;
+								m_TCBM_Commands.Reset();
+							}
+							else if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
 							{
 								if (fileBrowser->SelectLST(fileBrowserSelectedName))
 								{
@@ -2120,7 +2259,18 @@ void emulator()
 
 							fileBrowserSelectedName = m_IEC_Commands.GetNameOfImageSelected();
 
-							if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
+							if (DiskImage::IsTAPExtention(fileBrowserSelectedName))
+							{
+								// TAP files don't enter emulation, just load into tape player
+								const FILINFO* filInfoSelected = m_IEC_Commands.GetImageSelected();
+								if (filInfoSelected && g_tapePlayer)
+								{
+									g_tapePlayer->LoadTap(filInfoSelected);
+								}
+								fileBrowserSelectedName = 0;
+								m_IEC_Commands.Reset();
+							}
+							else if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
 							{
 								if (fileBrowser->SelectLST(fileBrowserSelectedName))
 								{

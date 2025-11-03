@@ -27,6 +27,7 @@
 #include "options.h"
 #include "stb_image.h"
 #include "Petscii.h"
+#include "tape_player.h"
 extern "C"
 {
 #include "rpi-gpio.h"
@@ -1166,6 +1167,19 @@ void FileBrowser::UpdateInputFolders()
 			}
 			else // not a directory
 			{
+#if defined(PI1551SUPPORT)
+				// Check for TAP files first (they don't enter emulation, just load into tape player)
+				if (DiskImage::IsTAPExtention(current->filImage.fname))
+				{
+					extern TapePlayer* g_tapePlayer;
+					if (g_tapePlayer)
+					{
+						g_tapePlayer->LoadTap(&current->filImage);
+						dirty = true;
+					}
+				}
+				else
+#endif
 				if (DiskImage::IsDiskImageExtention(current->filImage.fname))
 				{
 					DiskImage::DiskType diskType = DiskImage::GetDiskImageTypeViaExtention(current->filImage.fname);

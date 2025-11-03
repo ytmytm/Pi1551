@@ -4,7 +4,7 @@ OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 	DiskImage.o m6502.o Pi1551.o Drive1551.o \
 	commands_base.o tcbm_bus.o tcbm_commands.o m6523.o InputMappings.o \
 	gcr.o prot.o lz.o emmc.o diskio.o options.o Screen.o SSD1306.o ScreenLCD.o \
-	Timer.o FileBrowser.o DiskCaddy.o ROMs.o xga_font_data.o SpinLock.o
+	Timer.o FileBrowser.o DiskCaddy.o ROMs.o xga_font_data.o SpinLock.o tape_player.o
 
 #	Drive.o Pi1541.o iec_bus.o iec_commands.o m6522.o m8520.o wd177x.o Pi1581.o InputMappings.o
 

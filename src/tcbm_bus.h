@@ -101,7 +101,6 @@ enum PIGPIO
 	PIGPIO_OUT_DEV = 9,
 	PIGPIO_IN_RESET = 11,
 	PIGPIO_IN_BUTTON5 = 5,
-	PIGPIO_OUT_SPI0_RS = 6, // possibly not used
 	PIGPIO_OUT_SOUND = 13
 };
 #else
@@ -194,8 +193,6 @@ public:
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, FS_INPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_BUTTON1, FS_INPUT);
-
-		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SPI0_RS, FS_OUTPUT);
 		
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
 		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_LED, FS_OUTPUT);
