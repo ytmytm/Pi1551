@@ -85,6 +85,7 @@ public:
 private:
 	// Parse TAP file and build half-wave timing array
 	bool ParseTAP(FIL& fp, u32 fileSize);
+	void FreePulseBuffer();
 
 	// System timer IRQ handler (static to work with interrupt system)
 	static void TapeIRQHandler(void* pParam);
@@ -96,19 +97,18 @@ private:
 	void SetupIRQ();
 	void TeardownIRQ();
 
-	// Static pulse timing buffer (microseconds per half-wave)
-	static u32 pulseTimings[TAPE_MAX_HALFWAVES];
-	static u32 pulseCount;
-	static u32 currentPulseIndex;
+    // Pulse timing buffer (microseconds per half-wave)
+    static u64* pulseTimings;
+    static size_t pulseCount;
+    static size_t currentPulseIndex;
 	static bool loaded;
 	static bool motorActive;
 	static bool atEnd;
 	static bool readLineState;  // Current state of READ line (true = high, false = low)
-	static u32 totalPlaybackTimeUs;  // Total time in microseconds
-	static u32 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
+	static u64 totalPlaybackTimeUs;  // Total time in microseconds
+	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
 	static char tapFilename[256];
 	static TapePlayer* instance;  // Singleton instance for IRQ handler
 };
 
 #endif // TAPE_PLAYER_H
-

@@ -21,6 +21,7 @@
 #include "interrupt.h"
 #include <string.h>
 #include <malloc.h>
+#include <limits>
 
 extern "C"
 {
@@ -28,15 +29,15 @@ extern "C"
 }
 
 // Static member definitions
-u32 TapePlayer::pulseTimings[TAPE_MAX_HALFWAVES];
-u32 TapePlayer::pulseCount = 0;
-u32 TapePlayer::currentPulseIndex = 0;
+u64* TapePlayer::pulseTimings = nullptr;
+size_t TapePlayer::pulseCount = 0;
+size_t TapePlayer::currentPulseIndex = 0;
 bool TapePlayer::loaded = false;
 bool TapePlayer::motorActive = false;
 bool TapePlayer::atEnd = false;
 bool TapePlayer::readLineState = true;  // Start with READ line high
-u32 TapePlayer::totalPlaybackTimeUs = 0;
-u32 TapePlayer::cumulativePulseTimeUs = 0;
+u64 TapePlayer::totalPlaybackTimeUs = 0;
+u64 TapePlayer::cumulativePulseTimeUs = 0;
 char TapePlayer::tapFilename[256] = {0};
 TapePlayer* TapePlayer::instance = nullptr;
 
@@ -77,6 +78,7 @@ TapePlayer::TapePlayer()
 TapePlayer::~TapePlayer()
 {
 	TeardownIRQ();
+    FreePulseBuffer();
 	if (instance == this)
 	{
 		instance = nullptr;
@@ -102,12 +104,12 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	// Close any existing tape
 	TeardownIRQ();
 	loaded = false;
-	pulseCount = 0;
 	currentPulseIndex = 0;
 	atEnd = false;
 	motorActive = false;
 	totalPlaybackTimeUs = 0;
 	cumulativePulseTimeUs = 0;
+	FreePulseBuffer();
 
 	if (!fileInfo || !fileInfo->fname)
 		return false;
@@ -136,6 +138,16 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	}
 
 	return success;
+}
+
+void TapePlayer::FreePulseBuffer()
+{
+	if (pulseTimings)
+	{
+		free(pulseTimings);
+		pulseTimings = nullptr;
+	}
+    pulseCount = 0;
 }
 
 bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
@@ -183,14 +195,22 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	}
 
 	// Parse data based on version
-	pulseCount = 0;
 	u32 dataIndex = 0;
-	u32 totalTimeUs = 0;
+	u64 totalTimeUs = 0;
+	size_t newPulseCount = 0;
+
+    size_t newCapacity = TAPE_MAX_HALFWAVES;
+    u64* newTimings = (u64*)malloc(newCapacity * sizeof(u64));
+    if (!newTimings)
+    {
+        free(dataBuffer);
+        return false;
+    }
 
 	if (header.version == 2)
 	{
 		// Version 2: each byte is a half-wave, 0x00 means extended length (next 3 bytes, little-endian)
-		while (dataIndex < bytesRead && pulseCount < TAPE_MAX_HALFWAVES - 1)
+		while (dataIndex < bytesRead)
 		{
 			u32 unitValue;
 			if (dataBuffer[dataIndex] == 0x00)
@@ -210,11 +230,16 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 			}
 
 			// Convert to microseconds
-			u32 pulseUs = (u32)(unitValue * unitToUs + 0.5);  // Round to nearest
+			u64 pulseUs = (u64)(unitValue * unitToUs + 0.5);  // Round to nearest
 			if (pulseUs == 0)
 				pulseUs = 1;  // Minimum 1 us
-
-			pulseTimings[pulseCount++] = pulseUs;
+            if (newPulseCount >= newCapacity)
+            {
+                free(newTimings);
+                free(dataBuffer);
+                return false;
+            }
+			newTimings[newPulseCount++] = pulseUs;
 			totalTimeUs += pulseUs;
 		}
 	}
@@ -222,7 +247,7 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	{
 		// Version 0: each byte represents a complete low-high cycle (50% duty cycle)
 		// Treat as half-waves (same as v2), but if byte is 0x00, use 256 units
-		while (dataIndex < bytesRead && pulseCount < TAPE_MAX_HALFWAVES - 1)
+		while (dataIndex < bytesRead)
 		{
 			u32 unitValue = dataBuffer[dataIndex++];
 			if (unitValue == 0x00)
@@ -234,30 +259,44 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 			if (halfWaveUnits == 0)
 				halfWaveUnits = 1;
 
-			u32 pulseUs1 = (u32)(halfWaveUnits * unitToUs + 0.5);
+			u64 pulseUs1 = (u64)(halfWaveUnits * unitToUs + 0.5);
 			if (pulseUs1 == 0)
 				pulseUs1 = 1;
 
-			u32 pulseUs2 = (u32)((unitValue - halfWaveUnits) * unitToUs + 0.5);
+			u64 pulseUs2 = (u64)((unitValue - halfWaveUnits) * unitToUs + 0.5);
 			if (pulseUs2 == 0)
 				pulseUs2 = 1;
 
-			if (pulseCount < TAPE_MAX_HALFWAVES - 2)
-			{
-				pulseTimings[pulseCount++] = pulseUs1;
-				pulseTimings[pulseCount++] = pulseUs2;
-				totalTimeUs += pulseUs1 + pulseUs2;
-			}
-			else
-				break;
+            if (newPulseCount >= newCapacity)
+            {
+                free(newTimings);
+                free(dataBuffer);
+                return false;
+            }
+            newTimings[newPulseCount++] = pulseUs1;
+
+            if (newPulseCount >= newCapacity)
+            {
+                free(newTimings);
+                free(dataBuffer);
+                return false;
+            }
+            newTimings[newPulseCount++] = pulseUs2;
+			totalTimeUs += pulseUs1 + pulseUs2;
 		}
 	}
 
 	free(dataBuffer);
 
-	if (pulseCount == 0)
+	if (newPulseCount == 0)
+	{
+		free(newTimings);
 		return false;
+	}
 
+	FreePulseBuffer();
+	pulseTimings = newTimings;
+    pulseCount = newPulseCount;
 	totalPlaybackTimeUs = totalTimeUs;
 	return true;
 }
@@ -321,7 +360,7 @@ void TapePlayer::HandleTapeIRQ()
 	}
 
 	// Motor is active and we have data - toggle READ line and schedule next pulse
-	if (currentPulseIndex < pulseCount)
+	if (pulseTimings && currentPulseIndex < pulseCount)
 	{
 		// Toggle READ line
 		readLineState = !readLineState;
@@ -335,7 +374,9 @@ void TapePlayer::HandleTapeIRQ()
 
 		// Schedule next pulse
 		u32 now = read32(ARM_SYSTIMER_CLO);
-		u32 nextTime = now + pulseTimings[currentPulseIndex];
+		u64 interval64 = pulseTimings[currentPulseIndex];
+		u32 nextInterval = (interval64 > std::numeric_limits<u32>::max()) ? std::numeric_limits<u32>::max() : static_cast<u32>(interval64);
+		u32 nextTime = now + nextInterval;
 		write32(ARM_SYSTIMER_C1, nextTime);
 
 		currentPulseIndex++;
@@ -365,7 +406,7 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 	{
 		// Resume playback from current position
 		// Trigger next pulse shortly (if we have pulses remaining)
-		if (currentPulseIndex < pulseCount)
+		if (pulseTimings && currentPulseIndex < pulseCount)
 		{
 			u32 now = read32(ARM_SYSTIMER_CLO);
 			write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
@@ -388,15 +429,19 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	// Derived from currentPulseIndex (sum of pulse timings played so far)
 	if (loaded)
 	{
-		state.currentTimeMs = cumulativePulseTimeUs / 1000;
-		state.totalTimeMs = totalPlaybackTimeUs / 1000;
-		state.tapeCounter = (state.currentTimeMs / 200) % 1000;  // 200ms per count
+		u64 currentTimeMs64 = cumulativePulseTimeUs / 1000;
+		u64 totalTimeMs64 = totalPlaybackTimeUs / 1000;
+		u32 maxU32 = std::numeric_limits<u32>::max();
+		state.currentTimeMs = (currentTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(currentTimeMs64);
+		state.totalTimeMs = (totalTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(totalTimeMs64);
+		u64 counterValue = (currentTimeMs64 / 200) % 1000;
+		state.tapeCounter = static_cast<u32>(counterValue);  // 200ms per count
 		
 		// Calculate percentage
-		if (state.totalTimeMs > 0)
+		if (totalTimeMs64 > 0)
 		{
 			// Use 64-bit to avoid overflow for long tapes
-			u64 percent = ((u64)state.currentTimeMs * 100) / (u64)state.totalTimeMs;
+			u64 percent = (currentTimeMs64 * 100) / totalTimeMs64;
 			state.percentage = (percent > 100) ? 100 : (u8)percent;
 		}
 		else
@@ -443,4 +488,3 @@ void TapePlayer::Reset()
 		DataMemBarrier();
 	}
 }
-
