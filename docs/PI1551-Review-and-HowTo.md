@@ -53,7 +53,7 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   GPIO27    SW1 (13) |  o  |                                        (14)  o  | GND
   GPIO22    SW2 (15) |  o  |                                        (16)  o  | GPIO23  DIO4
   3V3           (17) |  o  |                                        (18)  o  | GPIO24  DIO5
-  GPIO10   LED* (19) |  o  |                                        (20)  o  | GND
+  GPIO10    LED (19) |  o  |                                        (20)  o  | GND
   GPIO9     DEV (21) |  o  |                                        (22)  o  | GPIO25  DIO6
   GPIO11  RESET (23) |  o  |                                        (24)  o  | GPIO8   DIO7
   GND           (25) |  o  |                                        (26)  o  | GPIO7   DIO8
@@ -79,23 +79,25 @@ Legend
   - `RESET` (input): GPIO11
 - I/O:
   - Buttons: `SW1`=GPIO27, `SW2`=GPIO22, `SW3`=GPIO17, `SW4`=GPIO4, `SW5`=GPIO5
+  - Rotary encoder (`SW1`, `SW2`, `SW3`)
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
   - Sound (PWM): GPIO13
-  - SPI0_RS (unused): GPIO6
   - LED: GPIO10
+- TAP (future):
+  - GPIO6, 19, 26 reserved for tape MOTOR, `READ`, `WRITE` with `SENSE` grounded
 
 ### TCBM2SD - TCBM Connector
 
 
 ```
-GND	     1	2	DEV
-DIO1	   3	4	DIO2
-DIO3	   5	6	DIO4
-DIO5	   7	8	DIO6
-DIO7	   9	10	DIO8
-DAV	    11	12	STATUS0
-ACK	    13	14	STATUS1
-/RESET	15	16	ALT_A6/GND
+GND      1	2  DEV
+DIO1     3	4  DIO2
+DIO3     5	6  DIO4
+DIO5     7	8  DIO6
+DIO7     9	10 DIO8
+DAV     11	12 STATUS0
+ACK     13	14 STATUS1
+/RESET  15	16 ALT_A6/GND
 ```
 
 ##### ACK / DAV
@@ -105,6 +107,8 @@ ACK	    13	14	STATUS1
 ACK here is controller's ACK! It is an output and goes to cable pin 13 (drive's DAV input)
 
 DAV here is controller's DAV! It is an input and goes to cable pin 11 (drive's ACK output)
+
+ALT_A6/GND must be grounded to disable onboard Arduino, DON'T connect cable to TCBM connector when computer is ON
 
 ##### RESET
 
@@ -142,7 +146,7 @@ make clean && make RASPPI=3 V=1`
 ```
 
 Notes:
-- `Makefile` already compiles the PI1551 variant by default: objects include `Drive1551.o`, `Pi1551.o`, `tcbm_bus.o`, `tcbm_commands.o`, `m6523.o`, `InputMappings1551.o` and exclude IEC/1541 objects.
+- `Makefile` already compiles the PI1551 variant by default: objects include `Drive1551.o`, `Pi1551.o`, `commands_base.o`, `tcbm_bus.o`, `tcbm_commands.o`, `m6523.o`, `InputMappings.o` and exclude IEC/1541 objects (commented out on line 9).
 - `src/defs.h` has `#define PI1551SUPPORT 1`. If you prefer toggling via compiler define, remove that line and pass `CPPFLAGS+=-DPI1551SUPPORT`.
 - Output artifacts: `kernel.elf`, `kernel.img`, `kernel.lst`, `kernel.map` in project root.
 
@@ -192,9 +196,6 @@ Insert the SD card into a Raspberry Pi 3 and power on. The emulator starts, chan
 
 - Make `PI1551SUPPORT` selectable by build-time flag; default to 1541 for backward compatibility.
 - Audit ROM fetch in 1551 path to use `ROMs::Read1551` consistently.
-- Validate Port C to GPIO bit mappings for `DEV`, `ACK`, `STATUS0/1` and adjust `RefreshOuts1551` masks accordingly.
-- Hook DDRA writes to immediately update GPIO data bus direction to avoid transient mismatches.
-- ~~Update directory header string and version reporting to PI1551 branding.~~ **FIXED**: Already uses `PI_DRIVE_NAME` macro.
 - Add runtime fallback if `/1551` folder is missing (create or use `/`).
 
 
