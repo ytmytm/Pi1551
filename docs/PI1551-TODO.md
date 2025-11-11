@@ -14,17 +14,34 @@
 
 - browser mode is sometimes faulty
     - must do DIR after each C16 reset, otherwise DLOAD won't work (OPEN15,8,15:CLOSE15 is not enough)
+    - there is clearly some wrong state after reset issue
+    - see below for a missing test
+    - ALL operations must handle timeout or RESET condition
 - `StarFileName` doesn't seem to work if we are in another folder (not in /1551/)
+    - Always constructs absolute path under DEFAULT_BROWSE_DIR regardless of current directory
+    - If starts with '/', trim leading '/' and prepend DEFAULT_BROWSE_DIR (e.g., '/a.prg' -> '/1551/a.prg')
+    - If doesn't start with '/', prepend DEFAULT_BROWSE_DIR (e.g., 'a.prg' -> '/1551/a.prg')
+    - Examples: 'a.prg' -> '/1551/a.prg', '/games/a.prg' -> '/1551/games/a.prg', 'games/a.prg' -> '/1551/games/a.prg'
+        - fix done, untested
 - fastload / fastdir mode (tcbm2sd `U0` commands) doesn't work
     - it's not recognized by DIRECTORY BROWSER: 'TCBM2SD' must be in the UI/UJ status
     - then both BOOT.T2SD and PAROBEK should recognize fastloader (stunt car racer must load in ~6s - definietly less than 10s)
 - must support SD2IEC option to list disk images as DIR
+    - there is an extended command to turn it on/off, but we need also option in options.txt
     - then must ALSO support 'CD:<diskimage.d64>' command to start emulation
         - fix done, untested
     - ? is there anything in SD2IEC docs about automatically creating disk image fliplist (what button 5 does)
+- add non-emulation disk-image mode like in Arduino tcbm2sd reference:
+    - only for d71/d81/d82/d80
+    - arduino does read only, but we can use the diskimage.c library for read/write
+        - d82/d80 need this developed according to VICE disk image docs, until then fail with WRITE PROTECT ON
 
 # Tests
 
+- test if starfilename works from any subfolder
+- test if CD:<diskimage> works now
+- test if DLOAD after reset would work if OPEN15,8,15,"I":CLOSE15 is issued
+    - I used only OPEN/CLOSE which my not trigger TCBM access
 - (done) stick in parobek, test 1551 fastloader
     ? stays on READY with on cursor after load, why ?
 - (done) test if switching to drive 9 works

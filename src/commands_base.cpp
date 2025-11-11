@@ -1511,15 +1511,25 @@ void Commands_Base::OpenFile()
 
 			if (starRequested)
 			{
-				char cwd[1024];
-				if (f_getcwd(cwd, sizeof(cwd)) == FR_OK)
+				// Always construct absolute path under DEFAULT_BROWSE_DIR
+				// If starFileName starts with '/', trim it and prepend DEFAULT_BROWSE_DIR
+				// Examples: 'a.prg' -> '/1551/a.prg', '/a.prg' -> '/1551/a.prg', '/games/a.prg' -> '/1551/games/a.prg'
+				const char* starPath = starFileName;
+				if (starFileName[0] == '/')
 				{
-					const char* folder = strchr(cwd, '/');
-					if (folder && strcasecmp(folder, DEFAULT_BROWSE_DIR) == 0)
-					{
-						strncpy(filename, starFileName, sizeof(filename));
-						filename[sizeof(filename) - 1] = '\0';
-					}
+					// Skip leading '/' to make it relative to DEFAULT_BROWSE_DIR
+					starPath = starFileName + 1;
+				}
+				
+				// Construct absolute path: DEFAULT_BROWSE_DIR + '/' + starPath
+				size_t browseDirLen = strlen(DEFAULT_BROWSE_DIR);
+				size_t starPathLen = strlen(starPath);
+				if (browseDirLen + 1 + starPathLen < sizeof(filename))
+				{
+					strncpy(filename, DEFAULT_BROWSE_DIR, sizeof(filename));
+					filename[browseDirLen] = '/';
+					strncpy(filename + browseDirLen + 1, starPath, sizeof(filename) - browseDirLen - 1);
+					filename[browseDirLen + 1 + starPathLen] = '\0';
 				}
 			}
 			
