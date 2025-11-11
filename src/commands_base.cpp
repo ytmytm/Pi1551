@@ -1129,7 +1129,7 @@ void Commands_Base::CD(int partition, char* filename)
 	char filenameEdited[256];
 
 	if (filename[0] == '/' && filename[1] == '/')
-		sprintf(filenameEdited, "\\\\1541\\%s", filename + 2);
+		sprintf(filenameEdited, "\\\\%s\\%s", DEFAULT_BROWSE_DIR + 1, filename + 2);
 	else
 		strcpy(filenameEdited, filename);
 
@@ -1271,7 +1271,7 @@ void Commands_Base::MKDir(int partition, char* filename)
 	char filenameEdited[256];
 
 	if (filename[0] == '/' && filename[1] == '/')
-		sprintf(filenameEdited, "\\\\1541\\%s", filename + 2);
+		sprintf(filenameEdited, "\\\\%s\\%s", DEFAULT_BROWSE_DIR + 1, filename + 2);
 	else
 		strcpy(filenameEdited, filename);
 	int len = strlen(filenameEdited);
