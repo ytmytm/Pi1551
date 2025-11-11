@@ -20,6 +20,7 @@
     - then both BOOT.T2SD and PAROBEK should recognize fastloader (stunt car racer must load in ~6s - definietly less than 10s)
 - must support SD2IEC option to list disk images as DIR
     - then must ALSO support 'CD:<diskimage.d64>' command to start emulation
+        - fix done, untested
     - ? is there anything in SD2IEC docs about automatically creating disk image fliplist (what button 5 does)
 
 # Tests
