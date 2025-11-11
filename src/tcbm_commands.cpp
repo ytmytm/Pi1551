@@ -82,6 +82,8 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 
     updateAction = NONE;
 
+    if (selectedImageName[0] != 0) updateAction = IMAGE_SELECTED;
+
     // Refresh bus snapshot each tick so we see host changes even when idle
     TCBM_Bus::ReadBrowseMode();
 
@@ -100,6 +102,10 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
             {
                 u8 discard;
                 ReadTCBMDataByteBlocking(discard);
+            }
+            else if (selectedImageName[0] != 0)
+            {
+                updateAction = IMAGE_SELECTED;
             }
             break;
         }
@@ -136,6 +142,10 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 			ServiceFastBlockWriteState();
 			break;
     }
+
+    // Check for disk image selection after state machine processing
+    // (CD command may have set selectedImageName during state processing)
+    if (selectedImageName[0] != 0) updateAction = IMAGE_SELECTED;
 
     UpdateDebugOverlay();
     return updateAction;
