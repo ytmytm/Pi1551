@@ -27,6 +27,7 @@
     - it's not recognized by DIRECTORY BROWSER: 'TCBM2SD' must be in the UI/UJ status
     - then both BOOT.T2SD and PAROBEK should recognize fastloader (stunt car racer must load in ~6s - definietly less than 10s)
 - must support SD2IEC option to list disk images as DIR
+    - docs: https://c64os.com/post/sd2iecdocumentation
     - there is an extended command to turn it on/off, but we need also option in options.txt
     - then must ALSO support 'CD:<diskimage.d64>' command to start emulation
         - fix done, untested
@@ -34,14 +35,17 @@
 - add non-emulation disk-image mode like in Arduino tcbm2sd reference:
     - only for d71/d81/d82/d80
     - arduino does read only, but we can use the diskimage.c library for read/write
+        - write support for d64/71/81 was removed when porting to arduino, need to be brought back
         - d82/d80 need this developed according to VICE disk image docs, until then fail with WRITE PROTECT ON
 
 # Tests
 
-- test if starfilename works from any subfolder
-- test if CD:<diskimage> works now
-- test if DLOAD after reset would work if OPEN15,8,15,"I":CLOSE15 is issued
+- test if `StarFileName` works from any subfolder
+- test if `CD:<diskimage>` works now
+- test if DLOAD after reset would work if `OPEN15,8,15,"I":CLOSE15` is issued
     - I used only OPEN/CLOSE which my not trigger TCBM access
+    - same but try with `?DS$` instead
+- test if /RESET_3_3V needs a pullup to 3.3V
 - (done) stick in parobek, test 1551 fastloader
     ? stays on READY with on cursor after load, why ?
 - (done) test if switching to drive 9 works
@@ -50,6 +54,17 @@
 - (done) remove DIO8 printing (appears in browser mode too)
 - (done) test with alternative DOS https://plus4world.powweb.com/software/Super_DOS_1551
 - (done) turn off debug option
+
+# LCD support
+
+I2C bus is on pins 3,5 (bus=1) so "option B" so `splitIECLines=1` because otherwise `bus=0` is enforced regardless
+
+```
+splitIECLines=1
+LCDName = ssd1306_128x32 // 60
+i2cBusMaster = 1 //SDA - pin 3 SCL - pin 5
+i2cScan = 1 // scan i2c bus and display addresses on screen
+```
 
 # Other
 

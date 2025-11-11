@@ -10,12 +10,14 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   - `src/m6523.{h,cpp}`: MOS 6523 TIA/TPI model with CPU port and 100 Hz IRQ source
   - `src/tcbm_bus.{h,cpp}`: Hardware-level TCBM pin mapping, GPIO setup, debounce, LED/sound control, real-time pin I/O, latch of Port A, ACK/DAV/STATUS/DEV handling
   - `src/tcbm_commands.{h,cpp}`: SD2IEC-like command channel implementation over TCBM for directory, file I/O, device switching, new disk creation, error channel
+  - `src/commands_base.{h,cpp}`: Base class extracting shared command functionality used by both IEC_Commands (1541) and TCBM_Commands (1551) for directory operations, file I/O, error handling, and common CBM commands
 - Integration and UI
   - `src/main.cpp`: Large integration of 1551 path: `Emulate1551`, TCBM flow, LCD/graph updates, options, mount path default to `/1551`, deviceID handling via TPI Port C, fast boot loop adjusted to 2 MHz timing, core loops, reset semantics
-  - `src/InputMappings1551.{h,cpp}`: Input layer aligned with 1551/TCBM and rotary encoder paths
+  - `src/InputMappings.{h,cpp}`: Input layer with PI1551SUPPORT conditionals for 1551/TCBM and rotary encoder paths (note: not separate InputMappings1551 files)
   - `src/FileBrowser.{h,cpp}`: PI1551 conditionals to show device/ROM etc.
   - `src/ROMs.h`: Adds 1551 ROM image storage
   - `src/options.{h,cpp}`: Adds `ROM1551`, default `dos1551-318008-01.bin`, options mapped to TCBM path
+  - `src/iec_commands.{h,cpp}`: Refactored to inherit from `Commands_Base`, extracting shared functionality for reuse by TCBM commands
   - `src/rpi-gpio.{c,h}`: Minor additions for GPIO usage
 - Build system
   - `Makefile`: switches object list to 1551/TCBM set (1541/IEC objects are commented out). Uses `Makefile.rules` for RPi model flags; default `RASPPI=3`.
@@ -29,32 +31,14 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   - `src/defs.h` hard-enables `#define PI1551SUPPORT 1`. Recommendation: control via build flag (`-DPI1551SUPPORT`) or a dedicated config header so both 1541 and 1551 builds remain selectable without modifying sources.
 
 - ROM read source in 1551 bus functions
-  - In `read6502_1551` the ROM path returns `roms.Read(address)` for 0xA000+ ranges. 1551 has a dedicated 16 KiB ROM; consider using `roms.Read1551(address)` for clarity and to avoid selecting a 1541 slot accidentally if misconfigured.
+  - In `read6502_1551` (see `Pi1551.cpp:50`) the ROM path returns `roms.Read(address)` for 0xA000+ ranges. 1551 has a dedicated 16 KiB ROM; consider using `roms.Read1551(address)` for clarity and to avoid selecting a 1541 slot accidentally if misconfigured. The `ROMs` class has a `Read1551()` method available (see `ROMs.h:38`).
 
 - Timing and double-rate CPU stepping
-  - `Emulate1551` runs `for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)` then refreshes outputs and calls drive update (GCR) once per microsecond. This mirrors a 2 MHz 6502 but I/O running at 1 MHz. Not sure if this breaks some software.
+  - `Emulate1551` runs `for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)` (see `main.cpp:1455`) then refreshes outputs and calls drive update (GCR) once per microsecond. This mirrors a 2 MHz 6502 but I/O running at 1 MHz. Code comment at lines 1474-1475 acknowledges this behavior. Not sure if this breaks some software.
   Note: CPU really runs at 2MHz, see https://www.softwolves.com/arkiv/cbm-hackers/15/15949.html
-
-- EOI and command parsing on TCBM
-  - `ReadIECSerialPort`/`WriteIECSerialPort` carry `STATUS` with EOI bits, but `Listen` and `Talk` contain TODOs to specialize for command/data phase codes. Consider refactoring to stateful read/write that also verifies busCommandCode framing to harden against edge cases.
-
-- Directory header branding
-  - `tcbm_commands.cpp` sets directory header to "PI1541". Consider a variant string like "PI1551" when PI1551 is compiled to avoid user confusion.
 
 - Default LCD logo and messages
   - LCD logo defaults still reference 1541 assets. Not critical, but branding could be switched (or made configurable) for PI1551 builds.
-
-- Hardcoded working directory
-  - `main.cpp` `f_chdir("/1551");` under PI1551. Ensure SD card root contains `/1551` and that file browser, auto-mount, and ROM discovery expect this path. Consider falling back to `/` if the folder is missing.
-
-- Device selection and DEV line behavior
-  - verify that changing the device number to 9 works in browser and in emulation modes
-
-- GPIO pin allocations and pull-ups
-  - `tcbm_bus.h` defines a set of pins and masks; verify collisions with LED, SOUND, and SPI0_RS for your specific HAT/wiring. Ensure no overlap with I2C pins used by LCD if enabled.
-
-- Error message text
-  - Some error strings and version banners still say PI1541; consider PI1551-specific wording where shown on directory header and error channel 73.
 
 ### Raspberry Pi 3 GPIO 40-pin header (ASCII pinout) with project signals
 
@@ -210,7 +194,7 @@ Insert the SD card into a Raspberry Pi 3 and power on. The emulator starts, chan
 - Audit ROM fetch in 1551 path to use `ROMs::Read1551` consistently.
 - Validate Port C to GPIO bit mappings for `DEV`, `ACK`, `STATUS0/1` and adjust `RefreshOuts1551` masks accordingly.
 - Hook DDRA writes to immediately update GPIO data bus direction to avoid transient mismatches.
-- Update directory header string and version reporting to PI1551 branding.
+- ~~Update directory header string and version reporting to PI1551 branding.~~ **FIXED**: Already uses `PI_DRIVE_NAME` macro.
 - Add runtime fallback if `/1551` folder is missing (create or use `/`).
 
 
