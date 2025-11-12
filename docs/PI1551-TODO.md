@@ -27,8 +27,10 @@
         - fix done, not right yet
 - fastload / fastdir mode (tcbm2sd `U0` commands) doesn't work
     - it's not recognized by DIRECTORY BROWSER: 'TCBM2SD' must be in the UI/UJ status
+        - add it in a nicer way (it's hardcoded in commands_base now)
     - then both BOOT.T2SD and PAROBEK should recognize fastloader (stunt car racer must load in ~6s - definietly less than 10s)
     - they do but the protocol doesn't work from the browser (low priority)
+        - LOAD doesn't work but it seems fast dir listing does
 - must support SD2IEC option to list disk images as DIR
     - docs: https://c64os.com/post/sd2iecdocumentation
     - there is an extended command to turn it on/off, but we need also option in options.txt
