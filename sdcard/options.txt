@@ -6,7 +6,7 @@
 //deviceID = 9
 
 // If you are using the split line hardware option (ie Option B) then you need to specify this option
-//splitIECLines = 1
+splitIECLines = 1 // must be 1 for i2c bus 1
 // If you are using some type of hardware that requires the lines to be inverted then specify these options here
 //invertIECInputs = 1
 //If you are using a 7407
@@ -97,7 +97,7 @@ GraphIEC = 1
 // If you are using I2C LCD you can optionally change what pins it is connected to.
 // (defaults to 0 for non-split lines (Option A) or 1 for split lines (Option B))
 //i2cBusMaster = 0 //SDA - pin 27 SCL - pin 28
-//i2cBusMaster = 1 //SDA - pin 3 SCL - pin 5
+i2cBusMaster = 1 //SDA - pin 3 SCL - pin 5
 //i2cLcdAddress = 60	// I2C display address in decimal and shifted. 60 == 0x78, 61 == 0x7A
 //i2cLcdFlip = 1 // Rotate i2c LCD screen 180 degrees
 //i2cLcdOnContrast = 127 // Allows you to adjust the contrast on your i2c LCD screen

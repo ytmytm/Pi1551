@@ -116,7 +116,8 @@ ALT_A6/GND must be grounded to disable onboard Arduino, DON'T connect cable to T
 
 `/RESET` CAN'T BE DIRECTLY CONNECTED to TCBM on tcbm2sd 1.3 boards - it's a 5V system /RESET, not 3.3V /RESET_3_3_V from CPLD.
 
-Cut the trace on tcbm2sd and (optionally) add a wire to join pin 16 of TCBM connector with /RESET_3_3V from JP1 - the one side of it that then goes to Arduino RESET.
+You can cut the trace on tcbm2sd v1.3 and (optionally) add a wire to join pin 15 of TCBM connector with /RESET_3_3V from JP1
+(left side). If Pi1551 gets stuck on boot you also have to add a pullup resistor (3.3K or larger) to 3.3V.
 
 Pi1551 hat **MUST** have a jumper for that with instruction that a jumper *MUST* be open for
 tcbm2sd 1.3 boards unless there was a manual patch

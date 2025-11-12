@@ -44,18 +44,19 @@
 - add missing DOS1551 traps
     - CD.. or CD<-
     - fastboot (skip some amount of cycles)
+    - spin up skip (skip delay when motor starts up)
 
 # Tests
 
-- test if `DLOAD"*` works right after reset
-- test if `StarFileName` works from any subfolder
-    - no
+- test if h/w reset doesn't end emulation, should just reset drive
 - test if `CD:<diskimage>` works now
     - yes, but can't exit the image / end emulation with `SW1`, immediately goes back into image
-- test if /RESET_3_3V needs a pullup to 3.3V
+- (done) test if `DLOAD"*` works right after reset
+- (done) test if `StarFileName` works from any subfolder
+- (done) test if /RESET_3_3V needs a pullup to 3.3V - YES
 - (done) test if DLOAD after reset would work if `OPEN15,8,15,"I":CLOSE15` is issued or `?DS$`
 - (done) stick in parobek, test 1551 fastloader
-    ? stays on READY with on cursor after load, why ?
+    ? stays on READY with no cursor after load, why ?
 - (done) test if switching to drive 9 works
 - (done) save tested
 - (done) base and -clean versions tested
