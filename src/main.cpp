@@ -610,7 +610,8 @@ void UpdateScreen()
 		if (g_tapePlayer && options.GraphIEC())
 		{
 			bool tapeMotor = g_tapePlayer->GetMotorActive();
-			bool tapeRead = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_READ_GPIO) == RPI_IO_HI);
+			// Hardware inverts TAPE_READ signal: GPIO low = output high, GPIO high = output low
+			bool tapeRead = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_READ_GPIO) == RPI_IO_LO);
 			
 			// Plot motor signal (above READ line)
 			u32 motorTop = top - 40;

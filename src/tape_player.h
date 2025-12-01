@@ -29,8 +29,9 @@ extern "C"
 
 // Fixed GPIO pins for tape interface
 #define TAPE_MOTOR_GPIO 6   // Pin 31, input, active-high
-#define TAPE_READ_GPIO  19  // Pin 35, output
+#define TAPE_READ_GPIO  19  // Pin 35, output, active-low (hardware inverts signal)
 #define TAPE_WRITE_GPIO 26  // Pin 37, input (stub, not used)
+#define TAPE_SENSE_GPIO 0   // Pin 27, output, active-low
 
 // Maximum number of half-waves we can store (static allocation)
 // Typical TAP files have thousands of pulses, so we need a reasonable buffer
@@ -104,7 +105,7 @@ private:
 	static bool loaded;
 	static bool motorActive;
 	static bool atEnd;
-	static bool readLineState;  // Current state of READ line (true = high, false = low)
+	static bool readLineState;  // Current state of READ line (true = high, false = low) - note: hardware inverts GPIO signal
 	static u64 totalPlaybackTimeUs;  // Total time in microseconds
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
 	static char tapFilename[256];

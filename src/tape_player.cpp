@@ -35,7 +35,7 @@ size_t TapePlayer::currentPulseIndex = 0;
 bool TapePlayer::loaded = false;
 bool TapePlayer::motorActive = false;
 bool TapePlayer::atEnd = false;
-bool TapePlayer::readLineState = true;  // Start with READ line high
+bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
 char TapePlayer::tapFilename[256] = {0};
@@ -90,9 +90,9 @@ void TapePlayer::InitializeGPIO()
 	// GPIO6 (MOTOR) - input with pull-up
 	RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_MOTOR_GPIO);
 
-	// GPIO19 (READ) - output, start high
+	// GPIO19 (READ) - output, start high (hardware inverts, so set GPIO low for high output)
 	RPI_SetGpioOutput((rpi_gpio_pin_t)TAPE_READ_GPIO);
-	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 	readLineState = true;
 
 	// GPIO26 (WRITE) - input with pull-up (stub, not used)
@@ -133,7 +133,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		currentPulseIndex = 0;
 		atEnd = false;
 		readLineState = true;
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 		SetupIRQ();
 	}
 
@@ -362,12 +362,12 @@ void TapePlayer::HandleTapeIRQ()
 	// Motor is active and we have data - toggle READ line and schedule next pulse
 	if (pulseTimings && currentPulseIndex < pulseCount)
 	{
-		// Toggle READ line
+		// Toggle READ line (hardware inverts: GPIO low = output high, GPIO high = output low)
 		readLineState = !readLineState;
 		if (readLineState)
-			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want high output -> set GPIO low
 		else
-			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
+			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want low output -> set GPIO high
 
 		// Update cumulative pulse time (before incrementing index)
 		cumulativePulseTimeUs += pulseTimings[currentPulseIndex];
@@ -383,10 +383,10 @@ void TapePlayer::HandleTapeIRQ()
 	}
 	else
 	{
-		// End of tape - hold READ high
+		// End of tape - hold READ high (hardware inverts: GPIO low = output high)
 		atEnd = true;
 		readLineState = true;
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 		
 		// Schedule periodic recheck
 		u32 now = read32(ARM_SYSTIMER_CLO);
@@ -478,7 +478,7 @@ void TapePlayer::Reset()
 	currentPulseIndex = 0;
 	atEnd = false;
 	readLineState = true;
-	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 	cumulativePulseTimeUs = 0;  // Reset counter
 	
 	if (motorActive)
