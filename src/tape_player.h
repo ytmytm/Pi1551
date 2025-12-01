@@ -133,6 +133,8 @@ private:
 	static bool senseLineState;
 	static u64 totalPlaybackTimeUs;  // Total time in microseconds
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
+	static u64 lastPulseTimeUs;  // Cumulative time of last pulse (for cumulative timing like pitap)
+	static u32 playbackStartTime;  // System timer value when playback started (for cumulative timing)
 	static char tapFilename[256];
 	static TapePlayer* instance;  // Singleton instance for IRQ handler
 };
