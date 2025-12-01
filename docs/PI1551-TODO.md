@@ -47,6 +47,7 @@
     - CD.. or CD<-
     - fastboot (skip some amount of cycles)
     - spin up skip (skip delay when motor starts up)
+- *any* TPI access clears byte ready, not only reads but also writes
 
 # Tests
 
