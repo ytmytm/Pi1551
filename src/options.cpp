@@ -238,7 +238,16 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(displayPC)
 		ELSE_CHECK_DECIMAL_OPTION(screenWidth)
 		ELSE_CHECK_DECIMAL_OPTION(screenHeight)
-		ELSE_CHECK_DECIMAL_OPTION(i2cBusMaster)
+		else if (strcasecmp(pOption, "i2cBusMaster") == 0)
+		{
+			unsigned nValue = 0;
+			if ((nValue = GetDecimal(pValue)) != INVALID_VALUE)
+			{
+				// Bus 0 (pins 27/28) is permanently disabled as GPIO0/GPIO1 are used for TAPE_SENSE
+				// Force bus 1 (pins 3/5) if 0 is specified
+				i2cBusMaster = (nValue == 0) ? 1 : nValue;
+			}
+		}
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdAddress)
 		ELSE_CHECK_DECIMAL_OPTION(i2cScan)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdFlip)
@@ -331,7 +340,15 @@ void Options::Process(char* buffer)
 	{
 		invertIECInputs = false;
 		// If using non split lines then only the 1st bus master can be used (as ATN is using the 2nd)
-		i2cBusMaster = 0;
+		// However, bus 0 (pins 27/28) is permanently disabled as GPIO0/GPIO1 are used for TAPE_SENSE
+		// So we must use bus 1 (pins 3/5) even for non-split lines
+		i2cBusMaster = 1;
+	}
+	
+	// Ensure bus 0 is never used (pins 27/28 are reserved for TAPE_SENSE)
+	if (i2cBusMaster == 0)
+	{
+		i2cBusMaster = 1;
 	}
 }
 

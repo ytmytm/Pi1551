@@ -57,7 +57,7 @@ This document summarizes all changes on branch `pi1551` (including uncommitted e
   GPIO9     DEV (21) |  o  |                                        (22)  o  | GPIO25  DIO6
   GPIO11  RESET (23) |  o  |                                        (24)  o  | GPIO8   DIO7
   GND           (25) |  o  |                                        (26)  o  | GPIO7   DIO8
-  ID_SD         (27) |  o  |                                        (28)  o  | ID_SC
+  GPIO0  TSENSE (27) |  o  |                                        (28)  o  | ID_SC
   GPIO5     SW5 (29) |  o  |                                        (30)  o  | GND
   GPIO6  TMOTOR (31) |  o  |                                        (32)  o  | GPIO12  ACK (drive) --> DAV (tcbm2sd pin 11)
   GPIO13  SOUND (33) |  o  |                                        (34)  o  | GND
@@ -85,8 +85,9 @@ Legend
   - LED: GPIO10
 - Tape interface:
   - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
-  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
+  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4 (0=active)
   - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
+  - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4 (0=active)
 
 ### TCBM2SD - TCBM Connector
 
