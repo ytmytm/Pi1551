@@ -19,6 +19,7 @@
 #ifndef TAPE_PLAYER_H
 #define TAPE_PLAYER_H
 
+#include "defs.h"
 #include "types.h"
 #include "ff.h"
 
@@ -31,7 +32,16 @@ extern "C"
 #define TAPE_MOTOR_GPIO 6   // Pin 31, input, active-high
 #define TAPE_READ_GPIO  19  // Pin 35, output, active-low (hardware inverts signal)
 #define TAPE_WRITE_GPIO 26  // Pin 37, input (stub, not used)
-#define TAPE_SENSE_GPIO 0   // Pin 27, output, active-low
+// TAPE_SENSE_GPIO: Pin 27, output, active-low (hardware inverts signal)
+// Logic: senseLineState=true (SENSE=1) = PLAY pressed = active state
+//   - Software sets GPIO HIGH (1)
+//   - Hardware inverts: GPIO HIGH → output LOW
+//   - Output LOW → computer sees LOW = PLAY pressed (active)
+// Logic: senseLineState=false (SENSE=0) = PLAY released = inactive state
+//   - Software sets GPIO LOW (0)
+//   - Hardware inverts: GPIO LOW → output HIGH
+//   - Output HIGH → computer sees HIGH = PLAY released (inactive)
+#define TAPE_SENSE_GPIO 0
 
 // Maximum number of half-waves we can store (static allocation)
 // Typical TAP files have thousands of pulses, so we need a reasonable buffer
@@ -82,6 +92,17 @@ public:
 
 	// Initialize GPIO pins
 	void InitializeGPIO();
+	
+	// Test functions for keyboard control
+	void ToggleTapeRead();
+	void ToggleTapeSense();
+	
+	// Get current state (for display)
+	bool GetTapeReadState() const;
+	// Returns SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
+	// When true: GPIO is HIGH, hardware inverts to output LOW, computer sees LOW = active
+	// When false: GPIO is LOW, hardware inverts to output HIGH, computer sees HIGH = inactive
+	bool GetTapeSenseState() const;
 
 private:
 	// Parse TAP file and build half-wave timing array
@@ -106,6 +127,10 @@ private:
 	static bool motorActive;
 	static bool atEnd;
 	static bool readLineState;  // Current state of READ line (true = high, false = low) - note: hardware inverts GPIO signal
+	// SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
+	// When true: GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active
+	// When false: GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive
+	static bool senseLineState;
 	static u64 totalPlaybackTimeUs;  // Total time in microseconds
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
 	static char tapFilename[256];

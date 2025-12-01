@@ -291,6 +291,10 @@ bool InputMappings::CheckKeyboardBrowseMode()
 		SetKeyboardFlag(WRITEPROTECT_FLAG);
 	else if (keyboard->KeyHeld(KEY_L) && keyboard->KeyEitherAlt() )
 		SetKeyboardFlag(MAKELST_FLAG);
+	else if (keyboard->KeyPressed(KEY_R) && keyboard->KeyNoModifiers())
+		SetKeyboardFlag(TAPE_READ_TOGGLE_FLAG);  // 'r' toggles TAPE_READ (test function, before search)
+	else if (keyboard->KeyPressed(KEY_P) && keyboard->KeyNoModifiers())
+		SetKeyboardFlag(TAPE_SENSE_TOGGLE_FLAG);  // 'p' toggles TAPE_SENSE (test function, before search)
 	else
 	{
 		if (keyboard->KeyNoModifiers())
@@ -307,8 +311,11 @@ bool InputMappings::CheckKeyboardBrowseMode()
 				}
 			}
 
+			// Skip 'r' and 'p' from search (they are handled above)
 			for (index = KEY_A; index <= KEY_Z; ++index)
 			{
+				if (index == KEY_R || index == KEY_P)
+					continue;  // Skip 'r' and 'p' - they are used for tape control
 				if (keyboard->KeyHeld(index))
 				{
 					SetKeyboardFlag(NUMLET_FLAG);
@@ -355,10 +362,14 @@ void InputMappings::CheckKeyboardEmulationMode(unsigned numberOfImages, unsigned
 			SetKeyboardFlag(HALT_FLAG);
 		else if (keyboard->KeyHeld(KEY_S))
 			SetKeyboardFlag(STEP_FLAG);
+		else if (keyboard->KeyPressed(KEY_R) && !keyboard->KeyEitherAlt())
+			SetKeyboardFlag(TAPE_READ_TOGGLE_FLAG);  // 'r' toggles TAPE_READ (when not Alt)
 		else if (keyboard->KeyHeld(KEY_R))
 			SetKeyboardFlag(RUN_FLAG);
 		else if (keyboard->KeyHeld(KEY_E))
 			SetKeyboardFlag(RESET_FLAG);
+		else if (keyboard->KeyPressed(KEY_P))
+			SetKeyboardFlag(TAPE_SENSE_TOGGLE_FLAG);  // 'p' toggles TAPE_SENSE
 	else if (numberOfImages > 1)
 	{
 		unsigned index;

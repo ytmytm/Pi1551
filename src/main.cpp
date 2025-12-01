@@ -442,6 +442,7 @@ void UpdateScreen()
 	// Tape player signal state variables
 	bool oldTapeMotor = false;
 	bool oldTapeRead = false;
+	bool oldTapeSense = false;
 	u32 oldTapeCounter = 0;
 	char oldTapeFilename[256] = {0};
 	bool oldTapeAtEnd = false;
@@ -456,6 +457,7 @@ void UpdateScreen()
 		RGBA atnColour = COLOUR_YELLOW;
 		RGBA tapeMotorColour = COLOUR_GREEN;
 		RGBA tapeReadColour = COLOUR_MAGENTA;
+		RGBA tapeSenseColour = COLOUR_RED;
 	RGBA dataColour = COLOUR_GREEN;
 	RGBA clockColour = COLOUR_CYAN;
 	RGBA SRQColour = COLOUR_MAGENTA;
@@ -610,8 +612,9 @@ void UpdateScreen()
 		if (g_tapePlayer && options.GraphIEC())
 		{
 			bool tapeMotor = g_tapePlayer->GetMotorActive();
-			// Hardware inverts TAPE_READ signal: GPIO low = output high, GPIO high = output low
-			bool tapeRead = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_READ_GPIO) == RPI_IO_LO);
+			// Use state from TapePlayer instead of reading GPIO directly (more reliable)
+			bool tapeRead = g_tapePlayer->GetTapeReadState();
+			bool tapeSense = g_tapePlayer->GetTapeSenseState();
 			
 			// Plot motor signal (above READ line)
 			u32 motorTop = top - 40;
@@ -639,8 +642,22 @@ void UpdateScreen()
 				else screen.PlotPixel(graphX, readBottom, tapeReadColour);
 			}
 			
+			// Plot SENSE signal (above READ line)
+			u32 senseTop = top - 80;
+			u32 senseBottom = top - 62;
+			if (tapeSense != oldTapeSense)
+			{
+				screen.DrawLineV(graphX, senseTop, senseBottom, tapeSenseColour);
+			}
+			else
+			{
+				if (tapeSense) screen.PlotPixel(graphX, senseTop, tapeSenseColour);
+				else screen.PlotPixel(graphX, senseBottom, tapeSenseColour);
+			}
+			
 			oldTapeMotor = tapeMotor;
 			oldTapeRead = tapeRead;
+			oldTapeSense = tapeSense;
 		}
 #else
 		value = IEC_Bus::GetPI_Atn();
@@ -821,10 +838,13 @@ void UpdateScreen()
 				screen.PrintText(false, 0, y - 18, displayName, textColour, bgColour);
 			}
 			
-			// Display tape counter (3 digits)
-			if (tapeState.isLoaded && tapeState.tapeCounter != oldTapeCounter)
+			// Display tape counter (3 digits) - always update when loaded
+			if (tapeState.isLoaded)
 			{
-				oldTapeCounter = tapeState.tapeCounter;
+				if (tapeState.tapeCounter != oldTapeCounter)
+				{
+					oldTapeCounter = tapeState.tapeCounter;
+				}
 				snprintf(tempBuffer, tempBufferSize, "%03d", tapeState.tapeCounter);
 				screen.PrintText(false, 0, y - 36, tempBuffer, textColour, bgColour);
 			}
@@ -849,6 +869,17 @@ void UpdateScreen()
 					screen.PrintText(false, 8 * 8, y - 36, endText, textColour, bgColour);
 				}
 				
+				// Display TAPE_SENSE state (PLAY button status)
+				bool tapeSenseNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_SENSE_GPIO) == RPI_IO_HI);
+				if (tapeSenseNow != oldTapeSense)
+				{
+					oldTapeSense = tapeSenseNow;
+					char senseText[5];
+					// Hardware inverts: GPIO high = low output = PLAY pressed
+					strcpy(senseText, tapeSenseNow ? "PLAY" : "    ");
+					screen.PrintText(false, 11 * 8, y - 36, senseText, textColour, bgColour);
+				}
+				
 				// Display position/total and percentage (only update when time changes)
 				if (tapeState.currentTimeMs != oldTapeCurrentTimeMs)
 				{
@@ -866,6 +897,15 @@ void UpdateScreen()
 						(int)tapeState.percentage);
 					screen.PrintText(false, 12 * 8, y - 36, tempBuffer, textColour, bgColour);
 				}
+			}
+			
+			// Display TAPE_READ and TAPE_SENSE numeric state (always visible for testing)
+			if (g_tapePlayer)
+			{
+				bool tapeReadState = g_tapePlayer->GetTapeReadState();
+				bool tapeSenseState = g_tapePlayer->GetTapeSenseState();
+				snprintf(tempBuffer, tempBufferSize, "READ:%d SENSE:%d", tapeReadState ? 1 : 0, tapeSenseState ? 1 : 0);
+				screen.PrintText(false, 0, y - 54, tempBuffer, textColour, bgColour);
 			}
 		}
 
@@ -1242,6 +1282,8 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 		// S - Step one instruction then halt
 		// R - Run emulation continuously
 		// E - Reset emulation (preserves current state: running/halted/stepping)
+		// r - Toggle TAPE_READ (test function)
+		// p - Toggle TAPE_SENSE (test function)
 		if (inputMappings->Halt())
 		{
 			emulationHalted = true;
@@ -1264,7 +1306,18 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 		{
 			// Reset the emulated system but preserve emulation state
 			pi1541.Reset();
+			// Reset tape player
+			if (g_tapePlayer)
+				g_tapePlayer->Reset();
 			// Keep current emulation state (running/halted/stepping)
+		}
+		if (inputMappings->TapeReadToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeRead();
+		}
+		if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeSense();
 		}
 
 		// Handle emulation control states BEFORE CPU execution
@@ -1353,7 +1406,12 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 		if ((emulating == IEC_COMMANDS) || (resetCount > 10) || exitEmulation || exitDoAutoLoad)
 		{
 			if (reset)
+			{
 				exitReason = EXIT_RESET;
+				// Reset tape player on hardware reset
+				if (g_tapePlayer)
+					g_tapePlayer->Reset();
+			}
 			if (exitEmulation)
 				exitReason = EXIT_KEYBOARD;
 			if (exitDoAutoLoad)
@@ -1536,6 +1594,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		// S - Step one instruction then halt
 		// R - Run emulation continuously
 		// E - Reset emulation (preserves current state: running/halted/stepping)
+		// r - Toggle TAPE_READ (test function)
+		// p - Toggle TAPE_SENSE (test function)
 		if (inputMappings->Halt())
 		{
 			emulationHalted = true;
@@ -1558,7 +1618,18 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		{
 			// Reset the emulated system but preserve emulation state
 			pi1551.Reset();
+			// Reset tape player
+			if (g_tapePlayer)
+				g_tapePlayer->Reset();
 			// Keep current emulation state (running/halted/stepping)
+		}
+		if (inputMappings->TapeReadToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeRead();
+		}
+		if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeSense();
 		}
 
 		// Handle emulation control states BEFORE CPU execution
@@ -1640,7 +1711,12 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if ((emulating == IEC_COMMANDS) || (resetCount > 10) || exitEmulation || exitDoAutoLoad)
 		{
 			if (reset)
+			{
 				exitReason = EXIT_RESET;
+				// Reset tape player on hardware reset
+				if (g_tapePlayer)
+					g_tapePlayer->Reset();
+			}
 			if (exitEmulation)
 				exitReason = EXIT_KEYBOARD;
 			if (exitDoAutoLoad)
@@ -1795,6 +1871,8 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 		// S - Step one instruction then halt
 		// R - Run emulation continuously
 		// E - Reset emulation (preserves current state: running/halted/stepping)
+		// r - Toggle TAPE_READ (test function)
+		// p - Toggle TAPE_SENSE (test function)
 		if (inputMappings->Halt())
 		{
 			emulationHalted = true;
@@ -1818,6 +1896,14 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 			// Reset the emulated system but preserve emulation state
 			pi1581.Reset();
 			// Keep current emulation state (running/halted/stepping)
+		}
+		if (inputMappings->TapeReadToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeRead();
+		}
+		if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+		{
+			g_tapePlayer->ToggleTapeSense();
 		}
 
 		// Handle emulation control states BEFORE CPU execution
@@ -1900,7 +1986,12 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 		if ((emulating == IEC_COMMANDS)|| (resetCount > 10) || exitEmulation || exitDoAutoLoad)
 		{
 			if (reset)
+			{
 				exitReason = EXIT_RESET;
+				// Reset tape player on hardware reset
+				if (g_tapePlayer)
+					g_tapePlayer->Reset();
+			}
 			if (exitEmulation)
 				exitReason = EXIT_KEYBOARD;
 			if (exitDoAutoLoad)
@@ -2042,6 +2133,16 @@ void emulator()
 
 				while (emulating == IEC_COMMANDS)
 				{
+					// Handle tape control keys in browse mode
+					if (inputMappings->TapeReadToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeRead();
+					}
+					if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeSense();
+					}
+					
 					TCBM_Commands::UpdateAction updateAction = m_TCBM_Commands.SimulateIECUpdate();
 
 					switch (updateAction)
@@ -2138,6 +2239,16 @@ void emulator()
 			{
 				while (emulating == IEC_COMMANDS)
 				{
+					// Handle tape control keys in browse mode
+					if (inputMappings->TapeReadToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeRead();
+					}
+					if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeSense();
+					}
+					
 					fileBrowser->Update();
 					if (fileBrowser->SelectionsMade())
 						emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
@@ -2238,6 +2349,16 @@ void emulator()
 
 				while (emulating == IEC_COMMANDS)
 				{
+					// Handle tape control keys in browse mode
+					if (inputMappings->TapeReadToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeRead();
+					}
+					if (inputMappings->TapeSenseToggle() && g_tapePlayer)
+					{
+						g_tapePlayer->ToggleTapeSense();
+					}
+					
 					IEC_Commands::UpdateAction updateAction = m_IEC_Commands.SimulateIECUpdate();
 
 					switch (updateAction)

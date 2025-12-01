@@ -33,9 +33,17 @@ u64* TapePlayer::pulseTimings = nullptr;
 size_t TapePlayer::pulseCount = 0;
 size_t TapePlayer::currentPulseIndex = 0;
 bool TapePlayer::loaded = false;
+#if TAPE_MOTOR_SUPPORT
 bool TapePlayer::motorActive = false;
+#else
+bool TapePlayer::motorActive = true;  // Motor always active when support is disabled
+#endif
 bool TapePlayer::atEnd = false;
 bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal)
+// SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
+// When true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+// When false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+bool TapePlayer::senseLineState = false;  // Start with PLAY released (inactive)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
 char TapePlayer::tapFilename[256] = {0};
@@ -87,8 +95,12 @@ TapePlayer::~TapePlayer()
 
 void TapePlayer::InitializeGPIO()
 {
+#if TAPE_MOTOR_SUPPORT
 	// GPIO6 (MOTOR) - input with pull-up
 	RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_MOTOR_GPIO);
+#else
+	// Motor support disabled - motor is always active
+#endif
 
 	// GPIO19 (READ) - output, start high (hardware inverts, so set GPIO low for high output)
 	RPI_SetGpioOutput((rpi_gpio_pin_t)TAPE_READ_GPIO);
@@ -97,6 +109,14 @@ void TapePlayer::InitializeGPIO()
 
 	// GPIO26 (WRITE) - input with pull-up (stub, not used)
 	RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_WRITE_GPIO);
+	
+	// GPIO0 (SENSE) - output, start with PLAY released (inactive state)
+	// SENSE logic: senseLineState=true (SENSE=1) = PLAY pressed (active)
+	//   - Set GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+	//   - Set GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+	RPI_SetGpioOutput((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);  // GPIO LOW → output HIGH → PLAY released (inactive)
+	senseLineState = false;  // PLAY released (inactive)
 }
 
 bool TapePlayer::LoadTap(const FILINFO* fileInfo)
@@ -110,6 +130,10 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	totalPlaybackTimeUs = 0;
 	cumulativePulseTimeUs = 0;
 	FreePulseBuffer();
+	
+		// TAPE_SENSE: PLAY button released (inactive state) when TAP is unloaded
+		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 
 	if (!fileInfo || !fileInfo->fname)
 		return false;
@@ -134,7 +158,23 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		atEnd = false;
 		readLineState = true;
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+		// TAPE_SENSE: PLAY button pressed (active state) when TAP is loaded
+		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		senseLineState = true;  // PLAY pressed (active)
 		SetupIRQ();
+		
+		// Start playback immediately if motor is active (or if motor support is disabled)
+#if TAPE_MOTOR_SUPPORT
+		if (motorActive && pulseTimings && pulseCount > 0)
+#else
+		if (pulseTimings && pulseCount > 0)
+#endif
+		{
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
+			DataMemBarrier();
+		}
 	}
 
 	return success;
@@ -166,8 +206,11 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	if (memcmp(header.signature, "C16-TAPE-RAW", 12) != 0)
 		return false;
 
-	// Validate version (only support v0 and v2)
-	if (header.version != 0 && header.version != 2)
+	// Validate version (support v0, v1, and v2)
+	// v0: each byte is a complete cycle (low-high)
+	// v1: same as v2, each byte is a half-wave, 0x00 means extended length
+	// v2: each byte is a half-wave, 0x00 means extended length
+	if (header.version != 0 && header.version != 1 && header.version != 2)
 		return false;
 
 	// Validate machine (0x02 = Plus/4/C16)
@@ -209,13 +252,13 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 
 	if (header.version == 2)
 	{
-		// Version 2: each byte is a half-wave, 0x00 means extended length (next 3 bytes, little-endian)
+		// Version 2: each byte is a half-wave, 0x00 means extended length (next 3 bytes, little-endian, in TAP units)
 		while (dataIndex < bytesRead)
 		{
 			u32 unitValue;
 			if (dataBuffer[dataIndex] == 0x00)
 			{
-				// Extended length
+				// Extended length (in TAP units)
 				if (dataIndex + 3 >= bytesRead)
 					break;
 				unitValue = dataBuffer[dataIndex + 1] | 
@@ -243,15 +286,15 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 			totalTimeUs += pulseUs;
 		}
 	}
-	else
+	else if (header.version == 0)
 	{
 		// Version 0: each byte represents a complete low-high cycle (50% duty cycle)
-		// Treat as half-waves (same as v2), but if byte is 0x00, use 256 units
+		// If byte is 0x00, use 256 units (overflow condition)
 		while (dataIndex < bytesRead)
 		{
 			u32 unitValue = dataBuffer[dataIndex++];
 			if (unitValue == 0x00)
-				unitValue = 256;  // Common player behavior
+				unitValue = 256;  // Overflow condition in v0
 
 			// Convert to microseconds (half-wave, so divide by 2 conceptually)
 			// Actually, in v0 each byte is the full cycle, so we need two half-waves
@@ -283,6 +326,105 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
             }
             newTimings[newPulseCount++] = pulseUs2;
 			totalTimeUs += pulseUs1 + pulseUs2;
+		}
+	}
+	else  // header.version == 1
+	{
+		// Version 1: each byte represents a complete low-high cycle (50% duty cycle)
+		// If byte is 0x00, next 3 bytes are extended length (in CYCLES, not TAP units!)
+		// Cycles need to be converted: cycles_to_us = cycles / frequency * 1,000,000
+		double cyclesToUs = (header.video == 1) ? (1000000.0 / TAPE_CLOCK_NTSC_HZ) : (1000000.0 / TAPE_CLOCK_PAL_HZ);
+		
+		while (dataIndex < bytesRead)
+		{
+			u32 unitValue;
+			bool isExtended = false;
+			
+			if (dataBuffer[dataIndex] == 0x00)
+			{
+				// Extended length (3 bytes, little-endian, in CYCLES, not TAP units!)
+				if (dataIndex + 3 >= bytesRead)
+					break;
+				unitValue = dataBuffer[dataIndex + 1] | 
+				           (dataBuffer[dataIndex + 2] << 8) | 
+				           (dataBuffer[dataIndex + 3] << 16);
+				dataIndex += 4;
+				isExtended = true;
+			}
+			else
+			{
+				unitValue = dataBuffer[dataIndex++];
+				isExtended = false;
+			}
+
+			if (isExtended)
+			{
+				// Extended length is in cycles - convert directly to microseconds
+				// This is a full cycle, so we need two half-waves
+				u64 cycleUs = (u64)(unitValue * cyclesToUs + 0.5);
+				if (cycleUs == 0)
+					cycleUs = 1;
+				
+				u64 halfCycleUs = cycleUs / 2;
+				if (halfCycleUs == 0)
+					halfCycleUs = 1;
+				
+				u64 pulseUs1 = halfCycleUs;
+				u64 pulseUs2 = cycleUs - halfCycleUs;
+				if (pulseUs2 == 0)
+					pulseUs2 = 1;
+
+				if (newPulseCount >= newCapacity)
+				{
+					free(newTimings);
+					free(dataBuffer);
+					return false;
+				}
+				newTimings[newPulseCount++] = pulseUs1;
+
+				if (newPulseCount >= newCapacity)
+				{
+					free(newTimings);
+					free(dataBuffer);
+					return false;
+				}
+				newTimings[newPulseCount++] = pulseUs2;
+				totalTimeUs += pulseUs1 + pulseUs2;
+			}
+			else
+			{
+				// Normal byte is in TAP units (8 cycles per unit)
+				// Convert to microseconds (half-wave, so divide by 2 conceptually)
+				// Actually, in v1 each byte is the full cycle, so we need two half-waves
+				u32 halfWaveUnits = unitValue / 2;
+				if (halfWaveUnits == 0)
+					halfWaveUnits = 1;
+
+				u64 pulseUs1 = (u64)(halfWaveUnits * unitToUs + 0.5);
+				if (pulseUs1 == 0)
+					pulseUs1 = 1;
+
+				u64 pulseUs2 = (u64)((unitValue - halfWaveUnits) * unitToUs + 0.5);
+				if (pulseUs2 == 0)
+					pulseUs2 = 1;
+
+				if (newPulseCount >= newCapacity)
+				{
+					free(newTimings);
+					free(dataBuffer);
+					return false;
+				}
+				newTimings[newPulseCount++] = pulseUs1;
+
+				if (newPulseCount >= newCapacity)
+				{
+					free(newTimings);
+					free(dataBuffer);
+					return false;
+				}
+				newTimings[newPulseCount++] = pulseUs2;
+				totalTimeUs += pulseUs1 + pulseUs2;
+			}
 		}
 	}
 
@@ -330,25 +472,45 @@ void TapePlayer::HandleTapeIRQ()
 	// Clear interrupt flag
 	write32(ARM_SYSTIMER_CS, 1 << 1);  // Clear TIMER1 interrupt
 
+#if TAPE_MOTOR_SUPPORT
 	// Check motor state (poll GPIO)
 	bool motorNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_HI);
 	
-	if (motorNow != motorActive)
-	{
-		motorActive = motorNow;
-		if (!motorActive)
+		if (motorNow != motorActive)
 		{
+			motorActive = motorNow;
+			if (!motorActive)
+			{
+			// Motor stopped - release PLAY button (inactive state)
+			// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+			senseLineState = false;  // PLAY released (inactive)
 			// Motor stopped - hold current state (pulse time already tracked)
-			// Schedule a short recheck
-			u32 now = read32(ARM_SYSTIMER_CLO);
-			write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
-			DataMemBarrier();
-			return;
+				// Schedule a short recheck
+				u32 now = read32(ARM_SYSTIMER_CLO);
+				write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
+				DataMemBarrier();
+				return;
+			}
+			// Motor started - press PLAY button (active state)
+			// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+			senseLineState = true;  // PLAY pressed (active)
+			// Motor started - resume playback from current position
+			// Don't reset currentPulseIndex - continue from where we left off
+			// If we're at the end, stay at end
 		}
-		// Motor started - resume playback from current position
-		// Don't reset currentPulseIndex - continue from where we left off
-		// If we're at the end, stay at end
+#else
+	// Motor support disabled - motor is always active
+	motorActive = true;
+	// When motor is always active, ensure SENSE is set to PLAY pressed when playback starts
+	// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+	if (loaded && !atEnd && !senseLineState)
+	{
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		senseLineState = true;  // PLAY pressed (active)
 	}
+#endif
 
 	if (!motorActive || atEnd || !loaded)
 	{
@@ -375,7 +537,23 @@ void TapePlayer::HandleTapeIRQ()
 		// Schedule next pulse
 		u32 now = read32(ARM_SYSTIMER_CLO);
 		u64 interval64 = pulseTimings[currentPulseIndex];
-		u32 nextInterval = (interval64 > std::numeric_limits<u32>::max()) ? std::numeric_limits<u32>::max() : static_cast<u32>(interval64);
+		
+		// Handle very long intervals (overflow protection)
+		// Timer is 32-bit, so max interval is ~4294 seconds
+		// For intervals longer than 1 second, cap to 1 second to prevent overflow
+		// This may cause slight timing inaccuracies for very long pulses, but prevents crashes
+		const u32 MAX_SAFE_INTERVAL = 1000000;  // 1 second max per timer interrupt
+		u32 nextInterval;
+		if (interval64 > MAX_SAFE_INTERVAL)
+		{
+			// Cap to 1 second - very long pulses are rare and this prevents timer overflow
+			nextInterval = MAX_SAFE_INTERVAL;
+		}
+		else
+		{
+			nextInterval = static_cast<u32>(interval64);
+		}
+		
 		u32 nextTime = now + nextInterval;
 		write32(ARM_SYSTIMER_C1, nextTime);
 
@@ -387,6 +565,9 @@ void TapePlayer::HandleTapeIRQ()
 		atEnd = true;
 		readLineState = true;
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+		// TAPE_SENSE: PLAY button released (inactive state) when TAP ends
+		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		
 		// Schedule periodic recheck
 		u32 now = read32(ARM_SYSTIMER_CLO);
@@ -404,6 +585,10 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 	
 	if (motorActive && loaded && !atEnd)
 	{
+		// Motor started - press PLAY button (active state)
+		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		senseLineState = true;  // PLAY pressed (active)
 		// Resume playback from current position
 		// Trigger next pulse shortly (if we have pulses remaining)
 		if (pulseTimings && currentPulseIndex < pulseCount)
@@ -412,6 +597,13 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 			write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
 			DataMemBarrier();
 		}
+	}
+	else if (!motorActive)
+	{
+		// Motor stopped - release PLAY button (inactive state)
+		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		senseLineState = false;  // PLAY released (inactive)
 	}
 	// Motor state change handled - IRQ will pick it up
 }
@@ -462,29 +654,84 @@ void TapePlayer::Tick10ms()
 {
 	// This is called periodically from main loop
 	// We could update counter here, but GetUIState() calculates it on-demand
+#if TAPE_MOTOR_SUPPORT
 	// Main purpose is to ensure motor state is polled
 	bool motorNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_HI);
 	if (motorNow != motorActive)
 	{
 		OnMotorChange(motorNow);
 	}
+#else
+	// Motor support disabled - motor is always active
+	motorActive = true;
+#endif
 }
 
 void TapePlayer::Reset()
 {
-	if (!loaded)
-		return;
-
-	currentPulseIndex = 0;
-	atEnd = false;
+	// Stop playback and reset tape state
+	TeardownIRQ();
+	
+	// Cancel any pending timer interrupt by setting it far in the future
+	// This prevents HandleTapeIRQ from being called after reset
+	u32 farFuture = read32(ARM_SYSTIMER_CLO) + 0x7FFFFFFF;  // Set to far future
+	write32(ARM_SYSTIMER_C1, farFuture);
+	DataMemBarrier();
+	
+	// Clear any pending interrupt
+	write32(ARM_SYSTIMER_CS, 1 << 1);  // Clear TIMER1 interrupt
+	
+	if (loaded)
+	{
+		currentPulseIndex = 0;
+		atEnd = true;  // Set atEnd to prevent automatic restart
+		cumulativePulseTimeUs = 0;  // Reset counter
+	}
+	
+	// Set READ and SENSE to inactive state
 	readLineState = true;
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
-	cumulativePulseTimeUs = 0;  // Reset counter
+	// TAPE_SENSE: PLAY button released (inactive state)
+	// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	senseLineState = false;  // PLAY released (inactive)
 	
-	if (motorActive)
-	{
-		u32 now = read32(ARM_SYSTIMER_CLO);
-		write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
-		DataMemBarrier();
-	}
+	// IMPORTANT: Do NOT call SetupIRQ() here - playback should remain stopped
+	// Don't restart playback automatically - wait for motor to start (if motor support enabled)
+	// or for user to manually start playback (by loading a new TAP file)
+}
+
+void TapePlayer::ToggleTapeRead()
+{
+	// Toggle READ line state (hardware inverts: GPIO low = output high, GPIO high = output low)
+	readLineState = !readLineState;
+	if (readLineState)
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want high output -> set GPIO low
+	else
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want low output -> set GPIO high
+}
+
+void TapePlayer::ToggleTapeSense()
+{
+	// Toggle SENSE line state (hardware inverts: GPIO high = low output/PLAY pressed, GPIO low = high output/PLAY released)
+	senseLineState = !senseLineState;
+	if (senseLineState)
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);  // Want PLAY pressed (low output) -> set GPIO high
+	else
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);  // Want PLAY released (high output) -> set GPIO low
+}
+
+bool TapePlayer::GetTapeReadState() const
+{
+	// Return actual output state (not GPIO state)
+	// Hardware inverts: GPIO low = output high, GPIO high = output low
+	return readLineState;  // true = high output, false = low output
+}
+
+bool TapePlayer::GetTapeSenseState() const
+{
+	// Returns senseLineState: true = PLAY pressed (active), false = PLAY released (inactive)
+	// When true: GPIO is HIGH, hardware inverts to output LOW, computer sees LOW = active
+	// When false: GPIO is LOW, hardware inverts to output HIGH, computer sees HIGH = inactive
+	return senseLineState;
 }

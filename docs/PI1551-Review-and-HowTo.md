@@ -87,7 +87,12 @@ Legend
   - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
   - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4 (0=active)
   - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
-  - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4 (0=active)
+  - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
+    - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
+    - When SENSE=1 (senseLineState=true): GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active state (PLAY pressed)
+    - When SENSE=0 (senseLineState=false): GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive state (PLAY released)
+
+Note: check in `defs.h` if the support for MOTOR line is enabled or if we assume motor is always active: `TAPE_MOTOR_SUPPORT`
 
 ### TCBM2SD - TCBM Connector
 

@@ -50,6 +50,8 @@
 #define STEP_FLAG		(1 << 23)
 #define RUN_FLAG		(1 << 24)
 #define RESET_FLAG		(1 << 25)
+#define TAPE_READ_TOGGLE_FLAG	(1 << 26)
+#define TAPE_SENSE_TOGGLE_FLAG	(1 << 27)
 // dont exceed 32!!
 
 
@@ -210,6 +212,8 @@ public:
 	inline bool Step() { return KeyboardFlag(STEP_FLAG) | ButtonFlag(STEP_FLAG); }
 	inline bool Run() { return KeyboardFlag(RUN_FLAG) | ButtonFlag(RUN_FLAG); }
 	inline bool ResetEmulation() { return KeyboardFlag(RESET_FLAG) | ButtonFlag(RESET_FLAG); }
+	inline bool TapeReadToggle() { return KeyboardFlag(TAPE_READ_TOGGLE_FLAG); }
+	inline bool TapeSenseToggle() { return KeyboardFlag(TAPE_SENSE_TOGGLE_FLAG); }
 
 	// Used by the 2 cores so need to be volatile
 	//volatile static unsigned directDiskSwapRequest;
