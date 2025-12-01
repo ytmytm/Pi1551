@@ -39,7 +39,7 @@ bool TapePlayer::motorActive = false;
 bool TapePlayer::motorActive = true;  // Motor always active when support is disabled
 #endif
 bool TapePlayer::atEnd = false;
-bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal)
+bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal) - matches cbmtapepi initial state, first transfer_pulse will start with LOW
 // SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
 // When true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 // When false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
@@ -103,6 +103,7 @@ void TapePlayer::InitializeGPIO()
 #endif
 
 	// GPIO19 (READ) - output, start high (hardware inverts, so set GPIO low for high output)
+	// Matches cbmtapepi: initial state is HIGH, first transfer_pulse will start with LOW
 	RPI_SetGpioOutput((rpi_gpio_pin_t)TAPE_READ_GPIO);
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 	readLineState = true;
@@ -156,7 +157,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		loaded = true;
 		currentPulseIndex = 0;
 		atEnd = false;
-		readLineState = true;
+		readLineState = true;  // Start with HIGH (output) like cbmtapepi, first pulse will toggle to LOW
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 		// TAPE_SENSE: PLAY button pressed (active state) when TAP is loaded
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
@@ -172,7 +173,17 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 #endif
 		{
 			u32 now = read32(ARM_SYSTIMER_CLO);
-			write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
+			// Schedule first timer interrupt for the first half-wave duration
+			// This ensures the first half-wave (HIGH) has the correct duration
+			u64 firstInterval = pulseTimings[0];
+			if (firstInterval > 1000000)
+				firstInterval = 1000000;  // Cap at 1 second
+			u32 nextTime = now + static_cast<u32>(firstInterval);
+			// Check if timer already passed (shouldn't happen, but be safe)
+			u32 currentTime = read32(ARM_SYSTIMER_CLO);
+			if (nextTime < currentTime)
+				nextTime = currentTime + static_cast<u32>(firstInterval);
+			write32(ARM_SYSTIMER_C1, nextTime);
 			DataMemBarrier();
 		}
 	}
@@ -534,9 +545,11 @@ void TapePlayer::HandleTapeIRQ()
 		// Update cumulative pulse time (before incrementing index)
 		cumulativePulseTimeUs += pulseTimings[currentPulseIndex];
 
-		// Schedule next pulse
+		// Schedule next pulse - use NEXT index for the next half-wave duration
+		// After toggling, we're now in the next half-wave state, so we need the next timing
 		u32 now = read32(ARM_SYSTIMER_CLO);
-		u64 interval64 = pulseTimings[currentPulseIndex];
+		u32 nextIndex = currentPulseIndex + 1;
+		u64 interval64 = (nextIndex < pulseCount) ? pulseTimings[nextIndex] : 1000;  // Use next timing, or 1ms if at end
 		
 		// Handle very long intervals (overflow protection)
 		// Timer is 32-bit, so max interval is ~4294 seconds
@@ -554,7 +567,21 @@ void TapePlayer::HandleTapeIRQ()
 			nextInterval = static_cast<u32>(interval64);
 		}
 		
+		// Calculate next timer value
 		u32 nextTime = now + nextInterval;
+		
+		// CRITICAL: Check if timer value has already passed (time may drift due to interrupt latency)
+		// This prevents missing timer interrupts and ensures stable playback
+		// Similar to Timer.c line 47-50
+		// Re-read current time to account for any delay in processing
+		u32 currentTime = read32(ARM_SYSTIMER_CLO);
+		if (nextTime < currentTime)
+		{
+			// Timer value already passed - recalculate from current time
+			// This can happen if interrupt was delayed by other interrupts or system load
+			nextTime = currentTime + nextInterval;
+		}
+		
 		write32(ARM_SYSTIMER_C1, nextTime);
 
 		currentPulseIndex++;
@@ -563,7 +590,7 @@ void TapePlayer::HandleTapeIRQ()
 	{
 		// End of tape - hold READ high (hardware inverts: GPIO low = output high)
 		atEnd = true;
-		readLineState = true;
+		readLineState = true;  // End state: HIGH (output)
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 		// TAPE_SENSE: PLAY button released (inactive state) when TAP ends
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
@@ -689,7 +716,7 @@ void TapePlayer::Reset()
 	}
 	
 	// Set READ and SENSE to inactive state
-	readLineState = true;
+	readLineState = true;  // Reset to HIGH (output) like initial state
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
 	// TAPE_SENSE: PLAY button released (inactive state)
 	// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
