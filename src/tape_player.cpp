@@ -117,6 +117,8 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		// TAPE_SENSE: PLAY button released (inactive state) when TAP is unloaded
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		// Wake core 2 so it can detect tape unloaded and go back to sleep
+		__asm("SEV");
 
 	if (!fileInfo || !fileInfo->fname)
 		return false;
@@ -153,6 +155,8 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		motorActive = true;
 #endif
 		
+		// Wake core 2 if it's sleeping (waiting for tape to be loaded)
+		__asm("SEV");
 		// Core 2 playback loop will see loaded/motorActive and start generating pulses.
 	}
 
@@ -423,6 +427,8 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = true;  // PLAY pressed (active)
+		// Wake core 2 if it's sleeping (waiting for motor to become active)
+		__asm("SEV");
 		// CoreLoop() on core 2 will see motorActive and start/resume pulses.
 	}
 	else if (!motorActive)
@@ -431,6 +437,8 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = false;  // PLAY released (inactive)
+		// Wake core 2 so it can detect motor stopped and go back to sleep
+		__asm("SEV");
 	}
 	// Motor state change handled; CoreLoop() uses motorActive to gate playback.
 }
@@ -541,6 +549,8 @@ void TapePlayer::Reset()
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 	senseLineState = false;  // PLAY released (inactive)
 	
+	// Wake core 2 so it can detect the reset state and go back to sleep
+	__asm("SEV");
 	// Playback remains stopped after reset; CoreLoop() will only generate pulses
 	// again after a new TAP is loaded and, if applicable, the motor is started.
 }
@@ -549,6 +559,8 @@ void TapePlayer::CoreLoop()
 {
 	// Dedicated playback loop intended to run on core 2.
 	// Uses busy-waiting on ARM_SYSTIMER_CLO to generate READ pulses, independent of IRQs.
+	// When idle (no tape loaded, motor inactive, or tape finished), core enters low-power
+	// mode using WFE (Wait For Event) and is woken by SEV (Send Event) when state changes.
 
 	// Ensure GPIOs are configured on this core.
 	InitializeGPIO();
@@ -558,15 +570,18 @@ void TapePlayer::CoreLoop()
 		// Wait until we have a valid tape loaded
 		if (!loaded || pulseTimings == nullptr || pulseCount == 0)
 		{
-			// Short idle to avoid hammering the bus
-			for (volatile int i = 0; i < 1000; ++i) { __asm("NOP"); }
+			// Put core into low-power mode until tape is loaded
+			// Core will be woken by SEV when LoadTap() is called
+			__asm("WFE");
 			continue;
 		}
 
 		// Motor must be active and not at end of tape
 		if (!motorActive || atEnd)
 		{
-			for (volatile int i = 0; i < 1000; ++i) { __asm("NOP"); }
+			// Put core into low-power mode until motor becomes active
+			// Core will be woken by SEV when OnMotorChange() is called
+			__asm("WFE");
 			continue;
 		}
 
@@ -582,7 +597,9 @@ void TapePlayer::CoreLoop()
 				RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 				senseLineState = false;
 			}
-			for (volatile int i = 0; i < 1000; ++i) { __asm("NOP"); }
+			// Put core into low-power mode (tape finished)
+			// Core will be woken by SEV if tape is reset or new tape loaded
+			__asm("WFE");
 			continue;
 		}
 
