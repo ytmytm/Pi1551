@@ -193,33 +193,25 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		if (pulseTimings && pulseCount > 0)
 #endif
 		{
-			// Initialize cumulative timing (like pitap)
+			// Initialize timing/debug counters
 			playbackStartTime = read32(ARM_SYSTIMER_CLO);
 			lastPulseTimeUs = 0;
-			lastInterruptTime = 0;  // Reset interrupt timing (will be set after first schedule)
-			maxInterruptDelay = 0;  // Reset max delay
-			maxHandlerDuration = 0;  // Reset max handler duration
+			lastInterruptTime = 0;  // Will be set after first schedule
+			maxInterruptDelay = 0;
+			maxHandlerDuration = 0;
 			
-			// Schedule first timer interrupt for the first half-wave duration
-			// Using cumulative timing: nextPulseTime = lastPulseTime + pulseTimings[0]
+			// Schedule first timer interrupt RELATIVE to current time.
+			// This more closely matches pitap's SimpleusDelay() behaviour
+			// and avoids 32-bit overflow corner cases.
 			u64 firstInterval = pulseTimings[0];
 			if (firstInterval > 1000000)
 				firstInterval = 1000000;  // Cap at 1 second
-			u64 nextPulseTimeUs = lastPulseTimeUs + firstInterval;
-			u32 targetTime = playbackStartTime + static_cast<u32>(nextPulseTimeUs);
 			
-			// Check if target time has already passed (shouldn't happen, but be safe)
 			u32 currentTime = read32(ARM_SYSTIMER_CLO);
-			if (targetTime < currentTime || targetTime < playbackStartTime)  // Overflow check
-			{
-				// Recalculate from current time
-				targetTime = currentTime + static_cast<u32>(firstInterval);
-				playbackStartTime = currentTime;
-				lastPulseTimeUs = 0;
-			}
+			u32 targetTime = currentTime + static_cast<u32>(firstInterval);
 			
 			write32(ARM_SYSTIMER_C1, targetTime);
-			lastInterruptTime = targetTime;  // Store scheduled time for first interrupt
+			lastInterruptTime = targetTime;
 			DataMemBarrier();
 		}
 	}
@@ -613,65 +605,25 @@ void TapePlayer::HandleTapeIRQ()
 		else
 			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want low output -> set GPIO high
 
-		// Update cumulative pulse time (before incrementing index)
+		// Update cumulative pulse time (for UI/debug)
 		cumulativePulseTimeUs += pulseTimings[currentPulseIndex];
-
-		// Use cumulative timing like pitap: nextPulseTime = lastPulseTime + pulseTimings[nextIndex]
-		// This ensures we always know when the next pulse should be, accounting for cumulative time
+		
+		// Schedule next pulse RELATIVE to current time, similar to pitap's
+		// SimpleusDelay() based implementation. This keeps the code simple
+		// and avoids 32-bit overflow corner cases while jitter stays far
+		// below typical Plus/4 tape pulse lengths.
 		u32 currentTime = read32(ARM_SYSTIMER_CLO);
 		u32 nextIndex = currentPulseIndex + 1;
 		
 		if (nextIndex < pulseCount)
 		{
-			// Calculate next pulse time using cumulative timing (like pitap)
 			u64 nextPulseInterval = pulseTimings[nextIndex];
 			if (nextPulseInterval > 1000000)
 				nextPulseInterval = 1000000;  // Cap at 1 second
 			
-			// Calculate when next pulse should occur: lastPulseTimeUs + currentPulse + nextPulseInterval
-			// (lastPulseTimeUs is the cumulative time up to currentPulseIndex, so we add currentPulse + nextPulse)
-			u64 nextPulseTimeUs = lastPulseTimeUs + pulseTimings[currentPulseIndex] + nextPulseInterval;
+			u32 targetTime = currentTime + static_cast<u32>(nextPulseInterval);
 			
-			// Calculate target time: playbackStartTime + nextPulseTimeUs
-			// Handle 32-bit timer overflow by checking if addition would wrap
-			u32 targetTime;
-			if (nextPulseTimeUs > 0x7FFFFFFF)  // Prevent overflow (max safe value for 32-bit)
-			{
-				// Reset timing base if we're getting too far
-				playbackStartTime = currentTime;
-				lastPulseTimeUs = 0;
-				targetTime = currentTime + static_cast<u32>(nextPulseInterval);
-			}
-			else
-			{
-				u64 targetTime64 = playbackStartTime + nextPulseTimeUs;
-				// Check for overflow in addition
-				if (targetTime64 < playbackStartTime || targetTime64 > 0xFFFFFFFF)
-				{
-					// Reset timing base
-					playbackStartTime = currentTime;
-					lastPulseTimeUs = 0;
-					targetTime = currentTime + static_cast<u32>(nextPulseInterval);
-				}
-				else
-				{
-					targetTime = static_cast<u32>(targetTime64);
-					
-					// Check if target time has already passed (like pitap: if(next_pulse>time_now))
-					if (targetTime <= currentTime || targetTime < playbackStartTime)
-					{
-						// Deadline missed - schedule immediately (similar to pitap's missed_pulses++)
-						// But we still schedule to continue playback
-						targetTime = currentTime + static_cast<u32>(nextPulseInterval);
-						// Reset timing base to prevent further drift
-						playbackStartTime = currentTime;
-						lastPulseTimeUs = 0;
-					}
-				}
-			}
-			
-			// Update lastPulseTimeUs AFTER scheduling (like pitap: last_pulse = GetClockTicks64() after delay)
-			// We update it to include the current pulse we just processed
+			// Track nominal cumulative time for UI/debug only
 			lastPulseTimeUs += pulseTimings[currentPulseIndex];
 			
 			write32(ARM_SYSTIMER_C1, targetTime);
