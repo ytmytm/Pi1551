@@ -58,6 +58,11 @@ struct TapeUIState
 	u32 currentTimeMs;  // Current position in milliseconds
 	u32 totalTimeMs;  // Total tape length in milliseconds
 	u8 percentage;  // Playback percentage (0-100)
+	u32 interruptCount;  // Number of times interrupt handler was called (for debugging)
+	u32 currentPulseIndex;  // Current pulse index (for debugging)
+	u32 currentPulseDurationUs;  // Duration of current pulse in microseconds (for debugging)
+	u32 maxInterruptDelayUs;  // Maximum delay between scheduled and actual interrupt time (for debugging)
+	u32 maxHandlerDurationUs;  // Maximum interrupt handler execution time (for debugging)
 };
 
 class TapePlayer
@@ -135,6 +140,10 @@ private:
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
 	static u64 lastPulseTimeUs;  // Cumulative time of last pulse (for cumulative timing like pitap)
 	static u32 playbackStartTime;  // System timer value when playback started (for cumulative timing)
+	static u32 interruptCallCount;  // Debug: count of interrupt handler calls
+	static u32 lastInterruptTime;  // Debug: time of last interrupt handler call
+	static u32 maxInterruptDelay;  // Debug: maximum delay between scheduled and actual interrupt time
+	static u32 maxHandlerDuration;  // Debug: maximum interrupt handler execution time
 	static char tapFilename[256];
 	static TapePlayer* instance;  // Singleton instance for IRQ handler
 };

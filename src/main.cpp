@@ -906,6 +906,19 @@ void UpdateScreen()
 				bool tapeSenseState = g_tapePlayer->GetTapeSenseState();
 				snprintf(tempBuffer, tempBufferSize, "READ:%d SENSE:%d", tapeReadState ? 1 : 0, tapeSenseState ? 1 : 0);
 				screen.PrintText(false, 0, y - 54, tempBuffer, textColour, bgColour);
+				
+				// Display interrupt call count, current pulse index, and pulse duration (for debugging)
+				// Long pulses (>1s) indicate synchronization/pause signals - IRQ will pause during these
+				u32 pulseMs = tapeState.currentPulseDurationUs / 1000;
+				u32 delayUs = tapeState.maxInterruptDelayUs;
+				u32 handlerUs = tapeState.maxHandlerDurationUs;
+				snprintf(tempBuffer, tempBufferSize, "IRQ:%lu PULSE:%lu DUR:%lums DELAY:%luus HAND:%luus", 
+					(unsigned long)tapeState.interruptCount, 
+					(unsigned long)tapeState.currentPulseIndex,
+					(unsigned long)pulseMs,
+					(unsigned long)delayUs,
+					(unsigned long)handlerUs);
+				screen.PrintText(false, 0, y - 72, tempBuffer, textColour, bgColour);
 			}
 		}
 

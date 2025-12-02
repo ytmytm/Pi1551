@@ -48,6 +48,10 @@ u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
 u64 TapePlayer::lastPulseTimeUs = 0;  // Cumulative time of last pulse (for cumulative timing like pitap)
 u32 TapePlayer::playbackStartTime = 0;  // System timer value when playback started
+u32 TapePlayer::interruptCallCount = 0;  // Debug: count of interrupt handler calls
+u32 TapePlayer::lastInterruptTime = 0;  // Debug: time of last interrupt handler call
+u32 TapePlayer::maxInterruptDelay = 0;  // Debug: maximum delay between scheduled and actual interrupt time
+u32 TapePlayer::maxHandlerDuration = 0;  // Debug: maximum interrupt handler execution time
 char TapePlayer::tapFilename[256] = {0};
 TapePlayer* TapePlayer::instance = nullptr;
 
@@ -134,6 +138,10 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		cumulativePulseTimeUs = 0;
 		lastPulseTimeUs = 0;
 		playbackStartTime = 0;
+		interruptCallCount = 0;  // Reset interrupt counter
+		lastInterruptTime = 0;  // Reset interrupt timing
+		maxInterruptDelay = 0;  // Reset max delay
+		maxHandlerDuration = 0;  // Reset max handler duration
 	FreePulseBuffer();
 	
 		// TAPE_SENSE: PLAY button released (inactive state) when TAP is unloaded
@@ -167,6 +175,15 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = true;  // PLAY pressed (active)
+		
+#if TAPE_MOTOR_SUPPORT
+		// Motor support enabled - motor state will be checked in interrupt handler
+		// Don't start playback here, wait for motor to be activated
+#else
+		// Motor support disabled - motor is always active, start playback immediately
+		motorActive = true;
+#endif
+		
 		SetupIRQ();
 		
 		// Start playback immediately if motor is active (or if motor support is disabled)
@@ -179,6 +196,9 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 			// Initialize cumulative timing (like pitap)
 			playbackStartTime = read32(ARM_SYSTIMER_CLO);
 			lastPulseTimeUs = 0;
+			lastInterruptTime = 0;  // Reset interrupt timing (will be set after first schedule)
+			maxInterruptDelay = 0;  // Reset max delay
+			maxHandlerDuration = 0;  // Reset max handler duration
 			
 			// Schedule first timer interrupt for the first half-wave duration
 			// Using cumulative timing: nextPulseTime = lastPulseTime + pulseTimings[0]
@@ -199,6 +219,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 			}
 			
 			write32(ARM_SYSTIMER_C1, targetTime);
+			lastInterruptTime = targetTime;  // Store scheduled time for first interrupt
 			DataMemBarrier();
 		}
 	}
@@ -493,10 +514,41 @@ void TapePlayer::TapeIRQHandler(void* pParam)
 
 void TapePlayer::HandleTapeIRQ()
 {
+	// CRITICAL: Clear interrupt flag FIRST to prevent re-entry
+	// Do this before DataMemBarrier to minimize latency
+	write32(ARM_SYSTIMER_CS, 1 << 1);  // Clear TIMER1 interrupt
+	
 	DataMemBarrier();
 
-	// Clear interrupt flag
-	write32(ARM_SYSTIMER_CS, 1 << 1);  // Clear TIMER1 interrupt
+	// Debug: measure interrupt handler timing
+	u32 handlerStartTime = read32(ARM_SYSTIMER_CLO);
+	u32 interruptDelay = 0;
+	
+	if (lastInterruptTime != 0)
+	{
+		// Calculate delay: if handlerStartTime > lastInterruptTime, we have delay
+		// This measures how late we are compared to when we were scheduled
+		if (handlerStartTime > lastInterruptTime)
+		{
+			interruptDelay = handlerStartTime - lastInterruptTime;
+			if (interruptDelay > maxInterruptDelay)
+				maxInterruptDelay = interruptDelay;
+		}
+	}
+
+	// Debug: increment interrupt call counter
+	interruptCallCount++;
+
+	// CRITICAL: Check atEnd FIRST - if reset was called, stop immediately
+	if (atEnd || !loaded)
+	{
+		// Playback stopped (reset or end of tape) - stop timer completely
+		u32 now = read32(ARM_SYSTIMER_CLO);
+		write32(ARM_SYSTIMER_C1, now + 0x7FFFFFFF);  // Set to far future (effectively stop)
+		lastInterruptTime = 0;  // Reset scheduled time
+		DataMemBarrier();
+		return;
+	}
 
 #if TAPE_MOTOR_SUPPORT
 	// Check motor state (poll GPIO)
@@ -515,6 +567,7 @@ void TapePlayer::HandleTapeIRQ()
 				// Schedule a short recheck
 				u32 now = read32(ARM_SYSTIMER_CLO);
 				write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
+				lastInterruptTime = now + 1000;  // Store scheduled time
 				DataMemBarrier();
 				return;
 			}
@@ -540,9 +593,12 @@ void TapePlayer::HandleTapeIRQ()
 
 	if (!motorActive || atEnd || !loaded)
 	{
-		// Motor off or at end - schedule short recheck
+		// Motor off or at end - stop timer (no need to keep checking)
+		// If atEnd, playback is finished - stop timer completely
+		// If motor off, wait for motor to start (will be handled by OnMotorChange)
 		u32 now = read32(ARM_SYSTIMER_CLO);
-		write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
+		write32(ARM_SYSTIMER_C1, now + 0x7FFFFFFF);  // Set to far future (effectively stop)
+		lastInterruptTime = 0;  // Reset scheduled time
 		DataMemBarrier();
 		return;
 	}
@@ -619,11 +675,14 @@ void TapePlayer::HandleTapeIRQ()
 			lastPulseTimeUs += pulseTimings[currentPulseIndex];
 			
 			write32(ARM_SYSTIMER_C1, targetTime);
+			lastInterruptTime = targetTime;  // Store scheduled time for next interrupt
 		}
 		else
 		{
 			// End of tape - schedule recheck
-			write32(ARM_SYSTIMER_C1, currentTime + 1000);
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			write32(ARM_SYSTIMER_C1, now + 1000);
+			lastInterruptTime = now + 1000;  // Store scheduled time
 		}
 
 		currentPulseIndex++;
@@ -631,17 +690,39 @@ void TapePlayer::HandleTapeIRQ()
 	else
 	{
 		// End of tape - hold READ high (hardware inverts: GPIO low = output high)
-		atEnd = true;
-		readLineState = true;  // End state: HIGH (output)
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
-		// TAPE_SENSE: PLAY button released (inactive state) when TAP ends
-		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+		// Only set state if not already at end (to avoid unnecessary GPIO changes)
+		if (!atEnd)
+		{
+			atEnd = true;
+			readLineState = true;  // End state: HIGH (output)
+			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+			// TAPE_SENSE: PLAY button released (inactive state) when TAP ends
+			// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
+			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+			senseLineState = false;  // PLAY released (inactive)
+		}
 		
-		// Schedule periodic recheck
+		// Schedule periodic recheck (but only if motor is still active, otherwise stop)
 		u32 now = read32(ARM_SYSTIMER_CLO);
-		write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
+		if (motorActive)
+		{
+			// Motor still active - schedule recheck (in case motor stops)
+			write32(ARM_SYSTIMER_C1, now + 1000);  // Recheck in 1ms
+			lastInterruptTime = now + 1000;  // Store scheduled time
+		}
+		else
+		{
+			// Motor stopped - cancel timer (no need to keep checking)
+			write32(ARM_SYSTIMER_C1, now + 0x7FFFFFFF);  // Set to far future
+			lastInterruptTime = 0;  // Reset scheduled time
+		}
 	}
+
+	// Debug: measure interrupt handler execution time
+	u32 handlerEndTime = read32(ARM_SYSTIMER_CLO);
+	u32 handlerDuration = handlerEndTime - handlerStartTime;
+	if (handlerDuration > maxHandlerDuration)
+		maxHandlerDuration = handlerDuration;
 
 	DataMemBarrier();
 }
@@ -664,6 +745,7 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 		{
 			u32 now = read32(ARM_SYSTIMER_CLO);
 			write32(ARM_SYSTIMER_C1, now + 100);  // Start in 100us
+			lastInterruptTime = now + 100;  // Store scheduled time
 			DataMemBarrier();
 		}
 	}
@@ -684,6 +766,15 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	state.atEnd = atEnd;
 	strncpy(state.filename, tapFilename, sizeof(state.filename) - 1);
 	state.filename[sizeof(state.filename) - 1] = '\0';
+	state.interruptCount = interruptCallCount;  // Debug: interrupt call count
+	state.currentPulseIndex = static_cast<u32>(currentPulseIndex);  // Debug: current pulse index
+	// Debug: current pulse duration (show 0 if at end or not loaded)
+	if (loaded && currentPulseIndex < pulseCount && pulseTimings)
+		state.currentPulseDurationUs = static_cast<u32>(pulseTimings[currentPulseIndex]);
+	else
+		state.currentPulseDurationUs = 0;
+	state.maxInterruptDelayUs = maxInterruptDelay;  // Debug: maximum interrupt delay
+	state.maxHandlerDurationUs = maxHandlerDuration;  // Debug: maximum handler duration
 
 	// Calculate tape counter (3-digit, 000-999)
 	// Counter increments approximately every 200ms of playback
@@ -739,22 +830,31 @@ void TapePlayer::Tick10ms()
 void TapePlayer::Reset()
 {
 	// Stop playback and reset tape state
-	TeardownIRQ();
-	
-	// Cancel any pending timer interrupt by setting it far in the future
+	// First, cancel any pending timer interrupt by setting it far in the future
 	// This prevents HandleTapeIRQ from being called after reset
+	// Do this BEFORE TeardownIRQ() to ensure timer is canceled first
 	u32 farFuture = read32(ARM_SYSTIMER_CLO) + 0x7FFFFFFF;  // Set to far future
 	write32(ARM_SYSTIMER_C1, farFuture);
 	DataMemBarrier();
 	
 	// Clear any pending interrupt
 	write32(ARM_SYSTIMER_CS, 1 << 1);  // Clear TIMER1 interrupt
+	DataMemBarrier();
+	
+	// Now teardown IRQ (after canceling timer)
+	TeardownIRQ();
 	
 	if (loaded)
 	{
 		currentPulseIndex = 0;
 		atEnd = true;  // Set atEnd to prevent automatic restart
 		cumulativePulseTimeUs = 0;  // Reset counter
+		lastPulseTimeUs = 0;  // Reset cumulative timing
+		playbackStartTime = 0;
+		interruptCallCount = 0;  // Reset interrupt counter
+		lastInterruptTime = 0;  // Reset interrupt timing
+		maxInterruptDelay = 0;  // Reset max delay
+		maxHandlerDuration = 0;  // Reset max handler duration
 	}
 	
 	// Set READ and SENSE to inactive state
