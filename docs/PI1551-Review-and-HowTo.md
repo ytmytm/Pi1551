@@ -83,9 +83,9 @@ Legend
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
   - Sound (PWM): GPIO13
   - LED: GPIO10
-- Tape interface:
+ - Tape interface:
   - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
-  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4 (0=active)
+  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
   - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
   - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
     - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
