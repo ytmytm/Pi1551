@@ -6,10 +6,11 @@
 - it would be possible to enable/disable arduino
     - only on safe tcbm2sd > 1.3 without diode because it won't pass the reset back into tcbm2sd
     - control line #16 from RPi - switch all lines to input (it will be pulled up as unconnected) except for reset to restart arduino/system
-- TAP support - header for tape recorder? how U2+ does it? how Arduino does it?
+- TAP support (works) - header for tape recorder? how U2+ does it? how Arduino does it?
     - RPi circuit https://github.com/RhinoDevel/cbmtapepi
     - Tapuino (TAP) https://github.com/sweetlilmre/tapuino
-    - needs 4 GPIO, motor goes through optocoupler 4N35; but we have 2 GPIOs left (force rotary encoder and free SW4/5?)
+    - Pitap https://gp2x.org/pitap/
+    - needs 4 GPIOs, all of them through NPN open-collector with 3.3V/5V pullups
 
 # Browser mode
 
@@ -77,9 +78,10 @@
 - remove irrelevant options, this is pure 1551, no IEC, no VIA, no 1581 - OR keep it but update Makefile/Makefile.rules
     - old code was kept for reference
 - rebrand to Pi1551
+- credit myself where appropriate
 - provide fully prepared sd card boot partition for download
 - add traps in ROM code to handle U0 commands to support tcbm2sd fastload protocol (all the commands)
 - on safe tcbm2sd > 1.4 the hat could drive line 16 and /RESET to enable/disable Arduino
 - backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
-- TAP format support (how? IRQ on MOTOR, DMA to pump data)
++ TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
