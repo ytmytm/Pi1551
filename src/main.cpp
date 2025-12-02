@@ -1543,6 +1543,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	TCBM_Bus::TPI = &pi1551.TPI;
 	TCBM_Bus::port = pi1551.TPI.GetPortA();
 	pi1551.Reset();	// will call TCBM_Bus::Reset();
+	// Reset tape player on C16 reset
+	if (g_tapePlayer)
+		g_tapePlayer->Reset();
 
 	//resetWhileEmulating = false;
 	selectedViaIECCommands = false;
@@ -2110,6 +2113,9 @@ void emulator()
 			TCBM_Bus::TPI = 0;
 			TCBM_Bus::port = 0;
 			TCBM_Bus::Reset();
+			// Reset tape player when exiting emulation
+			if (g_tapePlayer)
+				g_tapePlayer->Reset();
 
 #if not defined(EXPERIMENTALZERO)
 			core0RefreshingScreen.Acquire();
@@ -2154,11 +2160,14 @@ void emulator()
 
 					switch (updateAction)
 					{
-						case TCBM_Commands::RESET:
-							if (options.GetOnResetChangeToStartingFolder())
-								fileBrowser->DisplayRoot();
-							TCBM_Bus::Reset();
-							m_TCBM_Commands.SimulateIECBegin();
+					case TCBM_Commands::RESET:
+						if (options.GetOnResetChangeToStartingFolder())
+							fileBrowser->DisplayRoot();
+						TCBM_Bus::Reset();
+						// Reset tape player on C16 reset command
+						if (g_tapePlayer)
+							g_tapePlayer->Reset();
+						m_TCBM_Commands.SimulateIECBegin();
 							CheckAutoMountImage(EXIT_UNKNOWN, fileBrowser);
 							break;
 						case TCBM_Commands::NONE:
