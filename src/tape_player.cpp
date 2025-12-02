@@ -66,19 +66,10 @@ struct TAPHeader
 	u32 dataSize;  // Little-endian
 };
 
-// Plus/4 CPU frequencies (Hz)
-// PAL: ~1.76 MHz, NTSC: ~2.0 MHz
-// But TAP format uses tape clock, not CPU clock
-// For Plus/4, the tape clock is approximately:
-// PAL: 886,724 Hz, NTSC: 1,022,727 Hz
+// Plus/4 tape clock frequencies (Hz), as used by PiTap
+// PAL: 886,724 Hz, NTSC: 894,886 Hz (note: NTSC differs from VICE's value)
 #define TAPE_CLOCK_PAL_HZ  886724
-#define TAPE_CLOCK_NTSC_HZ 1022727
-
-// TAP format: 1 unit = 8 CPU cycles / frequency
-// So pulse_length_us = unit_value * (8 / frequency) * 1,000,000
-// For microseconds: pulse_length_us = unit_value * (8,000,000 / frequency)
-#define TAP_UNIT_TO_US_PAL  (8000000.0 / TAPE_CLOCK_PAL_HZ)   // ~9.024 us per unit
-#define TAP_UNIT_TO_US_NTSC (8000000.0 / TAPE_CLOCK_NTSC_HZ)   // ~7.822 us per unit
+#define TAPE_CLOCK_NTSC_HZ 894886
 
 TapePlayer::TapePlayer()
 {
@@ -246,9 +237,6 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 		return false;
 
 	// Validate version (support v0, v1, and v2)
-	// v0: each byte is a complete cycle (low-high)
-	// v1: same as v2, each byte is a half-wave, 0x00 means extended length
-	// v2: each byte is a half-wave, 0x00 means extended length
 	if (header.version != 0 && header.version != 1 && header.version != 2)
 		return false;
 
@@ -256,9 +244,10 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	if (header.machine != 0x02)
 		return false;
 
-	// Determine timing based on video standard
-	// 0 = PAL, 1 = NTSC
-	double unitToUs = (header.video == 1) ? TAP_UNIT_TO_US_NTSC : TAP_UNIT_TO_US_PAL;
+	// Determine Plus/4 tape clock based on video standard (0 = PAL, 1 = NTSC)
+	double clockSpeed = (header.video == 1) ? (double)TAPE_CLOCK_NTSC_HZ : (double)TAPE_CLOCK_PAL_HZ;
+	// PiTap: clockSpeedDiv = 1000000.0 / clockSpeed; pulse_length_us = i * 8 * clockSpeedDiv
+	double clockSpeedDiv = 1000000.0 / clockSpeed;
 
 	// Read data size (little-endian)
 	u32 dataSize = header.dataSize;
@@ -276,7 +265,11 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 		return false;
 	}
 
-	// Parse data based on version
+	// Parse data using PiTap semantics:
+	// - For all versions, bytes represent TAP units (8 cycles per unit)
+	// - For v0, a value of 0 means 256 units (overflow)
+	// - For v1/v2, a value of 0 means extended length: next 3 bytes give cycle count directly
+	// We convert each full cycle into TWO half-waves so TapePlayer can toggle on every entry.
 	u32 dataIndex = 0;
 	u64 totalTimeUs = 0;
 	size_t newPulseCount = 0;
@@ -289,182 +282,59 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
         return false;
     }
 
-	if (header.version == 2)
+	while (dataIndex < bytesRead)
 	{
-		// Version 2: each byte is a half-wave, 0x00 means extended length (next 3 bytes, little-endian, in TAP units)
-		while (dataIndex < bytesRead)
+		u8 byte = dataBuffer[dataIndex++];
+		u64 fullCycleUs = 0;
+
+		if (header.version == 0)
 		{
-			u32 unitValue;
-			if (dataBuffer[dataIndex] == 0x00)
+			// v0: 0 means 256 units, all other values are TAP units
+			u32 units = (byte == 0x00) ? 256u : (u32)byte;
+			u64 cycles = (u64)units * 8u;
+			fullCycleUs = (u64)(cycles * clockSpeedDiv + 0.5);
+		}
+		else // v1 or v2
+		{
+			if (byte == 0x00)
 			{
-				// Extended length (in TAP units)
-				if (dataIndex + 3 >= bytesRead)
+				// Extended length: next 3 bytes are cycles directly
+				if (dataIndex + 2 >= bytesRead)
 					break;
-				unitValue = dataBuffer[dataIndex + 1] | 
-				           (dataBuffer[dataIndex + 2] << 8) | 
-				           (dataBuffer[dataIndex + 3] << 16);
-				dataIndex += 4;
+				u32 cycles = (u32)dataBuffer[dataIndex] |
+				             ((u32)dataBuffer[dataIndex + 1] << 8) |
+				             ((u32)dataBuffer[dataIndex + 2] << 16);
+				dataIndex += 3;
+				fullCycleUs = (u64)(cycles * clockSpeedDiv + 0.5);
 			}
 			else
 			{
-				unitValue = dataBuffer[dataIndex];
-				dataIndex++;
+				// Normal byte in TAP units (8 cycles per unit)
+				u32 units = (u32)byte;
+				u64 cycles = (u64)units * 8u;
+				fullCycleUs = (u64)(cycles * clockSpeedDiv + 0.5);
 			}
-
-			// Convert to microseconds
-			u64 pulseUs = (u64)(unitValue * unitToUs + 0.5);  // Round to nearest
-			if (pulseUs == 0)
-				pulseUs = 1;  // Minimum 1 us
-            if (newPulseCount >= newCapacity)
-            {
-                free(newTimings);
-                free(dataBuffer);
-                return false;
-            }
-			newTimings[newPulseCount++] = pulseUs;
-			totalTimeUs += pulseUs;
 		}
-	}
-	else if (header.version == 0)
-	{
-		// Version 0: each byte represents a complete low-high cycle (50% duty cycle)
-		// If byte is 0x00, use 256 units (overflow condition)
-		while (dataIndex < bytesRead)
+
+		if (fullCycleUs == 0)
+			fullCycleUs = 1;
+
+		// Convert full cycle into two half-waves, like PiTap's v0/v1 handling
+		u64 half1 = fullCycleUs / 2;
+		u64 half2 = fullCycleUs - half1;
+		if (half1 == 0) half1 = 1;
+		if (half2 == 0) half2 = 1;
+
+		if (newPulseCount + 2 > newCapacity)
 		{
-			u32 unitValue = dataBuffer[dataIndex++];
-			if (unitValue == 0x00)
-				unitValue = 256;  // Overflow condition in v0
-
-			// Convert to microseconds (half-wave, so divide by 2 conceptually)
-			// Actually, in v0 each byte is the full cycle, so we need two half-waves
-			u32 halfWaveUnits = unitValue / 2;
-			if (halfWaveUnits == 0)
-				halfWaveUnits = 1;
-
-			u64 pulseUs1 = (u64)(halfWaveUnits * unitToUs + 0.5);
-			if (pulseUs1 == 0)
-				pulseUs1 = 1;
-
-			u64 pulseUs2 = (u64)((unitValue - halfWaveUnits) * unitToUs + 0.5);
-			if (pulseUs2 == 0)
-				pulseUs2 = 1;
-
-            if (newPulseCount >= newCapacity)
-            {
-                free(newTimings);
-                free(dataBuffer);
-                return false;
-            }
-            newTimings[newPulseCount++] = pulseUs1;
-
-            if (newPulseCount >= newCapacity)
-            {
-                free(newTimings);
-                free(dataBuffer);
-                return false;
-            }
-            newTimings[newPulseCount++] = pulseUs2;
-			totalTimeUs += pulseUs1 + pulseUs2;
+			free(newTimings);
+			free(dataBuffer);
+			return false;
 		}
-	}
-	else  // header.version == 1
-	{
-		// Version 1: each byte represents a complete low-high cycle (50% duty cycle)
-		// If byte is 0x00, next 3 bytes are extended length (in CYCLES, not TAP units!)
-		// Cycles need to be converted: cycles_to_us = cycles / frequency * 1,000,000
-		double cyclesToUs = (header.video == 1) ? (1000000.0 / TAPE_CLOCK_NTSC_HZ) : (1000000.0 / TAPE_CLOCK_PAL_HZ);
-		
-		while (dataIndex < bytesRead)
-		{
-			u32 unitValue;
-			bool isExtended = false;
-			
-			if (dataBuffer[dataIndex] == 0x00)
-			{
-				// Extended length (3 bytes, little-endian, in CYCLES, not TAP units!)
-				if (dataIndex + 3 >= bytesRead)
-					break;
-				unitValue = dataBuffer[dataIndex + 1] | 
-				           (dataBuffer[dataIndex + 2] << 8) | 
-				           (dataBuffer[dataIndex + 3] << 16);
-				dataIndex += 4;
-				isExtended = true;
-			}
-			else
-			{
-				unitValue = dataBuffer[dataIndex++];
-				isExtended = false;
-			}
 
-			if (isExtended)
-			{
-				// Extended length is in cycles - convert directly to microseconds
-				// This is a full cycle, so we need two half-waves
-				u64 cycleUs = (u64)(unitValue * cyclesToUs + 0.5);
-				if (cycleUs == 0)
-					cycleUs = 1;
-				
-				u64 halfCycleUs = cycleUs / 2;
-				if (halfCycleUs == 0)
-					halfCycleUs = 1;
-				
-				u64 pulseUs1 = halfCycleUs;
-				u64 pulseUs2 = cycleUs - halfCycleUs;
-				if (pulseUs2 == 0)
-					pulseUs2 = 1;
-
-				if (newPulseCount >= newCapacity)
-				{
-					free(newTimings);
-					free(dataBuffer);
-					return false;
-				}
-				newTimings[newPulseCount++] = pulseUs1;
-
-				if (newPulseCount >= newCapacity)
-				{
-					free(newTimings);
-					free(dataBuffer);
-					return false;
-				}
-				newTimings[newPulseCount++] = pulseUs2;
-				totalTimeUs += pulseUs1 + pulseUs2;
-			}
-			else
-			{
-				// Normal byte is in TAP units (8 cycles per unit)
-				// Convert to microseconds (half-wave, so divide by 2 conceptually)
-				// Actually, in v1 each byte is the full cycle, so we need two half-waves
-				u32 halfWaveUnits = unitValue / 2;
-				if (halfWaveUnits == 0)
-					halfWaveUnits = 1;
-
-				u64 pulseUs1 = (u64)(halfWaveUnits * unitToUs + 0.5);
-				if (pulseUs1 == 0)
-					pulseUs1 = 1;
-
-				u64 pulseUs2 = (u64)((unitValue - halfWaveUnits) * unitToUs + 0.5);
-				if (pulseUs2 == 0)
-					pulseUs2 = 1;
-
-				if (newPulseCount >= newCapacity)
-				{
-					free(newTimings);
-					free(dataBuffer);
-					return false;
-				}
-				newTimings[newPulseCount++] = pulseUs1;
-
-				if (newPulseCount >= newCapacity)
-				{
-					free(newTimings);
-					free(dataBuffer);
-					return false;
-				}
-				newTimings[newPulseCount++] = pulseUs2;
-				totalTimeUs += pulseUs1 + pulseUs2;
-			}
-		}
+		newTimings[newPulseCount++] = half1;
+		newTimings[newPulseCount++] = half2;
+		totalTimeUs += half1 + half2;
 	}
 
 	free(dataBuffer);
