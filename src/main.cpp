@@ -907,17 +907,11 @@ void UpdateScreen()
 				snprintf(tempBuffer, tempBufferSize, "READ:%d SENSE:%d", tapeReadState ? 1 : 0, tapeSenseState ? 1 : 0);
 				screen.PrintText(false, 0, y - 54, tempBuffer, textColour, bgColour);
 				
-				// Display interrupt call count, current pulse index, and pulse duration (for debugging)
-				// Long pulses (>1s) indicate synchronization/pause signals - IRQ will pause during these
+				// Basic tape timing debug: show current pulse index and nominal duration
 				u32 pulseMs = tapeState.currentPulseDurationUs / 1000;
-				u32 delayUs = tapeState.maxInterruptDelayUs;
-				u32 handlerUs = tapeState.maxHandlerDurationUs;
-				snprintf(tempBuffer, tempBufferSize, "IRQ:%lu PULSE:%lu DUR:%lums DELAY:%luus HAND:%luus", 
-					(unsigned long)tapeState.interruptCount, 
+				snprintf(tempBuffer, tempBufferSize, "PULSE:%lu DUR:%lums",
 					(unsigned long)tapeState.currentPulseIndex,
-					(unsigned long)pulseMs,
-					(unsigned long)delayUs,
-					(unsigned long)handlerUs);
+					(unsigned long)pulseMs);
 				screen.PrintText(false, 0, y - 72, tempBuffer, textColour, bgColour);
 			}
 		}
@@ -2526,8 +2520,40 @@ extern "C"
 		enable_MMU_and_IDCaches();
 		_enable_unaligned_access();
 
-		DEBUG_LOG("emulator running on core %d\r\n", _get_core());
-		emulator();
+		int core = _get_core();
+		DEBUG_LOG("run_core on core %d\r\n", core);
+
+		// Core 1: main emulator (cycle-accurate 1MHz loop)
+		if (core == 1)
+		{
+			emulator();
+		}
+		// Core 2: dedicated TAP playback engine
+		else if (core == 2)
+		{
+			// Wait until the global TapePlayer instance is constructed
+			while (g_tapePlayer == nullptr)
+			{
+				__asm ("WFE");
+			}
+
+			// Run dedicated playback loop on core 2 (never returns under normal conditions)
+			g_tapePlayer->CoreLoop();
+
+			// If CoreLoop ever returns, just idle
+			while (1)
+			{
+				__asm ("WFE");
+			}
+		}
+		else
+		{
+			// Any other cores just idle
+			while (1)
+			{
+				__asm ("WFE");
+			}
+		}
 	}
 }
 static void start_core(int core, func_ptr func)
@@ -3144,13 +3170,18 @@ extern "C"
 
 #ifdef HAS_MULTICORE
 		start_core(3, _spin_core);
-		start_core(2, _spin_core);
 #ifdef USE_MULTICORE
+		// Core 1: emulator (via run_core -> emulator())
 		start_core(1, _init_core);
+		// Core 2: dedicated TAP playback engine (via run_core -> CoreLoop())
+		start_core(2, _init_core);
+		// Core 0: UI, screen updates and shared IRQ handling
 		UpdateScreen();		// core0 now loops here where it will handle interrupts and passively update the screen.
 		while (1);
 #else
+		// Single-core or non-multicore build: leave other cores spinning
 		start_core(1, _spin_core);
+		start_core(2, _spin_core);
 #endif
 #endif
 #ifndef USE_MULTICORE
