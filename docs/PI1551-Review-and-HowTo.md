@@ -183,10 +183,12 @@ On a FAT32-formatted SD card (single partition is fine):
   - Ensure the 1551 DOS ROM file is present at SD root (or `options.txt` path): default name is `dos1551-318008-01.bin`. It is loaded via the `ROM1551` option; if unspecified, the default filename above is tried.
   - Put `options.txt` in SD root. Minimal example for PI1551:
     ```
+    splitIECLines = 1 // must be 1 for i2c bus 1
+    i2cBusMaster = 1 //SDA - pin 3 SCL - pin 5
     deviceID = 8
     ROM1551 = dos1551-318008-01.bin
     LCDName = ssd1306_128x64
-    I2CLcdAddress = 60
+    i2cLcdAddress = 60
     lowerCaseBrowseModeFilenames = 1
     ignoreReset = 0
     ```
