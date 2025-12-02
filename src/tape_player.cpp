@@ -21,6 +21,7 @@
 #include <string.h>
 #include <malloc.h>
 #include <limits>
+#include <cmath>
 
 extern "C"
 {
@@ -451,7 +452,9 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 		state.currentPulseDurationUs = 0;
 
 	// Calculate tape counter (3-digit, 000-999)
-	// Counter increments approximately every 200ms of playback
+	// Uses VICE's physical model formula: c = g * (sqrt(v*t/(d*pi) + r^2/d^2) - r/d)
+	// This matches the original Commodore Datasette hardware behavior and VICE emulator
+	// Formula models tape spool geometry - counter advances non-linearly as tape unwinds
 	// Derived from currentPulseIndex (sum of pulse timings played so far)
 	if (loaded)
 	{
@@ -460,8 +463,27 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 		u32 maxU32 = std::numeric_limits<u32>::max();
 		state.currentTimeMs = (currentTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(currentTimeMs64);
 		state.totalTimeMs = (totalTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(totalTimeMs64);
-		u64 counterValue = (currentTimeMs64 / 200) % 1000;
-		state.tapeCounter = static_cast<u32>(counterValue);  // 200ms per count
+		
+		// VICE datasette counter constants (from datasette.h)
+		const double DS_D = 1.27e-5;
+		const double DS_R = 1.07e-2;
+		const double DS_V_PLAY = 4.76e-2;
+		const double DS_G = 0.525;
+		const double PI = 3.1415926535;
+		
+		// Convert time from milliseconds to seconds for formula
+		double t_seconds = currentTimeMs64 / 1000.0;
+		
+		// Calculate counter using VICE's physical model formula
+		// c = g * (sqrt(v*t/(d*pi) + r^2/d^2) - r/d)
+		double term1 = (DS_V_PLAY * t_seconds) / (DS_D * PI);
+		double term2 = (DS_R * DS_R) / (DS_D * DS_D);
+		double sqrt_term = std::sqrt(term1 + term2);
+		double counter_double = DS_G * (sqrt_term - DS_R / DS_D);
+		
+		// Convert to integer and wrap at 1000 (3-digit display: 000-999)
+		u64 counterValue = static_cast<u64>(counter_double + 0.5) % 1000;
+		state.tapeCounter = static_cast<u32>(counterValue);
 		
 		// Calculate percentage
 		if (totalTimeMs64 > 0)
