@@ -768,7 +768,9 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	state.filename[sizeof(state.filename) - 1] = '\0';
 	state.interruptCount = interruptCallCount;  // Debug: interrupt call count
 	state.currentPulseIndex = static_cast<u32>(currentPulseIndex);  // Debug: current pulse index
-	// Debug: current pulse duration (show 0 if at end or not loaded)
+	// Debug: current pulse duration (show next pulse duration, or 0 if at end or not loaded)
+	// Note: currentPulseIndex points to the pulse that was just processed,
+	// so we show the NEXT pulse duration (currentPulseIndex) for clarity
 	if (loaded && currentPulseIndex < pulseCount && pulseTimings)
 		state.currentPulseDurationUs = static_cast<u32>(pulseTimings[currentPulseIndex]);
 	else
