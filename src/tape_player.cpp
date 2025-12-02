@@ -83,10 +83,11 @@ void TapePlayer::InitializeGPIO()
 	// Motor support disabled - motor is always active
 #endif
 
-	// GPIO19 (READ) - output, start high (hardware inverts, so set GPIO low for high output)
-	// Matches cbmtapepi: initial state is HIGH, first transfer_pulse will start with LOW
+	// GPIO19 (READ) - output, start high.
+	// Hardware does NOT invert READ: GPIO high = CBM high.
+	// Initial state matches cbmtapepi effective state on CBM side: first pulse will go LOW.
 	RPI_SetGpioOutput((rpi_gpio_pin_t)TAPE_READ_GPIO);
-	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high on CBM
 	readLineState = true;
 
 	// GPIO26 (WRITE) - input with pull-up (stub, not used)
@@ -137,8 +138,8 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		loaded = true;
 		currentPulseIndex = 0;
 		atEnd = false;
-		readLineState = true;  // Start with HIGH (output) like cbmtapepi, first pulse will toggle to LOW
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+		readLineState = true;  // Start with HIGH (output) like cbmtapepi on CBM side, first pulse will toggle to LOW
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
 		// TAPE_SENSE: PLAY button pressed (active state) when TAP is loaded
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
@@ -512,7 +513,7 @@ void TapePlayer::Reset()
 	
 	// Set READ and SENSE to inactive state
 	readLineState = true;  // Reset to HIGH (output) like initial state
-	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Hardware inverts: GPIO low = output high
+	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
 	// TAPE_SENSE: PLAY button released (inactive state)
 	// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
@@ -554,7 +555,7 @@ void TapePlayer::CoreLoop()
 			{
 				atEnd = true;
 				readLineState = true;  // HIGH output
-				RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO low -> output high
+				RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high -> output high
 				// Release PLAY (inactive)
 				RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 				senseLineState = false;
@@ -583,12 +584,12 @@ void TapePlayer::CoreLoop()
 			continue;
 		}
 
-		// Toggle READ line (hardware inverts: GPIO low = output high, GPIO high = output low)
+		// Toggle READ line (no hardware inversion: GPIO high = CBM high, GPIO low = CBM low)
 		readLineState = !readLineState;
 		if (readLineState)
-			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want high output -> set GPIO low
+			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // High output -> set GPIO high
 		else
-			RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want low output -> set GPIO high
+			RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Low output -> set GPIO low
 
 		// Update timing/debug state
 		cumulativePulseTimeUs += intervalUs;
@@ -598,12 +599,12 @@ void TapePlayer::CoreLoop()
 
 void TapePlayer::ToggleTapeRead()
 {
-	// Toggle READ line state (hardware inverts: GPIO low = output high, GPIO high = output low)
+	// Toggle READ line state (no hardware inversion: GPIO high = CBM high, GPIO low = CBM low)
 	readLineState = !readLineState;
 	if (readLineState)
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want high output -> set GPIO low
+		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // High output -> set GPIO high
 	else
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Want low output -> set GPIO high
+		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);  // Low output -> set GPIO low
 }
 
 void TapePlayer::ToggleTapeSense()

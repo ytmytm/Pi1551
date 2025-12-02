@@ -123,7 +123,7 @@ private:
 	static bool loaded;
 	static bool motorActive;
 	static bool atEnd;
-	static bool readLineState;  // Current state of READ line (true = high, false = low) - note: hardware inverts GPIO signal
+	static bool readLineState;  // Current state of READ line (true = CBM high, false = CBM low)
 	// SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
 	// When true: GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active
 	// When false: GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive
