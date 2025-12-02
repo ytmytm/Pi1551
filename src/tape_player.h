@@ -45,7 +45,7 @@ extern "C"
 
 // Maximum number of half-waves we can store (static allocation)
 // Typical TAP files have thousands of pulses, so we need a reasonable buffer
-// For 300MB available on RPi0, we can use a large buffer
+// For 300MB available on RPi0, we can use a large buffer - about 40 minutes (half of C-90 tape)
 #define TAPE_MAX_HALFWAVES (10 * 1024 * 1024)  // 10M half-waves should be enough for most tapes
 
 struct TapeUIState
