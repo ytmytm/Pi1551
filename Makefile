@@ -23,7 +23,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS) $(LIBS)
 	@echo "  LINK $@"
 	$(Q)$(CC) $(CFLAGS) -o $(TARGET).elf -Xlinker -Map=$(TARGET).map -T linker.ld -nostartfiles $(OBJS) $(LIBS) -lm
-	$(Q)$(PREFIX)objdump -d $(TARGET).elf | $(PREFIX)c++filt > $(TARGET).lst
+	# $(Q)$(PREFIX)objdump -d $(TARGET).elf | $(PREFIX)c++filt > $(TARGET).lst
 	$(Q)$(PREFIX)objcopy $(TARGET).elf -O binary $(TARGET).img
 
 uspi/libuspi.a:
