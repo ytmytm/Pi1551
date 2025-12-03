@@ -401,12 +401,52 @@ void UpdateLCD(const char* track, unsigned temperature)
 		IEC_Bus::WaitMicroSeconds(100);
 #endif
 
-		if (options.DisplayTemperature())
-			snprintf(tempBuffer, tempBufferSize, "%s %02dC", track, temperature);
-		else
-			snprintf(tempBuffer, tempBufferSize, "%s", track);
+		// Prepare display text
+		bool showTapeInfo = false;
+#if defined(PI1551SUPPORT)
+		// Check if tape is loaded and playing - show counter and percentage on OLED
+		// This works in both browse mode and emulation mode
+		if (g_tapePlayer)
+		{
+			TapeUIState tapeState;
+			g_tapePlayer->GetUIState(tapeState);
+			
+			if (tapeState.isLoaded)
+			{
+				showTapeInfo = true;
+				// First row: counter (left), status indicators (P/M), and percentage (right)
+				// Calculate right-aligned position for percentage
+				u32 screenChars = screenLCD->Width() / screenLCD->GetFontWidth();
+				char percentStr[8];
+				snprintf(percentStr, sizeof(percentStr), "%d%%", tapeState.percentage);
+				
+				// Get SENSE state (PLAY button)
+				bool tapeSenseActive = g_tapePlayer->GetTapeSenseState();
+				
+				// Format: counter on left, status (P/M) in middle, percentage right-aligned
+				u32 percentX = screenChars - strlen(percentStr);
+				char counterStr[8];
+				// Format: "000 P M" or "000   " (P = PLAY/SENSE active, M = MOTOR active)
+				snprintf(counterStr, sizeof(counterStr), "%03d %c %c", 
+					tapeState.tapeCounter,
+					tapeSenseActive ? 'P' : ' ',
+					tapeState.motorActive ? 'M' : ' ');
+				screenLCD->PrintText(false, 0, 0, counterStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+				screenLCD->PrintText(false, percentX * screenLCD->GetFontWidth(), 0, percentStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			}
+		}
+#endif
+		
+		// Show normal track/temperature if not showing tape info
+		if (!showTapeInfo)
+		{
+			if (options.DisplayTemperature())
+				snprintf(tempBuffer, tempBufferSize, "%s %02dC", track, temperature);
+			else
+				snprintf(tempBuffer, tempBufferSize, "%s", track);
+			screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+		}
 
-		screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 		screenLCD->RefreshRows(0, 1);
 
 #if defined(PI1551SUPPORT)
@@ -444,7 +484,6 @@ void UpdateScreen()
 	bool oldTapeRead = false;
 	bool oldTapeSense = false;
 	u32 oldTapeCounter = 0;
-	char oldTapeFilename[256] = {0};
 	bool oldTapeAtEnd = false;
 	u32 oldTapeCurrentTimeMs = 0;
 
@@ -500,6 +539,26 @@ void UpdateScreen()
 		bool motor = false;
 
 		refreshLCDStatusDisplay = false;
+		
+		// Check if tape state changed to trigger LCD update (works in both browse and emulation mode)
+		static u32 lastTapeCounter = 0;
+		static u8 lastTapePercentage = 0;
+#if defined(PI1551SUPPORT)
+		if (g_tapePlayer && g_tapePlayer->IsLoaded())
+		{
+			TapeUIState tapeState;
+			g_tapePlayer->GetUIState(tapeState);
+			if (tapeState.isLoaded)
+			{
+				if (tapeState.tapeCounter != lastTapeCounter || tapeState.percentage != lastTapePercentage)
+				{
+					lastTapeCounter = tapeState.tapeCounter;
+					lastTapePercentage = tapeState.percentage;
+					refreshLCDStatusDisplay = true;
+				}
+			}
+		}
+#endif
 
 
 #if defined(PI1551SUPPORT)
@@ -819,25 +878,6 @@ void UpdateScreen()
 			TapeUIState tapeState;
 			g_tapePlayer->GetUIState(tapeState);
 			
-			// Display tape filename (truncated if too long)
-			if (tapeState.isLoaded && strcmp(tapeState.filename, oldTapeFilename) != 0)
-			{
-				strncpy(oldTapeFilename, tapeState.filename, sizeof(oldTapeFilename) - 1);
-				oldTapeFilename[sizeof(oldTapeFilename) - 1] = '\0';
-				
-				char displayName[32];
-				const char* nameOnly = strrchr(tapeState.filename, '/');
-				if (!nameOnly) nameOnly = tapeState.filename;
-				else nameOnly++;
-				
-				strncpy(displayName, nameOnly, 28);
-				displayName[28] = '\0';
-				if (strlen(nameOnly) > 28)
-					strcpy(displayName + 25, "...");
-				
-				screen.PrintText(false, 0, y - 18, displayName, textColour, bgColour);
-			}
-			
 			// Display tape counter (3 digits) - always update when loaded
 			if (tapeState.isLoaded)
 			{
@@ -899,20 +939,16 @@ void UpdateScreen()
 				}
 			}
 			
-			// Display TAPE_READ and TAPE_SENSE numeric state (always visible for testing)
+			// Display TAPE_READ, TAPE_SENSE, TAPE_WRITE, and TAPE_MOTOR numeric state (always visible for testing)
 			if (g_tapePlayer)
 			{
 				bool tapeReadState = g_tapePlayer->GetTapeReadState();
 				bool tapeSenseState = g_tapePlayer->GetTapeSenseState();
-				snprintf(tempBuffer, tempBufferSize, "READ:%d SENSE:%d", tapeReadState ? 1 : 0, tapeSenseState ? 1 : 0);
+				bool tapeMotorState = g_tapePlayer->GetMotorActive();
+				bool tapeWriteState = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_WRITE_GPIO) == RPI_IO_HI);
+				snprintf(tempBuffer, tempBufferSize, "READ:%d SENSE:%d WRITE:%d MOTOR:%d", 
+					tapeReadState ? 1 : 0, tapeSenseState ? 1 : 0, tapeWriteState ? 1 : 0, tapeMotorState ? 1 : 0);
 				screen.PrintText(false, 0, y - 54, tempBuffer, textColour, bgColour);
-				
-				// Basic tape timing debug: show current pulse index and nominal duration
-				u32 pulseMs = tapeState.currentPulseDurationUs / 1000;
-				snprintf(tempBuffer, tempBufferSize, "PULSE:%lu DUR:%lums",
-					(unsigned long)tapeState.currentPulseIndex,
-					(unsigned long)pulseMs);
-				screen.PrintText(false, 0, y - 72, tempBuffer, textColour, bgColour);
 			}
 		}
 
@@ -1022,7 +1058,22 @@ void UpdateScreen()
 				if (refreshLCDStatusDisplay)
 				{
 					UpdateLCD(tempBufferTrack, temperature);
+					refreshLCDStatusDisplay = false;
 				}
+#if defined(PI1551SUPPORT)
+				// In browse mode, update LCD periodically to show tape status even if nothing else changed
+				// This ensures tape counter is visible on OLED during playback in browse mode
+				if (emulating == IEC_COMMANDS && g_tapePlayer)
+				{
+					// Update every 10 iterations (roughly every 100ms) in browse mode to keep tape counter updated
+					static u32 browseUpdateCounter = 0;
+					if (++browseUpdateCounter >= 10)
+					{
+						browseUpdateCounter = 0;
+						UpdateLCD(tempBufferTrack, temperature);
+					}
+				}
+#endif
 			}
 			else
 			{
@@ -2113,9 +2164,7 @@ void emulator()
 			TCBM_Bus::TPI = 0;
 			TCBM_Bus::port = 0;
 			TCBM_Bus::Reset();
-			// Reset tape player when exiting emulation
-			if (g_tapePlayer)
-				g_tapePlayer->Reset();
+			// Don't reset tape player when exiting emulation - let it continue playing
 
 #if not defined(EXPERIMENTALZERO)
 			core0RefreshingScreen.Acquire();
