@@ -97,6 +97,31 @@ Legend
 
 Note: check in `defs.h` if the support for MOTOR line is enabled or if we assume motor is always active: `TAPE_MOTOR_SUPPORT`
 
+### C16/Plus4 TAPE connector
+
+Mini DIN 7
+
+Looking at the back of computer
+
+```
+        u
+    7   6   5
+    4  ===  3
+     2     1
+```
+
+```
+1 GND
+2 5V
+3 MOTOR (C= output)
+4 READ (C= input)
+5 WRITE (C= output)
+6 SENSE (C= input)
+7 GND
+```
+
+Note that the easiest way of soldering a flat cable is to put wires in order around the plug: 2,4,7,6,5,3,1.
+
 ### TCBM2SD - TCBM Connector
 
 
