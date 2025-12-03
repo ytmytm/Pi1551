@@ -84,10 +84,13 @@ Legend
   - Sound (PWM): GPIO13
   - LED: GPIO10
  - Tape interface:
-  - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
-  - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
-  - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
-  - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
+   All signals are unidirectional. All are connected through a NPN transistor with appropriate 10K pullup on collector: to 3.3V for inputs, to 5V (from C16 side, NOT from RPi3) for outputs.
+   Input signal goes through 10K resistor to base, emitter goes to GND. Collector is also connected to the signal output.
+   Any NPN works: 2n3904, S8050, BC547
+   - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
+   - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
+   - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
+   - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
     - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
     - When SENSE=1 (senseLineState=true): GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active state (PLAY pressed)
     - When SENSE=0 (senseLineState=false): GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive state (PLAY released)
