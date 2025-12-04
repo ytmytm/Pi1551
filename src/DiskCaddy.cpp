@@ -27,6 +27,10 @@ extern "C"
 }
 
 extern u8 deviceID;
+#if defined(PI1551SUPPORT)
+#include "tape_player.h"
+extern TapePlayer* g_tapePlayer;
+#endif
 
 static const u32 screenPosXCaddySelections = 240;
 static const u32 screenPosYCaddySelections = 280;
@@ -372,13 +376,34 @@ void DiskCaddy::ShowSelectedImage(u32 index)
 	if (screenLCD)
 	{
 		unsigned numberOfImages = GetNumberOfImages();
-		unsigned numberOfDisplayedImages = (screenLCD->Height()/screenLCD->GetFontHeight())-1;
+		// If tape is loaded, reduce available rows by 1 (row 1 = tape status, row 0 = track/temp is always there)
+		unsigned tapeRows = 0;
+#if defined(PI1551SUPPORT)
+		if (g_tapePlayer && g_tapePlayer->IsLoaded())
+		{
+			tapeRows = 1;  // Row 1 = tape status (row 0 = track/temp is always displayed)
+		}
+#endif
+		unsigned numberOfDisplayedImages = (screenLCD->Height()/screenLCD->GetFontHeight())-1-tapeRows;
 		unsigned caddyIndex;
 
 		RGBA BkColour = RGBA(0, 0, 0, 0xFF);
 		//screenLCD->Clear(BkColour);
 		x = 0;
 		y = 0;
+
+		// If tape is loaded, start from row 2 (row 0 = track/temp, row 1 = tape status)
+		// But row 0 is always there, so we only skip row 1 for tape status
+#if defined(PI1551SUPPORT)
+		if (g_tapePlayer && g_tapePlayer->IsLoaded())
+		{
+			y = screenLCD->GetFontHeight() * 2;  // Skip rows 0 and 1 (row 0 = track/temp, row 1 = tape status)
+		}
+		else
+#endif
+		{
+			y = screenLCD->GetFontHeight();  // Skip row 0 (track/temp) when no tape
+		}
 
 		snprintf(buffer, 256, "D%02d D%d/%d %c %s"
 			, deviceID

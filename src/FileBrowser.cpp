@@ -32,6 +32,85 @@ extern "C"
 {
 #include "rpi-gpio.h"
 }
+extern TapePlayer* g_tapePlayer;
+
+// Helper function to update tape status on OLED row 0 (browse mode) or row 1 (emulation mode)
+// Called without semaphore - assumes caller already has it
+// Can be called from both FileBrowser.cpp and main.cpp
+void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature)
+{
+#if defined(PI1551SUPPORT)
+	if (!screen->IsLCD() || !g_tapePlayer)
+		return;
+	
+	TapeUIState tapeState;
+	g_tapePlayer->GetUIState(tapeState);
+	
+	if (tapeState.isLoaded)
+	{
+		u32 screenChars = screen->Width() / screen->GetFontWidth();
+		char percentStr[8];
+		snprintf(percentStr, sizeof(percentStr), "%d%%", tapeState.percentage);
+		
+		bool tapeSenseActive = g_tapePlayer->GetTapeSenseState();
+		
+		u32 percentX = screenChars - strlen(percentStr);
+		char counterStr[8];
+		snprintf(counterStr, sizeof(counterStr), "%03d %c %c", 
+			tapeState.tapeCounter,
+			tapeSenseActive ? 'P' : ' ',
+			tapeState.motorActive ? 'M' : ' ');
+		
+		if (inEmulation)
+		{
+			// In emulation mode: row 0 = track/temperature, row 1 = tape info
+			extern Options options;
+			char tempBuffer[32];
+			if (options.DisplayTemperature())
+				snprintf(tempBuffer, sizeof(tempBuffer), "%s %02dC", track, temperature);
+			else
+				snprintf(tempBuffer, sizeof(tempBuffer), "%s", track);
+			screen->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			
+			u32 row1Y = screen->GetFontHeight();
+			screen->PrintText(false, 0, row1Y, counterStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			screen->PrintText(false, percentX * screen->GetFontWidth(), row1Y, percentStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			screen->RefreshRows(0, 2);
+		}
+		else
+		{
+			// In browse mode: row 0 = tape info only
+			screen->PrintText(false, 0, 0, counterStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			screen->PrintText(false, percentX * screen->GetFontWidth(), 0, percentStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			screen->RefreshRows(0, 1);
+		}
+	}
+	else
+	{
+		// Tape not loaded - clear row 0 (browse mode) or row 1 (emulation mode)
+		char clearBuffer[128] = { 0 };
+		u32 screenChars = screen->Width() / screen->GetFontWidth();
+		if (screenChars > sizeof(clearBuffer) - 1)
+			screenChars = sizeof(clearBuffer) - 1;
+		memset(clearBuffer, ' ', screenChars);
+		RGBA BkColour = RGBA(0, 0, 0, 0xFF);
+		
+		if (inEmulation)
+		{
+			// In emulation mode, clear row 1 (row 0 shows track/temperature)
+			u32 row1Y = screen->GetFontHeight();
+			screen->PrintText(false, 0, row1Y, clearBuffer, BkColour, BkColour);
+			screen->RefreshRows(1, 1);
+		}
+		else
+		{
+			// In browse mode, clear row 0
+			screen->PrintText(false, 0, 0, clearBuffer, BkColour, BkColour);
+			screen->RefreshRows(0, 1);
+		}
+	}
+#endif
+}
 
 #if defined(PI1551SUPPORT)
 #include "tcbm_commands.h"
@@ -168,18 +247,44 @@ void FileBrowser::BrowsableListView::Refresh()
 	u32 entryIndex;
 	u32 x = positionX;
 	u32 y = positionY;
+	
+	// Check if tape is loaded and adjust list position/rows accordingly
+	bool tapeLoaded = false;
+	u32 yOffset = 0;
+	u32 effectiveRows = rows;
+#if defined(PI1551SUPPORT)
+	if (screen->IsLCD() && g_tapePlayer)
+	{
+		tapeLoaded = g_tapePlayer->IsLoaded();
+		if (tapeLoaded)
+		{
+			yOffset = screen->GetFontHeight();
+			effectiveRows = rows - 1;  // Reduce available rows by 1 when tape is loaded
+		}
+	}
+#endif
+	y += yOffset;
+
+	// Update tape status on OLED (browse mode only - emulation mode uses UpdateLCD)
+	// This ensures tape status is visible and updated when list is refreshed
+#if defined(PI1551SUPPORT)
+	if (screen->IsLCD())
+	{
+		UpdateTapeStatusOnLCD(screen, false, "", 0);  // false = browse mode
+	}
+#endif
 
 	highlightScrollOffset = 0;
 
-	// Ensure the current selection is visible
-	if (list->currentIndex - offset >= rows)
+	// Ensure the current selection is visible (use effectiveRows to account for tape status row)
+	if (list->currentIndex - offset >= effectiveRows)
 	{
-		//DEBUG_LOG("CI= %d O = %d R = %d\r\n", list->currentIndex, offset, rows);
-		offset = list->currentIndex - rows + 1;
+		//DEBUG_LOG("CI= %d O = %d R = %d\r\n", list->currentIndex, offset, effectiveRows);
+		offset = list->currentIndex - effectiveRows + 1;
 		if ((int)offset < 0) offset = 0;
 	}
 
-	for (index = 0; index < rows; ++index)
+	for (index = 0; index < effectiveRows; ++index)
 	{
 		entryIndex = offset + index;
 
@@ -249,13 +354,24 @@ void FileBrowser::BrowsableListView::RefreshHighlightScroll()
 		}
 
 		int rowIndex = list->currentIndex - offset;
-		
 		u32 y = positionY;
+		
+		// If tape is loaded, shift list down by 1 row to make room for tape status on OLED
+		u32 yOffset = 0;
+#if defined(PI1551SUPPORT)
+		if (screen->IsLCD() && g_tapePlayer && g_tapePlayer->IsLoaded())
+		{
+			yOffset = screen->GetFontHeight();
+		}
+#endif
+		y += yOffset;
 		y += rowIndex * screen->GetFontHeight ();
-
+		
 		RefreshLine(list->currentIndex, 0, y, true);
 
-		screen->RefreshRows(rowIndex, 1);
+		// RefreshRows uses row index, which needs to account for tape status row offset
+		// rowIndex is already correct (0-based from the start of the list, not from screen top)
+		screen->RefreshRows(rowIndex + (yOffset > 0 ? 1 : 0), 1);
 	}
 }
 
@@ -996,6 +1112,15 @@ void FileBrowser::UpdateCurrentHighlight()
 			if (folder.currentHighlightTime <= 0)
 			{
 				folder.RefreshViewsHighlightScroll();
+				
+				// Also update tape status on OLED when scrolling long lines
+				// This ensures tape counter is updated periodically in browse mode
+#if defined(PI1551SUPPORT)
+				if (screenLCD && g_tapePlayer && g_tapePlayer->IsLoaded())
+				{
+					UpdateTapeStatusOnLCD(screenLCD, false, "", 0);  // false = browse mode
+				}
+#endif
 			}
 
 			if (folder.currentHighlightTime <= 0)

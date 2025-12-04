@@ -403,6 +403,7 @@ void UpdateLCD(const char* track, unsigned temperature)
 
 		// Prepare display text
 		bool showTapeInfo = false;
+		bool inEmulation = (emulating != IEC_COMMANDS);
 #if defined(PI1551SUPPORT)
 		// Check if tape is loaded and playing - show counter and percentage on OLED
 		// This works in both browse mode and emulation mode
@@ -414,25 +415,15 @@ void UpdateLCD(const char* track, unsigned temperature)
 			if (tapeState.isLoaded)
 			{
 				showTapeInfo = true;
-				// First row: counter (left), status indicators (P/M), and percentage (right)
-				// Calculate right-aligned position for percentage
-				u32 screenChars = screenLCD->Width() / screenLCD->GetFontWidth();
-				char percentStr[8];
-				snprintf(percentStr, sizeof(percentStr), "%d%%", tapeState.percentage);
-				
-				// Get SENSE state (PLAY button)
-				bool tapeSenseActive = g_tapePlayer->GetTapeSenseState();
-				
-				// Format: counter on left, status (P/M) in middle, percentage right-aligned
-				u32 percentX = screenChars - strlen(percentStr);
-				char counterStr[8];
-				// Format: "000 P M" or "000   " (P = PLAY/SENSE active, M = MOTOR active)
-				snprintf(counterStr, sizeof(counterStr), "%03d %c %c", 
-					tapeState.tapeCounter,
-					tapeSenseActive ? 'P' : ' ',
-					tapeState.motorActive ? 'M' : ' ');
-				screenLCD->PrintText(false, 0, 0, counterStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
-				screenLCD->PrintText(false, percentX * screenLCD->GetFontWidth(), 0, percentStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+				// Use helper function to update tape status (defined in FileBrowser.cpp)
+				extern void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature);
+				UpdateTapeStatusOnLCD(screenLCD, inEmulation, track, temperature);
+			}
+			else
+			{
+				// Tape not loaded - clear tape status row
+				extern void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature);
+				UpdateTapeStatusOnLCD(screenLCD, inEmulation, track, temperature);
 			}
 		}
 #endif
@@ -445,9 +436,8 @@ void UpdateLCD(const char* track, unsigned temperature)
 			else
 				snprintf(tempBuffer, tempBufferSize, "%s", track);
 			screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
+			screenLCD->RefreshRows(0, 1);
 		}
-
-		screenLCD->RefreshRows(0, 1);
 
 #if defined(PI1551SUPPORT)
 		TCBM_Bus::WaitMicroSeconds(100);

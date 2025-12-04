@@ -155,7 +155,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		motorActive = true;
 #endif
 		
-		// Wake core 2 if it's sleeping (waiting for tape to be loaded)
+		// Wake core 2 AFTER setting all state (loaded, motorActive) so it can start generating pulses
 		__asm("SEV");
 		// Core 2 playback loop will see loaded/motorActive and start generating pulses.
 	}
