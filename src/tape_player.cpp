@@ -520,7 +520,8 @@ void TapePlayer::Tick10ms()
 	// We could update counter here, but GetUIState() calculates it on-demand
 #if TAPE_MOTOR_SUPPORT
 	// Main purpose is to ensure motor state is polled
-	bool motorNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_HI);
+	// GPIO logic: 0 (LOW) = motor running, 1 (HIGH) = motor stopped
+	bool motorNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
 	if (motorNow != motorActive)
 	{
 		OnMotorChange(motorNow);

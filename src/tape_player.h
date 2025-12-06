@@ -29,7 +29,7 @@ extern "C"
 }
 
 // Fixed GPIO pins for tape interface
-#define TAPE_MOTOR_GPIO 6   // Pin 31, input, active-high
+#define TAPE_MOTOR_GPIO 6   // Pin 31, input, active-low (GPIO 0 = motor running, GPIO 1 = motor stopped)
 #define TAPE_READ_GPIO  19  // Pin 35, output, active-low (hardware inverts signal)
 #define TAPE_WRITE_GPIO 26  // Pin 37, input (stub, not used)
 // TAPE_SENSE_GPIO: Pin 27, output, active-low (hardware inverts signal)
