@@ -60,6 +60,7 @@ struct TapeUIState
 	u8 percentage;  // Playback percentage (0-100)
 	u32 currentPulseIndex;      // Current pulse index (for debugging)
 	u32 currentPulseDurationUs; // Duration of current pulse in microseconds (for debugging)
+	u32 loadGeneration;         // Monotonic load counter to detect new TAP loads
 };
 
 class TapePlayer
@@ -122,6 +123,7 @@ private:
     static size_t currentPulseIndex;
 	static bool loaded;
 	static bool motorActive;
+	static bool motorAlwaysOn;
 	static bool atEnd;
 	static bool readLineState;  // Current state of READ line (true = CBM high, false = CBM low)
 	// SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)

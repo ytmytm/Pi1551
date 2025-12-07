@@ -85,3 +85,4 @@
 - backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
+    - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback

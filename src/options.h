@@ -72,6 +72,7 @@ public:
 	inline unsigned int InvertIECInputs() const { return invertIECInputs; }
 	inline unsigned int InvertIECOutputs() const { return invertIECOutputs; }
 	inline unsigned int IgnoreReset() const { return ignoreReset; }
+	inline unsigned int TapeMotorAlwaysOn() const { return tapeMotorAlwaysOn; }
 
 	inline unsigned int AutoBootFB128() const { return autoBootFB128; }
 	inline const char* Get128BootSectorName() const { return C128BootSectorName; }
@@ -140,6 +141,7 @@ private:
 	unsigned int invertIECOutputs;
 	unsigned int splitIECLines;
 	unsigned int ignoreReset;
+	unsigned int tapeMotorAlwaysOn;
 	unsigned int autoBootFB128;
 
 	unsigned int displayTemperature;

@@ -79,11 +79,4 @@
 #define PI_DRIVE_NAME "PI1541"
 #endif
 
-// Tape interface support
-// TAPE_MOTOR_SUPPORT: if 0, motor is always active (no GPIO polling)
-// if 1, motor state is read from TAPE_MOTOR_GPIO pin
-#ifndef TAPE_MOTOR_SUPPORT
-#define TAPE_MOTOR_SUPPORT 0  // Default: motor always active
-#endif
-
 #endif

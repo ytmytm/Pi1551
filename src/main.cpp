@@ -533,6 +533,9 @@ void UpdateScreen()
 		// Check if tape state changed to trigger LCD update (works in both browse and emulation mode)
 		static u32 lastTapeCounter = 0;
 		static u8 lastTapePercentage = 0;
+		static u32 lastTapeCurrentTimeMs = 0;
+		static bool lastTapeLoaded = false;
+		static u32 lastTapeLoadGeneration = 0;
 #if defined(PI1551SUPPORT)
 		if (g_tapePlayer && g_tapePlayer->IsLoaded())
 		{
@@ -540,13 +543,31 @@ void UpdateScreen()
 			g_tapePlayer->GetUIState(tapeState);
 			if (tapeState.isLoaded)
 			{
-				if (tapeState.tapeCounter != lastTapeCounter || tapeState.percentage != lastTapePercentage)
+				// Force refresh when a new tape is loaded (even if values start at 0)
+				if (!lastTapeLoaded || tapeState.loadGeneration != lastTapeLoadGeneration)
 				{
 					lastTapeCounter = tapeState.tapeCounter;
 					lastTapePercentage = tapeState.percentage;
+					lastTapeCurrentTimeMs = tapeState.currentTimeMs;
+					lastTapeLoadGeneration = tapeState.loadGeneration;
 					refreshLCDStatusDisplay = true;
 				}
+
+				if (tapeState.tapeCounter != lastTapeCounter || tapeState.percentage != lastTapePercentage || tapeState.currentTimeMs != lastTapeCurrentTimeMs)
+				{
+					lastTapeCounter = tapeState.tapeCounter;
+					lastTapePercentage = tapeState.percentage;
+					lastTapeCurrentTimeMs = tapeState.currentTimeMs;
+					refreshLCDStatusDisplay = true;
+				}
+				lastTapeLoadGeneration = tapeState.loadGeneration;
+				lastTapeLoaded = true;
 			}
+		}
+		else
+		{
+			lastTapeLoaded = false;
+			lastTapeLoadGeneration = 0;
 		}
 #endif
 

@@ -18,6 +18,7 @@
 
 #include "tape_player.h"
 #include "rpiHardware.h"
+#include "options.h"
 #include <string.h>
 #include <malloc.h>
 #include <limits>
@@ -28,16 +29,16 @@ extern "C"
 #include "rpi-aux.h"
 }
 
+// Options live in main.cpp; treated as read-only configuration after startup.
+extern Options options;
+
 // Static member definitions
 u64* TapePlayer::pulseTimings = nullptr;
 size_t TapePlayer::pulseCount = 0;
 size_t TapePlayer::currentPulseIndex = 0;
 bool TapePlayer::loaded = false;
-#if TAPE_MOTOR_SUPPORT
-bool TapePlayer::motorActive = false;
-#else
-bool TapePlayer::motorActive = true;  // Motor always active when support is disabled
-#endif
+bool TapePlayer::motorActive = true;
+bool TapePlayer::motorAlwaysOn = true;
 bool TapePlayer::atEnd = false;
 bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal) - matches cbmtapepi initial state, first transfer_pulse will start with LOW
 // SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
@@ -47,6 +48,7 @@ bool TapePlayer::senseLineState = false;  // Start with PLAY released (inactive)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
 char TapePlayer::tapFilename[256] = {0};
+static u32 tapeLoadGeneration = 0;
 
 // TAP file header structure
 struct TAPHeader
@@ -68,6 +70,9 @@ struct TAPHeader
 
 TapePlayer::TapePlayer()
 {
+	// tapeMotorAlwaysOn is configured once at boot (options are read before construction)
+	motorAlwaysOn = options.TapeMotorAlwaysOn() != 0;
+	motorActive = motorAlwaysOn;
 }
 
 TapePlayer::~TapePlayer()
@@ -77,12 +82,14 @@ TapePlayer::~TapePlayer()
 
 void TapePlayer::InitializeGPIO()
 {
-#if TAPE_MOTOR_SUPPORT
-	// GPIO6 (MOTOR) - input with pull-up
-	RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_MOTOR_GPIO);
-#else
-	// Motor support disabled - motor is always active
-#endif
+	// Refresh configuration in case options were parsed after construction
+	motorAlwaysOn = options.TapeMotorAlwaysOn() != 0;
+
+	if (!motorAlwaysOn)
+	{
+		// GPIO6 (MOTOR) - input with pull-up
+		RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_MOTOR_GPIO);
+	}
 
 	// GPIO19 (READ) - output, start high.
 	// Hardware does NOT invert READ: GPIO high = CBM high.
@@ -105,11 +112,15 @@ void TapePlayer::InitializeGPIO()
 
 bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 {
+	// Refresh configuration each load (option is set once at boot)
+	motorAlwaysOn = options.TapeMotorAlwaysOn() != 0;
+
 	// Close any existing tape
 	loaded = false;
 	currentPulseIndex = 0;
 	atEnd = false;
-	motorActive = false;
+	// Respect configured motor behaviour (always on vs GPIO-driven)
+	motorActive = motorAlwaysOn;
 	totalPlaybackTimeUs = 0;
 	cumulativePulseTimeUs = 0;
 	FreePulseBuffer();
@@ -141,6 +152,8 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		loaded = true;
 		currentPulseIndex = 0;
 		atEnd = false;
+		cumulativePulseTimeUs = 0;
+		tapeLoadGeneration++;
 		readLineState = true;  // Start with HIGH (output) like cbmtapepi on CBM side, first pulse will toggle to LOW
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
 		// TAPE_SENSE: PLAY button pressed (active state) when TAP is loaded
@@ -148,12 +161,8 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = true;  // PLAY pressed (active)
 		
-#if TAPE_MOTOR_SUPPORT
-		// Motor support enabled - CoreLoop() will wait for MOTOR line to become active
-#else
-		// Motor support disabled - motor is always active, start playback immediately
-		motorActive = true;
-#endif
+		// Motor behaviour from options: when always on, start immediately; otherwise wait for GPIO poll
+		motorActive = motorAlwaysOn;
 		
 		// Wake core 2 AFTER setting all state (loaded, motorActive) so it can start generating pulses
 		__asm("SEV");
@@ -417,30 +426,29 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 
 void TapePlayer::OnMotorChange(bool motorHigh)
 {
-	// This is called from main loop polling
-	// The IRQ handler will pick up the change on next interrupt
-	motorActive = motorHigh;
+	// motorActive is runtime-configured: always on or GPIO-driven
+	motorActive = motorAlwaysOn ? true : motorHigh;
 
-	if (motorActive && loaded && !atEnd)
+	// SENSE logic: keep PLAY pressed whenever a tape is loaded and not at end.
+	// Motor state gates playback separately; stopping the motor should not
+	// auto-release PLAY, because the C16 controls motor but expects PLAY to
+	// stay engaged until the tape finishes or is unloaded.
+	if (loaded && !atEnd)
 	{
-		// Motor started - press PLAY button (active state)
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = true;  // PLAY pressed (active)
-		// Wake core 2 if it's sleeping (waiting for motor to become active)
-		__asm("SEV");
-		// CoreLoop() on core 2 will see motorActive and start/resume pulses.
 	}
-	else if (!motorActive)
+	else
 	{
-		// Motor stopped - release PLAY button (inactive state)
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		senseLineState = false;  // PLAY released (inactive)
-		// Wake core 2 so it can detect motor stopped and go back to sleep
-		__asm("SEV");
 	}
-	// Motor state change handled; CoreLoop() uses motorActive to gate playback.
+
+	// Wake core 2 so it can react to the new motor/SENSE state
+	__asm("SEV");
+	// CoreLoop() uses motorActive to gate playback.
 }
 
 void TapePlayer::GetUIState(TapeUIState& state) const
@@ -448,6 +456,7 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	state.isLoaded = loaded;
 	state.motorActive = motorActive;
 	state.atEnd = atEnd;
+	state.loadGeneration = tapeLoadGeneration;
 	strncpy(state.filename, tapFilename, sizeof(state.filename) - 1);
 	state.filename[sizeof(state.filename) - 1] = '\0';
 	state.currentPulseIndex = static_cast<u32>(currentPulseIndex);  // Debug: current pulse index
@@ -518,18 +527,12 @@ void TapePlayer::Tick10ms()
 {
 	// This is called periodically from main loop
 	// We could update counter here, but GetUIState() calculates it on-demand
-#if TAPE_MOTOR_SUPPORT
-	// Main purpose is to ensure motor state is polled
-	// GPIO logic: 0 (LOW) = motor running, 1 (HIGH) = motor stopped
-	bool motorNow = (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
-	if (motorNow != motorActive)
-	{
+	bool motorNow = motorAlwaysOn ? true
+	                              : (RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
+
+	// When always-on, still call handler to keep SENSE asserted and wake core 2 after load/reset.
+	if (motorAlwaysOn || motorNow != motorActive)
 		OnMotorChange(motorNow);
-	}
-#else
-	// Motor support disabled - motor is always active
-	motorActive = true;
-#endif
 }
 
 void TapePlayer::Reset()
