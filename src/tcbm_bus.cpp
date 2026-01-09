@@ -103,6 +103,10 @@ void TCBM_Bus::ReadGPIOUserInput()
 				SetButtonState(indexEnter, true);
 				break;
 
+			case ButtonUp:
+				SetButtonState(indexEnter, false);
+				break;
+
 			case RotateNegative:
 				SetButtonState(indexUp, true);
 				break;
@@ -111,10 +115,10 @@ void TCBM_Bus::ReadGPIOUserInput()
 				SetButtonState(indexDown, true);
 				break;
 
+			case NoChange:
 			default:
-				SetButtonState(indexEnter, false);
-				SetButtonState(indexUp, false);
-				SetButtonState(indexDown, false);
+				// Don't reset buttons on NoChange - let them remain in their current state
+				// This allows the button state to persist long enough for CheckButtonsBrowseMode() to detect it
 				break;
 
 		}
