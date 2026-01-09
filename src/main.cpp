@@ -1523,6 +1523,11 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 				IEC_Bus::OutputSound = !IEC_Bus::OutputSound;
 			}
 		}
+		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
+		{
+			// Ensure buzzer is turned off when sound counter reaches zero
+			IEC_Bus::OutputSound = false;
+		}
 
 		if (numberOfImages > 1)
 		{
@@ -1831,6 +1836,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
 			}
 		}
+		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
+		{
+			// Ensure buzzer is turned off when sound counter reaches zero
+			TCBM_Bus::OutputSound = false;
+		}
 
 		if (numberOfImages > 1)
 		{
@@ -2099,6 +2109,11 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 				headSoundCounter -= headSoundFreq * 8;
 				IEC_Bus::OutputSound = !IEC_Bus::OutputSound;
 			}
+		}
+		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
+		{
+			// Ensure buzzer is turned off when sound counter reaches zero
+			IEC_Bus::OutputSound = false;
 		}
 
 		if (numberOfImages > 1)
