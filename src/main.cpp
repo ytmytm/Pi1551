@@ -2632,7 +2632,7 @@ static void start_core(int core, func_ptr func)
 }
 #endif
 
-static bool AttemptToLoadROM(char* ROMName)
+[[maybe_unused]] static bool AttemptToLoadROM(char* ROMName)
 {
 	FIL fp;
 	FRESULT res;
@@ -2811,16 +2811,78 @@ static void CheckOptions()
     const char* ROMName1551 = options.GetRomName1551();
     if (ROMName1551)
     {
+        FIL fp;
+        FRESULT res;
         char ROMName1551_copy[256];
         strncpy(ROMName1551_copy, ROMName1551, 255);
         ROMName1551_copy[255] = 0;
         
-        if (AttemptToLoadROM(ROMName1551_copy))
+        char ROMName2[256] = "/roms/";
+        if (ROMName1551_copy[0] != '/')	// not a full path, prepend /roms/
+            strncat (ROMName2, ROMName1551_copy, 240);
+        else
+            ROMName2[0] = 0;
+        
+        if ( (FR_OK == f_open(&fp, ROMName1551_copy, FA_READ))
+            || (FR_OK == f_open(&fp, ROMName2, FA_READ)) )
         {
-            // Copy the loaded ROM from the generic buffer to the 1551-specific buffer
-            memcpy(roms.ROMImage1551, roms.ROMImages[0], ROMs::ROM_SIZE);
-            strncpy(roms.ROMName1551, ROMName1551, 255);
-            roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
+            u32 bytesRead;
+            FSIZE_t fileSize = f_size(&fp);
+            
+            screen.Clear(COLOUR_BLACK);
+            snprintf(tempBuffer, tempBufferSize, "Loading ROM %s\r\n", ROMName1551);
+            screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+            xpos = (widthScreen - widthText) >> 1;
+            ypos = (heightScreen - heightText) >> 1;
+            screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+            
+            SetACTLed(true);
+            
+            // Determine ROM size: 16k (16384) or 32k (32768)
+            if (fileSize == (FSIZE_t)32768)
+            {
+                res = f_read(&fp, roms.ROMImage1551, 32768, &bytesRead);
+                if (res == FR_OK && bytesRead == 32768)
+                {
+                    roms.ROM1551Size = 32768;
+                }
+            }
+            else if (fileSize == (FSIZE_t)16384)
+            {
+                // Default to 16k
+                res = f_read(&fp, roms.ROMImage1551, 16384, &bytesRead);
+                if (res == FR_OK && bytesRead == 16384)
+                {
+                    roms.ROM1551Size = 16384;
+                }
+            }
+            else
+            {
+                // Invalid size
+                res = FR_INVALID_PARAMETER;
+                bytesRead = 0;
+            }
+            
+            SetACTLed(false);
+            
+            if (res == FR_OK && (bytesRead == 16384 || bytesRead == 32768))
+            {
+                strncpy(roms.ROMName1551, ROMName1551, 255);
+                roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
+            }
+            else
+            {
+                snprintf(tempBuffer, tempBufferSize, "Invalid 1551 ROM file size!\r\nExpected 16k or 32k, got %lu bytes.", (unsigned long)bytesRead);
+                screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+                xpos = (widthScreen - widthText) >> 1;
+                ypos = (heightScreen - heightText) >> 1;
+                screen.Clear(COLOUR_RED);
+                screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+                f_close(&fp);
+                do { } while (1);
+            }
+            
+            f_close(&fp);
         }
         else
         {

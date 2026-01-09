@@ -25,7 +25,8 @@ class ROMs
 {
 public:
 	ROMs() :
-		currentROMIndex(0)
+		currentROMIndex(0),
+		ROM1551Size(16384)  // Default to 16k
 	{
 	}
 
@@ -37,7 +38,11 @@ public:
 	}
 	inline u8 Read1551(u16 address)
 	{
-		return ROMImage1551[address & 0x7fff];
+		// For 16k ROM: mask to 0x3fff, for 32k ROM: mask to 0x7fff
+		if (ROM1551Size == 32768)
+			return ROMImage1551[address & 0x7fff];
+		else
+			return ROMImage1551[address & 0x3fff];
 	}
 	inline u8 Read1581(u16 address)
 	{
@@ -47,7 +52,7 @@ public:
 	void ResetCurrentROMIndex();
 
 	static const int ROM_SIZE = 16384;
-	static const int ROM1551_SIZE = 16384;
+	static const int ROM1551_SIZE = 32768;  // Support both 16k and 32k ROMs
 	static const int ROM1581_SIZE = 16384 * 2;
 	static const int MAX_ROMS = 7;
 
@@ -61,6 +66,7 @@ public:
 
 	unsigned currentROMIndex;
 	unsigned lastManualSelectedROMIndex;
+	unsigned ROM1551Size;  // Actual size of loaded ROM: 16384 (16k) or 32768 (32k)
 
 	unsigned GetLongestRomNameLen() { return longestRomNameLen; }
 	unsigned UpdateLongestRomNameLen(unsigned maybeLongest);
