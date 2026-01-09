@@ -159,11 +159,12 @@ public:
 //
 //  The GPIO pins used for the rotary encoder are specified when initializing
 //  the class.  However, it is probably a good idea to reuse the same pins as
-//  the original Pi1541 pushbuttons:
+//  the original Pi1541/Pi1551 pushbuttons:
 //
-//     GPIO 22	-  Menu up       -  Encoder pin A (CLK)
-//     GPIO 23	-  Menu down     -  Encoder pin B (DT)
-//     GPIO 27  -  Enter/Select  -  Encoder pushbutton (SW)
+//     GPIO 27	-  Encoder pin A (CLK)  -  SW1
+//     GPIO 22  -  Encoder pin B (DT)   -  SW2
+//     GPIO 17  -  Encoder pushbutton   -  SW3 (TCBM/Pi1551)
+//     GPIO 23  -  Encoder pushbutton   -  SW3 (IEC/Pi1541)
 //
 //
 //  USAGE:
@@ -175,9 +176,10 @@ public:
 //  To use the RotaryEncoder, instance the class and initialize with the desired
 //  GPIO pins like this:
 //
-//     //Initialize using CLK on GPIO22, DT on GPIO32 and SW on GPIO27  
+//     //Initialize using CLK on GPIO27, DT on GPIO22 and SW on GPIO17 (TCBM) or GPIO23 (IEC)
 //     RotaryEncoder rotaryEncoder;
-//     rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO23, RPI_GPIO27);
+//     rotaryEncoder.Initialize(RPI_GPIO27, RPI_GPIO22, RPI_GPIO17);  // TCBM/Pi1551
+//     // rotaryEncoder.Initialize(RPI_GPIO27, RPI_GPIO22, RPI_GPIO23);  // IEC/Pi1541
 //
 //  Monitor the encoder by calling the Poll() method during your main processing
 //  loop.  The polling logic is constrained by only evaluating GPLEV0, which
