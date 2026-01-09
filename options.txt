@@ -45,6 +45,9 @@ OnResetChangeToStartingFolder = 1
 // Tape motor behaviour: 1 = motor always active, 0 = read TAPE_MOTOR_GPIO
 //tapeMotorAlwaysOn = 1
 
+// Skip motor spin-up delay for 1551: 1 = skip delay (trap at PC=$FA33 changes A from $A7 to $01), 0 = normal delay
+//skipMotorSpinUpDelay = 0
+
 // If you use FB64 (CBMFileBrowser) and want to use a fast loader cartridge (AR6, EFL, FC3) to load it then use this option to automatically mount it. 
 //AutoMountImage = fb.d64 // You MUST have a disk image in \1541 with this filename
 // If you use FB64 (CBMFileBrowser) and want Pi1541 to send all file names as lower case.

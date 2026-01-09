@@ -80,9 +80,11 @@
 - rebrand to Pi1551
 - credit myself where appropriate
 - provide fully prepared sd card boot partition for download
+- correctly setup fastboot (reset starts at $e9b5, ends after 1012787 when PC reaches mainloop at eabd)
+- trap/patch ROM to ignore motor spin up delay
 - add traps in ROM code to handle U0 commands to support tcbm2sd fastload protocol (all the commands)
 - on safe tcbm2sd > 1.4 the hat could drive line 16 and /RESET to enable/disable Arduino
-- backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
++ backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback

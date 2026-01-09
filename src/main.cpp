@@ -1741,6 +1741,17 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			if (pi1551.m6502.SYNC())	// About to start a new instruction.
 			{
 				pc = pi1551.m6502.GetPC();
+				
+				// Motor spin-up delay skip trap: if PC is at 0xFA33 and accumulator is 0xA7, change it to 0x01
+				// This skips the motor spin-up delay in the 1551 ROM
+				if (options.SkipMotorSpinUpDelay() && pc == 0xFA33)
+				{
+					if (pi1551.m6502.GetA() == 0xA7)
+					{
+						pi1551.m6502.SetA(0x01);
+					}
+				}
+				
 				// See if the emulated cpu is executing CD:_ (ie back out of emulated image) //XXXMW need something here
 				if (snoopIndex == 0 && (pc == SNOOP_CD_CBM || pc == SNOOP_CD_JIFFY_BOTH || pc == SNOOP_CD_JIFFY_DRIVEONLY)) snoopPC = pc;
 
