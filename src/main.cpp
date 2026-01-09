@@ -64,6 +64,9 @@ unsigned versionMinor = 24;
 // During these cycles the CPU is executing the ROM self test routines (these do not need to be cycle accurate)
 // ***1581*** Skip to AFCA (how many cycles is this?)
 #define FAST_BOOT_CYCLES 1003061
+// For 1551: reset starts at $e9b5, ends after 1012787 cycles when PC reaches mainloop at $eabd
+#define FAST_BOOT_CYCLES_1551 1012787
+#define FAST_BOOT_PC_1551 0xEABD
 
 #define COLOUR_BLACK RGBA(0, 0, 0, 0xff)
 #define COLOUR_WHITE RGBA(0xff, 0xff, 0xff, 0xff)
@@ -1628,11 +1631,12 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		refreshOutsAfterCPUStep = false;
 	}
  */
-	// Quickly get through 1541's self test code.
-	// This will make the emulated 1541 responsive to commands asap.
+	// Quickly get through 1551's self test code.
+	// This will make the emulated 1551 responsive to commands asap.
 	// During this time we don't need to set outputs.
+	// Boot ends when PC reaches mainloop at $eabd or after FAST_BOOT_CYCLES_1551 cycles.
 
-	while (cycleCount < FAST_BOOT_CYCLES)
+	while (cycleCount < FAST_BOOT_CYCLES_1551)
 	{
 		TCBM_Bus::ReadEmulationMode1551();
 
@@ -1643,6 +1647,13 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		pi1551.Update();
 
 		cycleCount++;
+
+		// Check if we've reached the mainloop (boot complete)
+		// PC at $eabd indicates the drive has finished booting and is in the main wait loop
+		if (pi1551.m6502.GetPC() == FAST_BOOT_PC_1551)
+		{
+			break;
+		}
 	}
 
 	// Self test code done. Begin realtime emulation.
