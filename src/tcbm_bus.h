@@ -229,12 +229,12 @@ public:
 		{
 			//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 			if (TCBM_Bus::rotaryEncoderInvert == true)
-			{ // button 2 / 1 / 3 (A=sw2, B=sw1, SW=sw3)
-				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON1, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON3);
+			{ // button 2 / 3 / 1 (A=sw2, B=sw3, SW=sw1)
+				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON1);
 			}
 			else
-			{ // button 1 / 2 / 3 (A=sw1, B=sw2, SW=sw3)
-				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON1, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON3);
+			{ // button 3 / 2 / 1 (A=sw3, B=sw2, SW=sw1)
+				TCBM_Bus::rotaryEncoder.Initialize((rpi_gpio_pin_t)PIGPIO_IN_BUTTON3, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON2, (rpi_gpio_pin_t)PIGPIO_IN_BUTTON1);
 			}
 		}
 

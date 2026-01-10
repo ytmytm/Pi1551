@@ -80,6 +80,13 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
         return RESET;
     }
 
+    // Honor pending POP_DIR requested by ROM traps before any further processing
+    if (pendingPopDir)
+    {
+        pendingPopDir = false;
+        return POP_DIR;
+    }
+
     updateAction = NONE;
 
     if (selectedImageName[0] != 0) updateAction = IMAGE_SELECTED;
@@ -185,6 +192,7 @@ void TCBM_Commands::ResetStateMachine()
     activeChannel    = 0;
     statusActive     = false;
     directoryActive  = false;
+    pendingPopDir    = false;
     captureOutput    = false;
     captureChannel   = 0;
     captureLength    = 0;
@@ -1458,6 +1466,15 @@ void TCBM_Commands::SaveFile()
 void TCBM_Commands::LoadDirectory()
 {
     ServiceDirectoryState();
+}
+
+void TCBM_Commands::RequestPopDir()
+{
+    // Defer POP_DIR so SimulateIECUpdate can return it once we're back in browse mode
+    pendingPopDir = true;
+    // Cancel any pending image selection so we don't auto-mount again
+    selectedImageName[0] = 0;
+    filInfoSelectedImage.fname[0] = 0;
 }
 
 

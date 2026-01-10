@@ -1105,6 +1105,8 @@ void UpdateScreen()
 #endif
 }
 
+#if !defined(PI1551SUPPORT) || defined(PI1581SUPPORT)
+// Snoop function is only used by 1541 and 1581, not by 1551
 static bool Snoop(u8 a)
 {
 	if (a == snoopBackCommand[snoopIndex] || (snoopIndex == 2 && (a == snoopBackCommand[3])))
@@ -1127,6 +1129,7 @@ static bool Snoop(u8 a)
 	}
 	return false;
 }
+#endif
 
 //--------------------------------------------------------------------------------------
 // This is an implementation of FNV-1a
@@ -1751,18 +1754,63 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 						pi1551.m6502.SetA(0x01);
 					}
 				}
-				
-				// See if the emulated cpu is executing CD:_ (ie back out of emulated image) //XXXMW need something here
-				if (snoopIndex == 0 && (pc == SNOOP_CD_CBM || pc == SNOOP_CD_JIFFY_BOTH || pc == SNOOP_CD_JIFFY_DRIVEONLY)) snoopPC = pc;
 
-				if (pc == snoopPC)
+				// CD command trap: intercept CD_/CD:_/CD../CD:.. commands at PC=0xc230
+				// Input buffer length is at 0xa4, buffer data starts at 0x0200
+				// If we detect a CD command, set buffer length to 0 to make ROM ignore it
+				// and request a directory pop in browser mode
+				if (pc == 0xc230)
 				{
-					if (Snoop(pi1551.m6502.GetA()))
+					u8 bufferLen = peek6502_1551(0xa4);
+					if (bufferLen >= 3)  // At least "CD_" or "CD."
 					{
-						emulating = IEC_COMMANDS;
-						exitReason = EXIT_CD;
+						u8 byte0 = peek6502_1551(0x0200);
+						u8 byte1 = peek6502_1551(0x0201);
+						u8 byte2 = peek6502_1551(0x0202);
+
+						bool isPopDir = false;
+
+						if (byte0 == 0x43 && byte1 == 0x44) // "CD"
+						{
+							if (byte2 == 0x5F) // "CD_"
+							{
+								isPopDir = true;
+							}
+							else if (byte2 == 0x2E && bufferLen >= 4) // "CD.."
+							{
+								u8 byte3 = peek6502_1551(0x0203);
+								if (byte3 == 0x2E)
+									isPopDir = true;
+							}
+							else if (byte2 == 0x3A && bufferLen >= 4) // "CD:..."
+							{
+								u8 byte3 = peek6502_1551(0x0203);
+								if (byte3 == 0x5F) // "CD:_"
+								{
+									isPopDir = true;
+								}
+								else if (byte3 == 0x2E && bufferLen >= 5) // "CD:.."
+								{
+									u8 byte4 = peek6502_1551(0x0204);
+									if (byte4 == 0x2E)
+										isPopDir = true;
+								}
+							}
+						}
+
+						if (isPopDir)
+						{
+							// Clear ROM input buffer so it ignores the command
+							write6502_1551(0xa4, 0);
+
+							// Request directory pop in browser mode and exit emulation
+							m_TCBM_Commands.RequestPopDir();
+							emulating = IEC_COMMANDS;
+							exitReason = EXIT_CD;
+						}
 					}
 				}
+
 			}
 			pi1551.m6502.Step();
 		}

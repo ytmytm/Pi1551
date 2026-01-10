@@ -376,12 +376,12 @@ public:
 		{
 			//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 			if (IEC_Bus::rotaryEncoderInvert == true)
-			{ // A=sw2, B=sw1, SW=sw3
-				IEC_Bus::rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO27, RPI_GPIO23);
+			{ // A=sw2, B=sw3, SW=sw1
+				IEC_Bus::rotaryEncoder.Initialize(RPI_GPIO22, RPI_GPIO23, RPI_GPIO27);
 			}
 			else
-			{ // A=sw1, B=sw2, SW=sw3
-				IEC_Bus::rotaryEncoder.Initialize(RPI_GPIO27, RPI_GPIO22, RPI_GPIO23);
+			{ // A=sw3, B=sw2, SW=sw1
+				IEC_Bus::rotaryEncoder.Initialize(RPI_GPIO23, RPI_GPIO22, RPI_GPIO27);
 			}
 		}
 

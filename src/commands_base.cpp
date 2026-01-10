@@ -1147,6 +1147,10 @@ void Commands_Base::CD(int partition, char* filename)
 	{
 		updateAction = POP_DIR;
 	}
+	else if (filenameEdited[0] == '.' && filenameEdited[1] == '.' && len == 2)
+	{
+		updateAction = POP_DIR;
+	}
 	else
 	{
 		if (displayingDevices)

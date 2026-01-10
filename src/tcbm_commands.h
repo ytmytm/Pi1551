@@ -71,6 +71,9 @@ public:
     static int  debugWriteStep;
     static char debugWriteBuffer[64];
 
+	// Allow traps to request a directory pop without exposing CD()
+	void RequestPopDir();
+
 protected:
 	bool WriteSerialPortByte(u8 data, bool eoi) override;
 	bool WriteSerialPortByteWithStatus(u8 data, u8 status);
@@ -149,6 +152,7 @@ protected:
 	u8  activeChannel;
 	bool statusActive;
 	bool directoryActive;
+	bool pendingPopDir;
 	bool captureOutput;
 	u8  captureChannel;
 	u32 captureLength;
