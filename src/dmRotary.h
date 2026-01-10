@@ -227,8 +227,7 @@ private:
     RotaryPin _clockPin;
     RotaryPin _dataPin;
 
-    int _currentRotaryState = 0;
-    int _currentRotarySequence = 0;
+    bool _currentRotaryState = false;  // Last CLK pin state (for edge detection)
 
     // Private methods
 

@@ -88,6 +88,30 @@ void TCBM_Bus::ReadGPIOUserInput()
 		int indexBack = InputMappings::INPUT_BUTTON_BACK;
 		int indexInsert = InputMappings::INPUT_BUTTON_INSERT;
 
+		// Static counters to track rotation button hold duration
+		// Buttons are held for a few cycles to ensure they are detected
+		static int rotationUpCounter = 0;
+		static int rotationDownCounter = 0;
+		const int ROTATION_BUTTON_HOLD_CYCLES = 5; // Hold button for 5 cycles
+
+		// Decrement counters and reset buttons when counter reaches zero
+		if (rotationUpCounter > 0)
+		{
+			rotationUpCounter--;
+			if (rotationUpCounter == 0)
+			{
+				SetButtonState(indexUp, false);
+			}
+		}
+		if (rotationDownCounter > 0)
+		{
+			rotationDownCounter--;
+			if (rotationDownCounter == 0)
+			{
+				SetButtonState(indexDown, false);
+			}
+		}
+
 		//Poll the rotary encoder
 		//
 		// Note: If the rotary encoder returns any value other than 'NoChange' an
@@ -109,16 +133,17 @@ void TCBM_Bus::ReadGPIOUserInput()
 
 			case RotateNegative:
 				SetButtonState(indexUp, true);
+				rotationUpCounter = ROTATION_BUTTON_HOLD_CYCLES;
 				break;
 
 			case RotatePositive:
 				SetButtonState(indexDown, true);
+				rotationDownCounter = ROTATION_BUTTON_HOLD_CYCLES;
 				break;
 
 			case NoChange:
 			default:
-				// Don't reset buttons on NoChange - let them remain in their current state
-				// This allows the button state to persist long enough for CheckButtonsBrowseMode() to detect it
+				// No rotation detected - buttons will be reset in next cycle if they were set
 				break;
 
 		}

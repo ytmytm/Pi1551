@@ -114,88 +114,38 @@ rotary_result_t RotaryEncoder::Poll(unsigned gplev0)
 
 	}
 
-	//Decode rotation 
+	//Decode rotation - simple method: detect CLK edge and check DT state
 	if (result == NoChange)
 	{
+		// Read current pin states (active low, so == 0 means pressed/active)
+		bool clockState = (gplev0 & _clockPin.GetGpioPinMask()) == 0;
+		bool dataState = (gplev0 & _dataPin.GetGpioPinMask()) == 0;
 
-		//Debounce clock and determine state
-		_clockPin.Update((gplev0 & _clockPin.GetGpioPinMask()) == 0);
-		bool clockState = _clockPin.GetState();
-
-		//Debounce data and determine state
-		_dataPin.Update((gplev0 & _dataPin.GetGpioPinMask()) == 0);
-		bool dataState = _dataPin.GetState();
-
-		//Detect rotary state change
-		int rotaryState = (clockState << 1) | dataState;
-		if (rotaryState != _currentRotaryState)
+		// Simple method: detect CLK rising edge (LOW to HIGH) and check DT state
+		// This detects each "click" of the encoder
+		if (clockState != _currentRotaryState)
 		{
-
-			//Update rotary sequence
-			_currentRotarySequence = (_currentRotarySequence << 2) | rotaryState;
-
-			if (rotaryState == 0)
+			// CLK state changed
+			if (clockState)  // CLK went from LOW to HIGH (rising edge)
 			{
-
-				switch (_currentRotarySequence)	
+				// On rising edge of CLK, check DT state to determine direction
+				// If DT != CLK (DT is LOW when CLK is HIGH) -> clockwise
+				// If DT == CLK (DT is HIGH when CLK is HIGH) -> counter-clockwise
+				if (!dataState)  // DT is LOW (different from CLK which is HIGH) -> clockwise
 				{
-
-					//Detect positive (clockwise) rotation							
-					//
-					//	0xb4 - 00 10 11 01 00 - Received and decoded perfect sequence
-					//	0x2c -    00 10 11 00 - Missed data but decoded unique sequence
-					//	0x34 -    00 11 01 00 - Missed data but decoded unique sequence
-					//  0xb8 - 00 10 11 10 00 - Invalid sequence, using best guess
-					//
-					case 0xb4:
-					case 0x2c:
-					case 0x34:
-					case 0xb8:
-						result = RotatePositive;
-						break;
-					
-					//Detect negative (counter-clockwise) rotation
-					//
-					//	0x78 - 00 01 11 10 00 - Received and decoded perfect sequence
-					//	0x1c -    00 01 11 00 - Missed data but decoded unique sequence
-					//	0x38 -    00 11 10 00 - Missed data but decoded unique sequence
-					//  0x74 - 00 01 11 01 00 - Invalid sequence, using best guess
-					//
-					case 0x78:
-					case 0x1c:
-					case 0x38:
-					case 0x74:
-						result = RotateNegative;
-						break;
-
-					#ifdef DM_ROTARY_DEBUG
-
-					//Unable to decode sequence
-					//
-					// 0x0c -       00 11 00 - No way to determine rotation direction
-					//
-					default:
-						if (_currentRotarySequence != 0x0c)
-						{
-							sprintf(message, "decode failed: %x\r\n", _currentRotarySequence);
-							WriteToMiniUart(message);
-						}
-						break;
-
-					#endif
-
+					result = RotatePositive;
 				}
-
-				//Clear rotary sequence
-				_currentRotarySequence = 0;
-
+				else  // DT is HIGH (same as CLK which is HIGH) -> counter-clockwise
+				{
+					result = RotateNegative;
+				}
 			}
+			// Only process on rising edge to avoid double-counting
+			// Falling edge is ignored for simplicity
 
-			//Update rotary state
-			_currentRotaryState = rotaryState;
-
+			// Update state (using _currentRotaryState as last clock state)
+			_currentRotaryState = clockState;
 		}
-
 	}
 
 	#ifdef DM_ROTARY_DEBUG
