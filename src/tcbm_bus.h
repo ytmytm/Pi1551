@@ -244,14 +244,15 @@ public:
 	{
 		if (input)
 		{
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO1, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO2, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO3, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO4, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO5, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO6, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO7, FS_INPUT);
-			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_DIO8, FS_INPUT);
+			// Pull-up when input so that when Plus/4 (tcbm2sd) releases bus (Z) we read $FF as 1551 expects
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO1);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO2);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO3);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO4);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO5);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO6);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO7);
+			RPI_SetGpioInputPullUp((rpi_gpio_pin_t)PIGPIO_DIO8);
 		}
 		else
 		{

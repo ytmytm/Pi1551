@@ -183,23 +183,35 @@ void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
     if (TPI)
     {
         IOPort* portC = TPI->GetPortC();
+        u8 ddrC = portC->GetDirection();
 
         PI_DAV  = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
-        portC->SetInput(0x80, PI_DAV); // DAV is bit 7
+        // Port C: only bits 0,1,2,3,7 come from TCBM GPIO (ST0, ST1, DEV, ACK, DAV).
+        // Bits 4,5,6 (MODE, DEVNUM, SYNC) are set by drive emulation (Drive1551) - do not overwrite.
+        u8 portCFromGPIO = (PI_DAV ? 0x80 : 0) |
+            ((gplev0 & PIGPIO_MASK_OUT_STATUS0) ? 0x01 : 0) |
+            ((gplev0 & PIGPIO_MASK_OUT_STATUS1) ? 0x02 : 0) |
+            ((gplev0 & PIGPIO_MASK_OUT_DEV) ? 0x04 : 0) |
+            ((gplev0 & PIGPIO_MASK_OUT_ACK) ? 0x08 : 0);
+        u8 portCInput = (portC->GetOutput() & ddrC) |
+            ((portCFromGPIO & 0x8Fu) | (portC->GetInput() & 0x70u)) & (u8)~ddrC;
+        portC->SetInput(portCInput);
 
         IOPort* portA = TPI->GetPortA();
-        DataSetToOut = portA->GetDirection() != 0; // we treat port A on byte level, not bit level
-        if (!DataSetToOut) {
-            PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
-                ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
-            portA->SetInput(PI_Data);
-        }
+        u8 ddrA = portA->GetDirection();
+        DataSetToOut = ddrA != 0;
+        // Port A input bits from GPIO (same as port C), only where DDRA says input
+        PI_Data = ((gplev0 & PIGPIO_MASK_DIO1) ? 0x01 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO2) ? 0x02 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO3) ? 0x04 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO4) ? 0x08 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO5) ? 0x10 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO6) ? 0x20 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO7) ? 0x40 : 0x00) |
+            ((gplev0 & PIGPIO_MASK_DIO8) ? 0x80 : 0x00);
+        // For 6523: output bits use latch (GetOutput), input bits use GPIO (PI_Data)
+        u8 portARead = (portA->GetOutput() & ddrA) | (PI_Data & (u8)~ddrA);
+        portA->SetInput(portARead);
 
         if (updateTIAStatus)
         {
@@ -262,7 +274,12 @@ void TCBM_Bus::RefreshOuts1551(void)
 		{
 			u8 m = masksA[i];
 			if (changed & m)
-				RPI_SetGpioPinFunction(pinsA[i], (dir & m) ? FS_OUTPUT : FS_INPUT);
+			{
+				if (dir & m)
+					RPI_SetGpioPinFunction(pinsA[i], FS_OUTPUT);
+				else
+					RPI_SetGpioInputPullUp(pinsA[i]);  // pull-up so when Plus/4 (tcbm2sd) releases bus we read $FF
+			}
 			if (dir & m)
 			{
 				if (out & m) set |= gpioMasksA[i]; else clear |= gpioMasksA[i];
@@ -284,7 +301,12 @@ void TCBM_Bus::RefreshOuts1551(void)
 		{
 			u8 m = masksC[i];
 			if (changedC & m)
-				RPI_SetGpioPinFunction(pinsC[i], (ddrC & m) ? FS_OUTPUT : FS_INPUT);
+			{
+				if (ddrC & m)
+					RPI_SetGpioPinFunction(pinsC[i], FS_OUTPUT);
+				else
+					RPI_SetGpioInputPullUp(pinsC[i]);  // pull-up when input so released line reads high
+			}
 			if (ddrC & m)
 			{
 				if (pc & m) set |= gpioMasksC[i]; else clear |= gpioMasksC[i];
@@ -314,18 +336,18 @@ void TCBM_Bus::RefreshOuts1551(void)
 	}
 }
 
-// called whenever someone calls SetOutput on PortA
+// called whenever the emulated 6502 writes to port A ($4000) or DDRA ($4003)
 // pUserData is a pointer given when function is attached
 // status is status & ddr, we should ignore it
 void TCBM_Bus::PortA_OnPortOut(void* pUserData, unsigned char status)
 {
-
 	if (TPI && port)
 	{
 		TPI_Data = port->GetOutput();
-		DataSetToOut = port->GetDirection() !=0;
+		DataSetToOut = port->GetDirection() != 0;
+		// Must refresh real GPIO so direction and levels match the TPI port (e.g. DDRA=0 -> pins input+pull-up).
+		RefreshOuts1551();
 	}
-
 }
 
 void TCBM_Bus::Reset(void)
@@ -343,4 +365,7 @@ void TCBM_Bus::Reset(void)
 	PI_Status = 0;
 	PI_ACK = false;
 
+	// TPI/port are already reset (all directions 0 = input). Sync GPIO to that state so DIO pins are input+pull-up.
+	if (TPI && port)
+		RefreshOuts1551();
 }

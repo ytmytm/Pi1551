@@ -1616,6 +1616,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	TCBM_Bus::TPI = &pi1551.TPI;
 	TCBM_Bus::port = pi1551.TPI.GetPortA();
 	pi1551.Reset();	// will call TCBM_Bus::Reset();
+	TCBM_Bus::RefreshOuts1551();	// sync GPIO to TPI initial state (DDRA=0 -> input+pull-up) before any cycles
 	// Reset tape player on C16 reset
 	if (g_tapePlayer)
 		g_tapePlayer->Reset();
@@ -1660,6 +1661,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	}
 
 	// Self test code done. Begin realtime emulation.
+	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
+	TCBM_Bus::RefreshOuts1551();
 
 #if defined(RPI2)
 	asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctBefore));

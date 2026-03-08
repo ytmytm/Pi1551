@@ -44,11 +44,14 @@
     - arduino does read only, but we can use the diskimage.c library for read/write
         - write support for d64/71/81 was removed when porting to arduino, need to be brought back
         - d82/d80 need this developed according to VICE disk image docs, until then fail with WRITE PROTECT ON
-- add missing DOS1551 traps
++ (done) add missing DOS1551 traps
     - CD.. or CD<-
     - fastboot (skip some amount of cycles)
     - spin up skip (skip delay when motor starts up)
-- *any* TPI access clears byte ready, not only reads but also writes
++ (done) *any* TPI access clears byte ready, not only reads but also writes
++ (done) bitfire loader, it requires that 1551 porta bits on input are pulled high when other end is high-z - but RPi pullups are not sufficient
+  (it also requires that status bits can switch direction but that was already handled in tcbm2sd)
+  (external pullups to 3.3V on DIO1-8 required - just in case they should be on all lines: ST0/ST1/DAV/ACK)
 
 # Tests
 
@@ -60,7 +63,6 @@
 - (done) test if /RESET_3_3V needs a pullup to 3.3V - YES
 - (done) test if DLOAD after reset would work if `OPEN15,8,15,"I":CLOSE15` is issued or `?DS$`
 - (done) stick in parobek, test 1551 fastloader
-    ? stays on READY with no cursor after load, why ?
 - (done) test if switching to drive 9 works
 - (done) save tested
 - (done) base and -clean versions tested
@@ -80,10 +82,9 @@
 - rebrand to Pi1551
 - credit myself where appropriate
 - provide fully prepared sd card boot partition for download
-- correctly setup fastboot (reset starts at $e9b5, ends after 1012787 when PC reaches mainloop at eabd)
-- trap/patch ROM to ignore motor spin up delay
 - add traps in ROM code to handle U0 commands to support tcbm2sd fastload protocol (all the commands)
-- on safe tcbm2sd > 1.4 the hat could drive line 16 and /RESET to enable/disable Arduino
++ correctly setup fastboot (reset starts at $e9b5, ends after 1012787 when PC reaches mainloop at eabd)
++ trap/patch ROM to ignore motor spin up delay
 + backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
