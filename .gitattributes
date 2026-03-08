@@ -1,0 +1,10 @@
+# Normalize line endings to LF (Unix-style) for all text files.
+* text=auto eol=lf
+
+# Explicitly treat these as binary (no conversion).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bin binary
