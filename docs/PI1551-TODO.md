@@ -52,6 +52,8 @@
 + (done) bitfire loader, it requires that 1551 porta bits on input are pulled high when other end is high-z - but RPi pullups are not sufficient
   (it also requires that status bits can switch direction but that was already handled in tcbm2sd)
   (external pullups to 3.3V on DIO1-8 required - just in case they should be on all lines: ST0/ST1/DAV/ACK)
+- 'VDC Challenge' (and some other gfx slideshows) use HYPALOAD7 fastloader, that relies on timing; a commented-out fix is in main.cpp (a delay loop)
+   but the fix breaks bitfire based loaders - is there another way to sync to 2MHz on RPI3?
 
 # Tests
 

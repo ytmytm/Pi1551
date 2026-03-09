@@ -1816,6 +1816,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 			}
 			pi1551.m6502.Step();
+			// a delay here in the 2nd cycle - of at least 50, up to 100 fixes 'VDC Challenge' loader (HYPALOAD 7), but breaks Bitfire, WHY? (and why in cycle2MHz==1 and not 0?)
+//			if (cycle2MHz == 1) {
+//				for (volatile unsigned i = 0; i < 100; i++) ;
+//			}
+			TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
 		}
 		// CPU does 2 cycles (2MHz), drive hardware is updated only once per 1MHz cycle
 		// TCBM outputs are outputted also only once per 1MHz cycle, hopefully this doesn't break any software
