@@ -55,6 +55,57 @@
 - 'VDC Challenge' (and some other gfx slideshows) use HYPALOAD7 fastloader, that relies on timing; a commented-out fix is in main.cpp (a delay loop)
    but the fix breaks bitfire based loaders - is there another way to sync to 2MHz on RPI3?
 
+this branch: timing-exploration: 20260321
+- cycle counter emitted on GPIO1 (28)
+- still a lot of jitter
+- pi1551.Update may take over 400ns (350-450) from measurements
+- can interleave that between 2MHz cycles (not at the end)
+- bitfire still works, VDC challenge/corruption doesn't (maybe then would with different delay? but the delay makes no sense)
+- gpio input/output is updated only when 6502 needs it / does it
+- but we're not using cycle timer to keep 50% duty - when disk is spinning we won't be able to keep 50% anyway
+- HDMI introduces a lot of jitter
+- again (like in pi-tap-support-devel* branches) is seems the only way for stable 1MHz/50% duty is to put pi1551.Update() on separate core and use cycle timer (from RPI2 on RPI3) to keep 50% duty cycle
+- still don't understand why in the previous commit, VDC challenge works with drive emulation almost half as slow
+
+# Timings (relative to 83b3e75b577dedec378b96b8fcdebc59185cd355 )
+
+- timing on gpio1 (28) with low just before the cycle2MHz loop starts
+  and high just after 2nd round (with housekeeping and sync to 1MHz)
+  with extra delay for cycle=1 enabled with busy loop for 100 iterations (VDC challenge works)
+  with delay 100 when drive idle
+  low: short 13%  high: long 87%   f: 798-811Hz (unstable)
+  with delay 100 when drive busy
+  low: short 9%  high: long 91%   f: 650Hz (unstable)
+  with delay 50 when drive idle
+  low: short 16%  high: long 84%   f: 1000Hz (unstable)
+  with delay 50 when drive busy
+  low: short 11%  high: long 89%   f: 770Hz (unstable)
+  without delay (Bitfire works) busy/idle similar
+  low: short 15% high: long 85% f:1000Hz (unstable)
+  without delay, pi1551 update moved between cycle 1/2 inside loop
+  low: short 20% high: long 80% f:1000Hz (unstable) (idle)
+  low:  50% high: 50% f:988Hz (unstable) busy (VDC doesn't work, bitfire works)
+  with delay 100, pi1551 update moved between cycle 1/2 inside loop (VDC works, corruption too, Bitfire doesn't)
+  low 15% high 85%, 800Hz (idle)
+  low 33% high 67%, 620Hz (busy)
+
+	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
+	RPI_SetGpioHi(RPI_GPIO1);
+
+		// Timing marker on GPIO1:
+		// low = first 2MHz cycle, high = second cycle + housekeeping.
+		RPI_SetGpioLo(RPI_GPIO1);
+		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
+		{
+			if (cycle2MHz == 1)
+			{
+				RPI_SetGpioHi(RPI_GPIO1);
+			}
+			if (pi1551.m6502.SYNC())	// About to start a new instruction.
+
+pi1551.Update - ~350-400ns when drive busy and spinning
+
+
 # Tests
 
 - test if h/w reset doesn't end emulation, should just reset drive
