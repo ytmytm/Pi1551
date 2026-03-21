@@ -77,6 +77,12 @@ u8 TCBM_Bus::lastOutC = 0xff; // invalid
 bool TCBM_Bus::lastOutputLED = false;
 bool TCBM_Bus::lastOutputSound = false;
 
+void TCBM_Bus::PollGPIOInputs1551(void)
+{
+	gplev0 = read32(ARM_GPIO_GPLEV0);
+	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
+}
+
 void TCBM_Bus::ReadGPIOUserInput()
 {
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
@@ -345,8 +351,7 @@ void TCBM_Bus::PortA_OnPortOut(void* pUserData, unsigned char status)
 	{
 		TPI_Data = port->GetOutput();
 		DataSetToOut = port->GetDirection() != 0;
-		// Must refresh real GPIO so direction and levels match the TPI port (e.g. DDRA=0 -> pins input+pull-up).
-		RefreshOuts1551();
+		// GPIO refresh: write6502_1551 / write6502ExtraRAM_1551 call RefreshOuts1551() after TPI.Write.
 	}
 }
 

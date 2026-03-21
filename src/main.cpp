@@ -1578,6 +1578,75 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 #endif
 
 #if defined(PI1551SUPPORT)
+static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
+{
+	// Motor spin-up delay skip trap: if PC is at 0xFA33 and accumulator is 0xA7, change it to 0x01
+	// This skips the motor spin-up delay in the 1551 ROM
+	if (options.SkipMotorSpinUpDelay() && pc == 0xFA33)
+	{
+		if (pi1551.m6502.GetA() == 0xA7)
+		{
+			pi1551.m6502.SetA(0x01);
+		}
+	}
+
+	// CD command trap: intercept CD_/CD:_/CD../CD:.. commands at PC=0xc230
+	// Input buffer length is at 0xa4, buffer data starts at 0x0200
+	// If we detect a CD command, set buffer length to 0 to make ROM ignore it
+	// and request a directory pop in browser mode
+	if (pc == 0xc230)
+	{
+		u8 bufferLen = peek6502_1551(0xa4);
+		if (bufferLen >= 3)  // At least "CD_" or "CD."
+		{
+			u8 byte0 = peek6502_1551(0x0200);
+			u8 byte1 = peek6502_1551(0x0201);
+			u8 byte2 = peek6502_1551(0x0202);
+
+			bool isPopDir = false;
+
+			if (byte0 == 0x43 && byte1 == 0x44) // "CD"
+			{
+				if (byte2 == 0x5F) // "CD_"
+				{
+					isPopDir = true;
+				}
+				else if (byte2 == 0x2E && bufferLen >= 4) // "CD.."
+				{
+					u8 byte3 = peek6502_1551(0x0203);
+					if (byte3 == 0x2E)
+						isPopDir = true;
+				}
+				else if (byte2 == 0x3A && bufferLen >= 4) // "CD:..."
+				{
+					u8 byte3 = peek6502_1551(0x0203);
+					if (byte3 == 0x5F) // "CD:_"
+					{
+						isPopDir = true;
+					}
+					else if (byte3 == 0x2E && bufferLen >= 5) // "CD:.."
+					{
+						u8 byte4 = peek6502_1551(0x0204);
+						if (byte4 == 0x2E)
+							isPopDir = true;
+					}
+				}
+			}
+
+			if (isPopDir)
+			{
+				// Clear ROM input buffer so it ignores the command
+				write6502_1551(0xa4, 0);
+
+				// Request directory pop in browser mode and exit emulation
+				m_TCBM_Commands.RequestPopDir();
+				emulating = IEC_COMMANDS;
+				exitReason = EXIT_CD;
+			}
+		}
+	}
+}
+
 EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 {
 	EXIT_TYPE exitReason = EXIT_UNKNOWN;
@@ -1642,8 +1711,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	while (cycleCount < FAST_BOOT_CYCLES_1551)
 	{
-		TCBM_Bus::ReadEmulationMode1551();
-
 		pi1551.m6502.SYNC();
 
 		pi1551.m6502.Step();
@@ -1663,6 +1730,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	// Self test code done. Begin realtime emulation.
 	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
 	TCBM_Bus::RefreshOuts1551();
+	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
+	RPI_SetGpioHi(RPI_GPIO1);
 
 #if defined(RPI2)
 	asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctBefore));
@@ -1672,8 +1741,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	while (exitReason == EXIT_UNKNOWN)
 	{
-		TCBM_Bus::ReadEmulationMode1551();
-
+		TCBM_Bus::PollGPIOInputs1551();
 		// Always check keyboard input first, even when halted
 		TCBM_Bus::ReadGPIOUserInput();
 
@@ -1683,158 +1751,35 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 #endif
 		inputMappings->CheckButtonsEmulationMode();
 
-		// Handle emulation control keys:
-		// H - Halt emulation
-		// S - Step one instruction then halt
-		// R - Run emulation continuously
-		// E - Reset emulation (preserves current state: running/halted/stepping)
-		// r - Toggle TAPE_READ (test function)
-		// p - Toggle TAPE_SENSE (test function)
-		if (inputMappings->Halt())
+		// Timing marker on GPIO1:
+		// low = first 2MHz cycle, high = second cycle + housekeeping.
+		RPI_SetGpioLo(RPI_GPIO1);
+		if (pi1551.m6502.SYNC())	// About to start a new instruction.
 		{
-			emulationHalted = true;
-			emulationRunning = false;
-			emulationStepping = false;
+			pc = pi1551.m6502.GetPC();
+			Pi1551ApplyNewInstructionTraps(pc, exitReason);
 		}
-		if (inputMappings->Step())
-		{
-			emulationHalted = false;
-			emulationRunning = false;
-			emulationStepping = true;
-		}
-		if (inputMappings->Run())
-		{
-			emulationHalted = false;
-			emulationRunning = true;
-			emulationStepping = false;
-		}
-		if (inputMappings->ResetEmulation())
-		{
-			// Reset the emulated system but preserve emulation state
-			pi1551.Reset();
-			// Reset tape player
-			if (g_tapePlayer)
-				g_tapePlayer->Reset();
-			// Keep current emulation state (running/halted/stepping)
-		}
-		if (inputMappings->TapeReadToggle() && g_tapePlayer)
-		{
-			g_tapePlayer->ToggleTapeRead();
-		}
-		if (inputMappings->TapeSenseToggle() && g_tapePlayer)
-		{
-			g_tapePlayer->ToggleTapeSense();
-		}
-
-		// Handle emulation control states BEFORE CPU execution
-		if (emulationHalted)
-		{
-			// Emulation is halted - don't execute any CPU steps
-			// Just wait and check for input
-			usDelay(1000); // Wait 1ms to avoid busy waiting
-			continue;
-		}
-		
-		if (emulationStepping)
-		{
-			// Step mode - execute one instruction then halt
-			emulationStepping = false;
-			emulationHalted = true;
-		}
-
-		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
-		{
-			if (pi1551.m6502.SYNC())	// About to start a new instruction.
-			{
-				pc = pi1551.m6502.GetPC();
-				
-				// Motor spin-up delay skip trap: if PC is at 0xFA33 and accumulator is 0xA7, change it to 0x01
-				// This skips the motor spin-up delay in the 1551 ROM
-				if (options.SkipMotorSpinUpDelay() && pc == 0xFA33)
-				{
-					if (pi1551.m6502.GetA() == 0xA7)
-					{
-						pi1551.m6502.SetA(0x01);
-					}
-				}
-
-				// CD command trap: intercept CD_/CD:_/CD../CD:.. commands at PC=0xc230
-				// Input buffer length is at 0xa4, buffer data starts at 0x0200
-				// If we detect a CD command, set buffer length to 0 to make ROM ignore it
-				// and request a directory pop in browser mode
-				if (pc == 0xc230)
-				{
-					u8 bufferLen = peek6502_1551(0xa4);
-					if (bufferLen >= 3)  // At least "CD_" or "CD."
-					{
-						u8 byte0 = peek6502_1551(0x0200);
-						u8 byte1 = peek6502_1551(0x0201);
-						u8 byte2 = peek6502_1551(0x0202);
-
-						bool isPopDir = false;
-
-						if (byte0 == 0x43 && byte1 == 0x44) // "CD"
-						{
-							if (byte2 == 0x5F) // "CD_"
-							{
-								isPopDir = true;
-							}
-							else if (byte2 == 0x2E && bufferLen >= 4) // "CD.."
-							{
-								u8 byte3 = peek6502_1551(0x0203);
-								if (byte3 == 0x2E)
-									isPopDir = true;
-							}
-							else if (byte2 == 0x3A && bufferLen >= 4) // "CD:..."
-							{
-								u8 byte3 = peek6502_1551(0x0203);
-								if (byte3 == 0x5F) // "CD:_"
-								{
-									isPopDir = true;
-								}
-								else if (byte3 == 0x2E && bufferLen >= 5) // "CD:.."
-								{
-									u8 byte4 = peek6502_1551(0x0204);
-									if (byte4 == 0x2E)
-										isPopDir = true;
-								}
-							}
-						}
-
-						if (isPopDir)
-						{
-							// Clear ROM input buffer so it ignores the command
-							write6502_1551(0xa4, 0);
-
-							// Request directory pop in browser mode and exit emulation
-							m_TCBM_Commands.RequestPopDir();
-							emulating = IEC_COMMANDS;
-							exitReason = EXIT_CD;
-						}
-					}
-				}
-
-			}
-			pi1551.m6502.Step();
-			// a delay here in the 2nd cycle - of at least 50, up to 100 fixes 'VDC Challenge' loader (HYPALOAD 7), but breaks Bitfire, WHY? (and why in cycle2MHz==1 and not 0?)
-//			if (cycle2MHz == 1) {
-//				for (volatile unsigned i = 0; i < 100; i++) ;
-//			}
-			TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
-		}
-		// CPU does 2 cycles (2MHz), drive hardware is updated only once per 1MHz cycle
-		// TCBM outputs are outputted also only once per 1MHz cycle, hopefully this doesn't break any software
+		pi1551.m6502.Step();
 		pi1551.Update();
-		TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
+		RPI_SetGpioHi(RPI_GPIO1);
+		pi1551.m6502.Step();
+		if (pi1551.m6502.SYNC())	// About to start a new instruction.
+		{
+			pc = pi1551.m6502.GetPC();
+			Pi1551ApplyNewInstructionTraps(pc, exitReason);
+		}
+		// a delay here in the 2nd cycle - of at least 50, up to 100 fixes 'VDC Challenge' loader (HYPALOAD 7), but breaks Bitfire, WHY? (and why in cycle2MHz==1 and not 0?)
+		// (this doesn't work anymore in this setup)
+//		for (volatile unsigned i = 0; i < 100; i++) ;
 
 		TCBM_Bus::OutputLED = pi1551.drive.IsLEDOn();
-#if defined(RPI3)
-		if (TCBM_Bus::OutputLED ^ oldLED)
-		{
-			SetACTLed(TCBM_Bus::OutputLED);
-			oldLED = TCBM_Bus::OutputLED;
-		}
-#endif
+//#if defined(RPI3)
+//		if (TCBM_Bus::OutputLED ^ oldLED)
+//		{
+//			SetACTLed(TCBM_Bus::OutputLED);
+//			oldLED = TCBM_Bus::OutputLED;
+//		}
+//#endif
 
 		// Do head moving sound
 		unsigned char headDir = pi1551.drive.GetLastHeadDirection();
@@ -1897,12 +1842,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		} while (ctAfter == ctBefore);
 #endif
 		ctBefore = ctAfter;
-		
-		if (!refreshOutsAfterCPUStep)
-		{
-			TCBM_Bus::ReadEmulationMode1551();
-			TCBM_Bus::RefreshOuts1551();	// Now output all outputs.
-		}
 
 		if (options.SoundOnGPIO() && headSoundCounter > 0)
 		{
@@ -1919,6 +1858,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			// Ensure buzzer is turned off when sound counter reaches zero
 			TCBM_Bus::OutputSound = false;
 		}
+
+		// LED and buzzer are not TPI registers; push them to GPIO when they change (RefreshOuts1551 early-outs if unchanged).
+		TCBM_Bus::RefreshOuts1551();
 
 		if (numberOfImages > 1)
 		{

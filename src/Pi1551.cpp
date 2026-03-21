@@ -95,13 +95,16 @@ u8 read6502_1551(u16 address)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.GetPortCPU()->GetDirection();
 	}
 	else if (address == 1) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.ReadCPUPort();
 	}
 	// 0x4000-0x7fff is VIA
 	else if (address >= 0x4000 && address < 0x8000) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.Read(address);
 	}
 	// 0x0002-0x3FFF is RAM
@@ -117,13 +120,16 @@ u8 read6502ExtraRAM_1551(u16 address)
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.GetPortCPU()->GetDirection();
 	}
 	else if (address == 1) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.ReadCPUPort();
 	}
 	// 0x4000-0x4008 is TIA
 	else if (address >= 0x4000 && address < 0x4008) {
+		TCBM_Bus::ReadEmulationMode1551();
 		return pi1551.TPI.Read(address);
 	}
 	// otherwise it's RAM
@@ -206,13 +212,16 @@ void write6502_1551(u16 address, const u8 value)
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
 		pi1551.TPI.GetPortCPU()->SetDirection(value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	else if (address == 1) {
 		pi1551.TPI.WriteCPUPort(value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	// 0x4000-0x7fff is TIA
 	else if (address >= 0x4000 && address < 0x8000) {
 		pi1551.TPI.Write(address, value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	else {
 		// otherwise it's RAM
@@ -226,13 +235,16 @@ void write6502ExtraRAM_1551(u16 address, const u8 value)
 	// 0x0, 0x1 is CPU port
 	if (address == 0) {
 		pi1551.TPI.GetPortCPU()->SetDirection(value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	else if (address == 1) {
 		pi1551.TPI.WriteCPUPort(value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	// 0x4000-0x4008 is TIA
 	else if (address >= 0x4000 && address < 0x4008) {
 		pi1551.TPI.Write(address, value);
+		TCBM_Bus::RefreshOuts1551();
 	}
 	else {
 		// otherwise it's RAM
