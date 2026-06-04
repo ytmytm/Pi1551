@@ -50,7 +50,8 @@ public:
 
 	void Initialise();
 
-	void Update();
+	void Update(unsigned encoderTicks = 16);
+	void EndMicrosecond();
 
 	void Reset();
 

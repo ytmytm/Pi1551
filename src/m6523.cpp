@@ -123,12 +123,15 @@ void m6523::Write(unsigned int address, unsigned char value)
 	{
 		case PA:
 			WritePortA(value);
+			portCPU.SetInput(0x80, false);
 		break;
 		case PB:
 			WritePortB(value);
+			portCPU.SetInput(0x80, false);
 		break;
 		case PC:
 			WritePortC(value);
+			portCPU.SetInput(0x80, false);
 		break;
 		case DDRA:
 			portA.SetDirection(value);

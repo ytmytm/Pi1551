@@ -52,7 +52,8 @@ public:
 
 	static void OnPortOut(void*, unsigned char status);
 
-	bool Update();
+	// Advance encoder/decoder; 16 ticks = 1us of disk time (8 per 6502 half-cycle at 2MHz).
+	bool Update(unsigned encoderTicks = 16);
 #if defined(EXPERIMENTALZERO)
 	void DriveLoopWrite();
 	void DriveLoopRead();

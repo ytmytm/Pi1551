@@ -175,6 +175,9 @@ extern u8 peek6502_1551(u16 address);
 
 static const int PI1551_UI_POLL_CYCLES = 20000; // 50Hz at the 1MHz emulation cadence.
 static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 10;
+// HYPALOAD7 polls in the 2nd 6502 half; stretch it after all 16 encoder ticks between halves.
+static const unsigned PI1551_ENCODER_TICKS_PER_US = 16;
+static const unsigned PI1551_SECOND_HALF_DELAY_ITERATIONS = 100;
 
 struct Pi1551UiSnapshot
 {
@@ -1913,7 +1916,6 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 {
 	EXIT_TYPE exitReason = EXIT_UNKNOWN;
-	bool oldLED = false;
 	unsigned ctBefore = 0;
 	unsigned ctAfter = 0;
 	int cycleCount = 0;
@@ -1922,7 +1924,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	int headSoundFreqCounter = 0;
 	unsigned char oldHeadDir = 0;
 	int resetCount = 0;
-	bool refreshOutsAfterCPUStep = true;
 	int uiPollCountdown = 0;
 	bool slowUiTick = false;
 	bool exitEmulation = false;
@@ -1930,12 +1931,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	bool nextDisk = false;
 	bool prevDisk = false;
 	unsigned directDiskSwapRequest = 0;
-#if defined(RPI2) || defined(RPI3)
-	u32 cpuCycleStart = 0;
-	u32 cpuCycleMidpoint = 0;
-	u32 previousCpuCycleTicks = clockCycles1MHz;
-	bool cpuCycleCounterAvailable = false;
-#endif
 	unsigned numberOfImages = diskCaddy.GetNumberOfImages();
 	unsigned numberOfImagesMax = numberOfImages;
 	if (numberOfImagesMax > 10)
@@ -1991,7 +1986,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		pi1551.m6502.Step();
 
-		pi1551.Update();
+		pi1551.Update(16);
+		pi1551.EndMicrosecond();
 
 		cycleCount++;
 
@@ -2009,29 +2005,10 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
 	RPI_SetGpioHi(RPI_GPIO1);
 
-#if defined(RPI2) || defined(RPI3)
-	EnableCpuCycleCounter();
-	u32 cpuCounterProbeStart = ReadCpuCycleCounter();
-	u32 systemCounterProbeStart = read32(ARM_SYSTIMER_CLO);
-	do
-	{
-		ctAfter = read32(ARM_SYSTIMER_CLO);
-	} while (ctAfter == systemCounterProbeStart);
-	cpuCycleCounterAvailable = (ReadCpuCycleCounter() - cpuCounterProbeStart) != 0;
-#endif
 	ctBefore = read32(ARM_SYSTIMER_CLO);
 
 	while (exitReason == EXIT_UNKNOWN)
 	{
-#if defined(RPI2) || defined(RPI3)
-		if (cpuCycleCounterAvailable)
-		{
-			cpuCycleStart = ReadCpuCycleCounter();
-			cpuCycleMidpoint = clockCycles1MHz / 3;
-			if (cpuCycleMidpoint == 0)
-				cpuCycleMidpoint = 1;
-		}
-#endif
 		TCBM_Bus::PollGPIOInputs1551();
 		slowUiTick = (--uiPollCountdown <= 0);
 		if (slowUiTick)
@@ -2046,36 +2023,35 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			directDiskSwapRequest = commands.directDiskSwapRequest;
 		}
 
-		// Timing marker on GPIO1:
-		// low = first 2MHz cycle plus any wait to the measured midpoint,
-		// high = second 2MHz cycle + drive update + housekeeping.
+		// Timing marker on GPIO1: low = 6502 halves + interleaved drive; high = housekeeping + SYSTIMER.
 		RPI_SetGpioLo(RPI_GPIO1);
-		if (pi1551.m6502.SYNC())	// About to start a new instruction.
+
+		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
-			pc = pi1551.m6502.GetPC();
-			Pi1551ApplyNewInstructionTraps(pc, exitReason);
-		}
-		pi1551.m6502.Step();
-		pi1551.Update();
-#if defined(RPI2) || defined(RPI3)
-		if (cpuCycleCounterAvailable)
-		{
-			do
+			if (pi1551.m6502.SYNC())
 			{
-				ctAfter = ReadCpuCycleCounter();
-			} while ((ctAfter - cpuCycleStart) < cpuCycleMidpoint);
-		}
+				pc = pi1551.m6502.GetPC();
+				Pi1551ApplyNewInstructionTraps(pc, exitReason);
+			}
+			pi1551.m6502.Step();
+			TCBM_Bus::RefreshOuts1551();
+
+			if (cycle2MHz == 0)
+			{
+				// 16MHz disk domain: full 1us of encoder between the two 6502 half-cycles.
+				pi1551.Update(PI1551_ENCODER_TICKS_PER_US);
+				TCBM_Bus::RefreshOuts1551();
+			}
+#if PI1551_SECOND_HALF_DELAY_ITERATIONS > 0
+			else
+			{
+				for (volatile unsigned delayIter = 0; delayIter < PI1551_SECOND_HALF_DELAY_ITERATIONS; ++delayIter)
+					;
+			}
 #endif
-		RPI_SetGpioHi(RPI_GPIO1);
-		pi1551.m6502.Step();
-		if (pi1551.m6502.SYNC())	// About to start a new instruction.
-		{
-			pc = pi1551.m6502.GetPC();
-			Pi1551ApplyNewInstructionTraps(pc, exitReason);
 		}
-		// a delay here in the 2nd cycle - of at least 50, up to 100 fixes 'VDC Challenge' loader (HYPALOAD 7), but breaks Bitfire, WHY? (and why in cycle2MHz==1 and not 0?)
-		// (this doesn't work anymore in this setup)
-//		for (volatile unsigned i = 0; i < 100; i++) ;
+
+		pi1551.EndMicrosecond();
 
 		TCBM_Bus::OutputLED = pi1551.drive.IsLEDOn();
 //#if defined(RPI3)
@@ -2125,26 +2101,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				exitReason = EXIT_AUTOLOAD;
 		}
 
-		do	// Sync to the 1MHz clock
-		{
-			ctAfter = read32(ARM_SYSTIMER_CLO);
-			unsigned ct = ctAfter - ctBefore;
-			if (ct > 1)
-			{
-				// If this ever occurs then we have taken too long (ie >1us) and lost a cycle.
-				// Cycle accuracy is now in jeopardy. If this occurs during critical communication loops then emulation can fail!
-				++g_overrunCounter;
-			}
-		} while (ctAfter == ctBefore);
-		ctBefore = ctAfter;
-#if defined(RPI2) || defined(RPI3)
-		if (cpuCycleCounterAvailable)
-			previousCpuCycleTicks = ReadCpuCycleCounter() - cpuCycleStart;
-#endif
-
 		if (options.SoundOnGPIO() && headSoundCounter > 0)
 		{
-			headSoundFreqCounter--;		// Continue updating a GPIO non DMA sound.
+			headSoundFreqCounter--;
 			if (headSoundFreqCounter <= 0)
 			{
 				headSoundFreqCounter = headSoundFreq;
@@ -2154,11 +2113,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		}
 		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
 		{
-			// Ensure buzzer is turned off when sound counter reaches zero
 			TCBM_Bus::OutputSound = false;
 		}
 
-		// LED and buzzer are not TPI registers; push them to GPIO when they change (RefreshOuts1551 early-outs if unchanged).
 		TCBM_Bus::RefreshOuts1551();
 		if (slowUiTick)
 			PublishPi1551UiSnapshot(options.DisplayPC());
@@ -2201,6 +2158,17 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			prevDisk = false;
 			directDiskSwapRequest = 0;
 		}
+
+		RPI_SetGpioHi(RPI_GPIO1);
+
+		do	// Sync to the 1MHz clock
+		{
+			ctAfter = read32(ARM_SYSTIMER_CLO);
+			unsigned ct = ctAfter - ctBefore;
+			if (ct > 1)
+				++g_overrunCounter;
+		} while (ctAfter == ctBefore);
+		ctBefore = ctAfter;
 	}
 	return exitReason;
 }

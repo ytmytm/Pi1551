@@ -422,8 +422,15 @@ void Drive::OnPortOut(void* pThis, unsigned char status)
 	pDrive->LED = (status & 8) == 0;			// CPU P3 (0=on, 1=off)
 }
 
-bool Drive::Update()
+bool Drive::Update(unsigned encoderTicks)
 {
+	if (encoderTicks == 0)
+		return false;
+
+#if defined(EXPERIMENTALZERO)
+	if (encoderTicks < 16)
+		encoderTicks = 16;
+#endif
 #if defined(PROFILE)
 	perf_counters_t pct;
 	reset_performance_counters(&pct);
@@ -482,6 +489,8 @@ bool Drive::Update()
 
 		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
         bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10);
+		if (writing && diskImage->GetReadOnly())
+			writing = false;
 
 		// UE6 provides the CPU's clock by dividing the 16Mhz clock by 16.
 		// UE7 (a 74ls193 4bit counter) counts up on the falling edge of the 16Mhz clock. UE7 drives the Encoder/Decoder clock.
@@ -511,7 +520,7 @@ bool Drive::Update()
 			}
 		}
 #else
-		for (int cycles = 0; cycles < 16; ++cycles)
+		for (unsigned cycles = 0; cycles < encoderTicks; ++cycles)
 		{
 			if (!writing)
 			{
