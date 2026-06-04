@@ -143,3 +143,13 @@ pi1551.Update - ~350-400ns when drive busy and spinning
     - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback
+
+# Corruption (game) — hang before fastloader (not HYPALOAD7/Bitfire)
+
+Symptom on Pi1551: head stays around **track 29** (loader area); on xplus4/VICE head goes to **track 18** then fastloader runs.
+
+This is **1551 DOS / sector read**, not TCBM burst timing. Use `docs/1551-rom-disassembly.asm` (Grósz / AAY1541).
+
+# Build on MacOS
+
+make clean && make RASPPI=3 V=1 PREFIX="/Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi/bin/arm-none-eabi-" -j12
