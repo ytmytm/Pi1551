@@ -85,6 +85,16 @@ void TCBM_Bus::PollGPIOInputs1551(void)
 
 void TCBM_Bus::ReadGPIOUserInput()
 {
+	ReadGPIOUserInput(gplev0);
+}
+
+void TCBM_Bus::PollGPIOUserInput1551()
+{
+	ReadGPIOUserInput(read32(ARM_GPIO_GPLEV0));
+}
+
+void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
+{
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 	if (TCBM_Bus::rotaryEncoderEnable == true)
 	{
@@ -125,7 +135,7 @@ void TCBM_Bus::ReadGPIOUserInput()
 		//       input button registers to reflect the desired action, and allow the
 		//       original processing logic to do it's work.
 		//
-		rotary_result_t rotaryResult = TCBM_Bus::rotaryEncoder.Poll(gplev0);
+		rotary_result_t rotaryResult = TCBM_Bus::rotaryEncoder.Poll(gpioLevel);
 		switch (rotaryResult)
 		{
 
@@ -154,8 +164,8 @@ void TCBM_Bus::ReadGPIOUserInput()
 
 		}
 
-		UpdateButton(indexBack, gplev0);
-		UpdateButton(indexInsert, gplev0);
+		UpdateButton(indexBack, gpioLevel);
+		UpdateButton(indexInsert, gpioLevel);
 	}
 	else // Unmolested original logic
 	{
@@ -163,7 +173,7 @@ void TCBM_Bus::ReadGPIOUserInput()
 		int index;
 		for (index = 0; index < buttonCount; ++index)
 		{
-			UpdateButton(index, gplev0);
+			UpdateButton(index, gpioLevel);
 		}
 
 	}

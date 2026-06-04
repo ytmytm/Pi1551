@@ -19,9 +19,14 @@
 #ifndef DRIVE1551_H
 #define DRIVE1551_H
 
+#include "defs.h"
 #include "m6523.h"
 #include "DiskImage.h"
 #include <stdlib.h>
+
+#if defined(PI1551SUPPORT) && !defined(PI1551_DISABLE_FORCE_DISK_SPINNING)
+#define PI1551_FORCE_DISK_SPINNING 1
+#endif
 
 #if defined(EXPERIMENTALZERO)
 inline int ceil(float num) {
@@ -70,12 +75,12 @@ public:
 private:
 #if defined(EXPERIMENTALZERO)
 	int32_t localSeed;
-	inline void ResetEncoderDecoder(unsigned int min, unsigned int /*max*/span)
+	inline void ResetEncoderDecoder(unsigned int min, unsigned int span)
 	{
 		UE7Counter = 16 - CLOCK_SEL_AB;	// A and B inputs of UE7 come from the VIA's CLOCK SEL A/B outputs (ie PB5/6)
 		UF4Counter = 0;
 		localSeed = ((localSeed * 1103515245) + 12345) & 0x7fffffff;
-		fluxReversalCyclesLeft = (span) * (localSeed >> 11) + min;
+		fluxReversalCyclesLeft = min + ((span * (unsigned int)(localSeed >> 16)) >> 15);
 	}
 #else
 	inline float GenerateRandomFluxReversalTime(float min, float max) { return ((max - min) * ((float)rand() / RAND_MAX)) + min; } // Inputs in micro seconds
@@ -99,7 +104,9 @@ private:
 			headBitOffset %= bitsInTrack;
 			cyclesPerBit = CYCLES_16Mhz_PER_ROTATION / (float)bitsInTrack;
 #if defined(EXPERIMENTALZERO)
-			cyclesPerBitInt = cyclesPerBit;
+			cyclesPerBitInt = (unsigned int)cyclesPerBit;
+			if (cyclesPerBitInt == 0)
+				cyclesPerBitInt = 1;
 			cyclesPerBitErrorConstant = (unsigned int)((cyclesPerBit - ((float)cyclesPerBitInt)) * static_cast<float>(0xffffffff));
 			cyclesForBitErrorCounter = (unsigned int)(((cyclesForBit)-(int)(cyclesForBit)) * static_cast<float>(0xffffffff));
 #endif

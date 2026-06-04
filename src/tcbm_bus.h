@@ -350,6 +350,8 @@ public:
 	static void Reset(void);
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
+	static void ReadGPIOUserInput(unsigned gpioLevel);
+	static void PollGPIOUserInput1551(void);
 	/// Sample reset line and GPLEV0 for buttons/rotary (no TPI input merge). Call once per emulation loop before ReadGPIOUserInput when not using ReadEmulationMode1551 every step.
 	static void PollGPIOInputs1551(void);
 	static void ReadEmulationMode1551(bool updateTIAStatus = true);

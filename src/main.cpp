@@ -146,8 +146,22 @@ bool USBKeyboardDetected = false;
 //bool resetWhileEmulating = false;
 bool selectedViaIECCommands = false;
 u16 pc;
-#if defined(RPI2)
+#if defined(RPI2) || defined(RPI3)
 u32 clockCycles1MHz;
+
+static inline void EnableCpuCycleCounter()
+{
+	// PMU counters are per-core, so each emulation core must enable its own counter.
+	asm volatile ("mcr p15,0,%0,c9,c12,0" :: "r" (0b0001) : "memory");
+	asm volatile ("mcr p15,0,%0,c9,c12,1" :: "r" ((1 << 31)) : "memory");
+}
+
+static inline u32 ReadCpuCycleCounter()
+{
+	u32 cycles;
+	asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (cycles));
+	return cycles;
+}
 #endif
 
 #if not defined(EXPERIMENTALZERO)
@@ -155,6 +169,193 @@ SpinLock core0RefreshingScreen;
 #endif
 unsigned int screenWidth = 1024;
 unsigned int screenHeight = 768;
+
+#if defined(PI1551SUPPORT)
+extern u8 peek6502_1551(u16 address);
+
+static const int PI1551_UI_POLL_CYCLES = 20000; // 50Hz at the 1MHz emulation cadence.
+static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 10;
+
+struct Pi1551UiSnapshot
+{
+	bool valid;
+	bool led;
+	bool motor;
+	bool dav;
+	bool ack;
+	u8 status;
+	u8 data;
+	u32 track;
+	unsigned long long overrunCounter;
+	u16 pc;
+	u8 a;
+	u8 x;
+	u8 y;
+	u8 sp;
+	u8 cpuStatus;
+	u8 mem4000[6];
+	u8 memAtPc[3];
+	u8 cpuPort;
+};
+
+static volatile unsigned g_pi1551UiSnapshotSequence = 0;
+static volatile Pi1551UiSnapshot g_pi1551UiSnapshot = {};
+
+struct Pi1551EmulationCommands
+{
+	bool exitEmulation;
+	bool autoLoad;
+	bool nextDisk;
+	bool prevDisk;
+	unsigned directDiskSwapRequest;
+};
+
+static volatile unsigned g_pi1551CommandSequence = 0;
+static volatile Pi1551EmulationCommands g_pi1551Commands = {};
+
+static inline void Pi1551DataBarrier()
+{
+	asm volatile ("dmb" ::: "memory");
+}
+
+static void PublishPi1551EmulationCommands(unsigned numberOfImages, unsigned numberOfImagesMax)
+{
+	TCBM_Bus::PollGPIOUserInput1551();
+#if not defined(EXPERIMENTALZERO)
+	inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+	inputMappings->CheckButtonsEmulationMode();
+
+	unsigned sequence = g_pi1551CommandSequence + 1;
+	if ((sequence & 1) == 0)
+		sequence++;
+	g_pi1551CommandSequence = sequence;
+	Pi1551DataBarrier();
+
+	g_pi1551Commands.exitEmulation = inputMappings->Exit();
+	g_pi1551Commands.autoLoad = inputMappings->AutoLoad();
+	g_pi1551Commands.nextDisk = inputMappings->NextDisk();
+	g_pi1551Commands.prevDisk = inputMappings->PrevDisk();
+	g_pi1551Commands.directDiskSwapRequest = inputMappings->directDiskSwapRequest;
+	inputMappings->directDiskSwapRequest = 0;
+
+	Pi1551DataBarrier();
+	g_pi1551CommandSequence = sequence + 1;
+}
+
+static void ConsumePi1551EmulationCommands(Pi1551EmulationCommands& commands)
+{
+	static unsigned lastConsumedSequence = 0;
+	unsigned sequenceBefore;
+	unsigned sequenceAfter;
+
+	do
+	{
+		sequenceBefore = g_pi1551CommandSequence;
+		Pi1551DataBarrier();
+		commands.exitEmulation = g_pi1551Commands.exitEmulation;
+		commands.autoLoad = g_pi1551Commands.autoLoad;
+		commands.nextDisk = g_pi1551Commands.nextDisk;
+		commands.prevDisk = g_pi1551Commands.prevDisk;
+		commands.directDiskSwapRequest = g_pi1551Commands.directDiskSwapRequest;
+		Pi1551DataBarrier();
+		sequenceAfter = g_pi1551CommandSequence;
+	}
+	while ((sequenceBefore != sequenceAfter) || (sequenceAfter & 1));
+
+	if (sequenceAfter == lastConsumedSequence)
+	{
+		commands.exitEmulation = false;
+		commands.autoLoad = false;
+		commands.nextDisk = false;
+		commands.prevDisk = false;
+		commands.directDiskSwapRequest = 0;
+		return;
+	}
+	lastConsumedSequence = sequenceAfter;
+}
+
+static void PublishPi1551UiSnapshot(bool includeDebug)
+{
+	unsigned sequence = g_pi1551UiSnapshotSequence + 1;
+	if ((sequence & 1) == 0)
+		sequence++;
+	g_pi1551UiSnapshotSequence = sequence;
+	Pi1551DataBarrier();
+
+	g_pi1551UiSnapshot.valid = true;
+	g_pi1551UiSnapshot.led = pi1551.drive.IsLEDOn();
+	g_pi1551UiSnapshot.motor = pi1551.drive.IsMotorOn();
+	g_pi1551UiSnapshot.dav = TCBM_Bus::GetPI_DAV();
+	g_pi1551UiSnapshot.ack = TCBM_Bus::GetPI_ACK();
+	g_pi1551UiSnapshot.status = TCBM_Bus::GetPI_Status();
+	g_pi1551UiSnapshot.data = TCBM_Bus::GetPI_Data();
+	g_pi1551UiSnapshot.track = pi1551.drive.Track();
+	g_pi1551UiSnapshot.overrunCounter = g_overrunCounter;
+
+	if (includeDebug)
+	{
+		u16 currentPC = pi1551.m6502.GetPC();
+		u8 currentA = pi1551.m6502.GetA();
+		u8 currentX = pi1551.m6502.GetX();
+		u8 currentY = pi1551.m6502.GetY();
+		u8 currentSP = 0;
+		u8 currentStatus = 0;
+		pi1551.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
+
+		g_pi1551UiSnapshot.pc = currentPC;
+		g_pi1551UiSnapshot.a = currentA;
+		g_pi1551UiSnapshot.x = currentX;
+		g_pi1551UiSnapshot.y = currentY;
+		g_pi1551UiSnapshot.sp = currentSP;
+		g_pi1551UiSnapshot.cpuStatus = currentStatus;
+		for (int index = 0; index < 6; ++index)
+			g_pi1551UiSnapshot.mem4000[index] = peek6502_1551(0x4000 + index);
+		for (int index = 0; index < 3; ++index)
+			g_pi1551UiSnapshot.memAtPc[index] = peek6502_1551(currentPC + index);
+		g_pi1551UiSnapshot.cpuPort = pi1551.TPI.PeekCPUPort();
+	}
+
+	Pi1551DataBarrier();
+	g_pi1551UiSnapshotSequence = sequence + 1;
+}
+
+static void ReadPi1551UiSnapshot(Pi1551UiSnapshot& snapshot)
+{
+	unsigned sequenceBefore;
+	unsigned sequenceAfter;
+
+	do
+	{
+		sequenceBefore = g_pi1551UiSnapshotSequence;
+		Pi1551DataBarrier();
+		snapshot.valid = g_pi1551UiSnapshot.valid;
+		snapshot.led = g_pi1551UiSnapshot.led;
+		snapshot.motor = g_pi1551UiSnapshot.motor;
+		snapshot.dav = g_pi1551UiSnapshot.dav;
+		snapshot.ack = g_pi1551UiSnapshot.ack;
+		snapshot.status = g_pi1551UiSnapshot.status;
+		snapshot.data = g_pi1551UiSnapshot.data;
+		snapshot.track = g_pi1551UiSnapshot.track;
+		snapshot.overrunCounter = g_pi1551UiSnapshot.overrunCounter;
+		snapshot.pc = g_pi1551UiSnapshot.pc;
+		snapshot.a = g_pi1551UiSnapshot.a;
+		snapshot.x = g_pi1551UiSnapshot.x;
+		snapshot.y = g_pi1551UiSnapshot.y;
+		snapshot.sp = g_pi1551UiSnapshot.sp;
+		snapshot.cpuStatus = g_pi1551UiSnapshot.cpuStatus;
+		for (int index = 0; index < 6; ++index)
+			snapshot.mem4000[index] = g_pi1551UiSnapshot.mem4000[index];
+		for (int index = 0; index < 3; ++index)
+			snapshot.memAtPc[index] = g_pi1551UiSnapshot.memAtPc[index];
+		snapshot.cpuPort = g_pi1551UiSnapshot.cpuPort;
+		Pi1551DataBarrier();
+		sequenceAfter = g_pi1551UiSnapshotSequence;
+	}
+	while ((sequenceBefore != sequenceAfter) || (sequenceAfter & 1));
+}
+
+#endif
 
 const char* termainalTextRed = "\E[31m";
 const char* termainalTextNormal = "\E[0m";
@@ -302,10 +503,9 @@ void InitialiseHardware()
 	RPI_PropertyAddTag(TAG_SET_CLOCK_RATE, ARM_CLK_ID, MaxClk);
 	RPI_PropertyProcess();
 
-#if defined(RPI2)
+#if defined(RPI2) || defined(RPI3)
 	// Enable clock cycle counter
-	asm volatile ("mcr p15,0,%0,c9,c12,0" :: "r" (0b0001));
-	asm volatile ("mcr p15,0,%0,c9,c12,1" :: "r" ((1 << 31)));
+	EnableCpuCycleCounter();
 
 	clockCycles1MHz = MaxClk / 1000000;
 #endif
@@ -512,7 +712,10 @@ void UpdateScreen()
 	unsigned temperature = 0;
 
 	const long int tempBufferTrackSize = 16;
-	char tempBufferTrack[tempBufferTrackSize];
+	char tempBufferTrack[tempBufferTrackSize] = "01.0";
+#if defined(PI1551SUPPORT)
+	char pi1551MinimalLcdText[32] = { 0 };
+#endif
 
 	top = screenHeight - height / 2;
 	bottom = screenHeight - 1;
@@ -523,6 +726,53 @@ void UpdateScreen()
 	while (1)
 	{
 		bool value;
+#if defined(PI1551SUPPORT)
+		if (emulating == EMULATING_1551)
+		{
+			static u32 nextPi1551MinimalUiTick = 0;
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			if ((int)(now - nextPi1551MinimalUiTick) < 0)
+				continue;
+			nextPi1551MinimalUiTick = now + PI1551_UI_POLL_CYCLES;
+
+			unsigned numberOfImages = diskCaddy.GetNumberOfImages();
+			unsigned numberOfImagesMax = numberOfImages;
+			if (numberOfImagesMax > 10)
+				numberOfImagesMax = 10;
+			PublishPi1551EmulationCommands(numberOfImages, numberOfImagesMax);
+
+			Pi1551UiSnapshot pi1551Snapshot = {};
+			ReadPi1551UiSnapshot(pi1551Snapshot);
+			if (pi1551Snapshot.valid && pi1551Snapshot.track != oldTrack)
+			{
+				oldTrack = pi1551Snapshot.track;
+				snprintf(tempBufferTrack, tempBufferTrackSize, "%02d.%d", (oldTrack >> 1) + 1, oldTrack & 1 ? 5 : 0);
+			}
+
+			if (options.DisplayTemperature())
+			{
+				unsigned currentTemperature = oldTemperature;
+				if (GetTemperature(currentTemperature))
+					currentTemperature /= 1000;
+				temperature = currentTemperature;
+			}
+
+			char lcdText[32];
+			if (options.DisplayTemperature())
+				snprintf(lcdText, sizeof(lcdText), "%s %02dC", tempBufferTrack, temperature);
+			else
+				snprintf(lcdText, sizeof(lcdText), "%s", tempBufferTrack);
+
+			if (strcmp(lcdText, pi1551MinimalLcdText) != 0)
+			{
+				strncpy(pi1551MinimalLcdText, lcdText, sizeof(pi1551MinimalLcdText) - 1);
+				pi1551MinimalLcdText[sizeof(pi1551MinimalLcdText) - 1] = 0;
+				UpdateLCD(tempBufferTrack, temperature);
+				oldTemperature = temperature;
+			}
+			continue;
+		}
+#endif
 		u32 y = screen.ScaleY(STATUS_BAR_POSITION_Y);
 
 		//RPI_UpdateTouch();
@@ -533,42 +783,62 @@ void UpdateScreen()
 
 		refreshLCDStatusDisplay = false;
 		
+#if defined(PI1551SUPPORT)
 		// Check if tape state changed to trigger LCD update (works in both browse and emulation mode)
 		static u32 lastTapeCounter = 0;
 		static u8 lastTapePercentage = 0;
 		static u32 lastTapeCurrentTimeMs = 0;
 		static bool lastTapeLoaded = false;
 		static u32 lastTapeLoadGeneration = 0;
-#if defined(PI1551SUPPORT)
-		if (g_tapePlayer && g_tapePlayer->IsLoaded())
+		static unsigned tapeUiUpdateCounter = 0;
+		static TapeUIState tapeUiState = {};
+		static bool tapeUiStateValid = false;
+		bool tapeUiTick = (++tapeUiUpdateCounter >= PI1551_TAPE_UI_UPDATE_DIVIDER);
+		if (tapeUiTick)
+			tapeUiUpdateCounter = 0;
+
+		Pi1551UiSnapshot pi1551Snapshot = {};
+		bool hasPi1551Snapshot = false;
+		if (emulating == EMULATING_1551)
 		{
-			TapeUIState tapeState;
-			g_tapePlayer->GetUIState(tapeState);
-			if (tapeState.isLoaded)
+			ReadPi1551UiSnapshot(pi1551Snapshot);
+			hasPi1551Snapshot = pi1551Snapshot.valid;
+			unsigned numberOfImages = diskCaddy.GetNumberOfImages();
+			unsigned numberOfImagesMax = numberOfImages;
+			if (numberOfImagesMax > 10)
+				numberOfImagesMax = 10;
+			PublishPi1551EmulationCommands(numberOfImages, numberOfImagesMax);
+		}
+		if (tapeUiTick && g_tapePlayer && g_tapePlayer->IsLoaded())
+		{
+			g_tapePlayer->GetUIState(tapeUiState);
+			tapeUiStateValid = tapeUiState.isLoaded;
+			if (tapeUiState.isLoaded)
 			{
 				// Force refresh when a new tape is loaded (even if values start at 0)
-				if (!lastTapeLoaded || tapeState.loadGeneration != lastTapeLoadGeneration)
+				if (!lastTapeLoaded || tapeUiState.loadGeneration != lastTapeLoadGeneration)
 				{
-					lastTapeCounter = tapeState.tapeCounter;
-					lastTapePercentage = tapeState.percentage;
-					lastTapeCurrentTimeMs = tapeState.currentTimeMs;
-					lastTapeLoadGeneration = tapeState.loadGeneration;
+					lastTapeCounter = tapeUiState.tapeCounter;
+					lastTapePercentage = tapeUiState.percentage;
+					lastTapeCurrentTimeMs = tapeUiState.currentTimeMs;
+					lastTapeLoadGeneration = tapeUiState.loadGeneration;
 					refreshLCDStatusDisplay = true;
 				}
 
-				if (tapeState.tapeCounter != lastTapeCounter || tapeState.percentage != lastTapePercentage || tapeState.currentTimeMs != lastTapeCurrentTimeMs)
+				if (tapeUiState.tapeCounter != lastTapeCounter || tapeUiState.percentage != lastTapePercentage || tapeUiState.currentTimeMs != lastTapeCurrentTimeMs)
 				{
-					lastTapeCounter = tapeState.tapeCounter;
-					lastTapePercentage = tapeState.percentage;
-					lastTapeCurrentTimeMs = tapeState.currentTimeMs;
+					lastTapeCounter = tapeUiState.tapeCounter;
+					lastTapePercentage = tapeUiState.percentage;
+					lastTapeCurrentTimeMs = tapeUiState.currentTimeMs;
 					refreshLCDStatusDisplay = true;
 				}
-				lastTapeLoadGeneration = tapeState.loadGeneration;
+				lastTapeLoadGeneration = tapeUiState.loadGeneration;
 				lastTapeLoaded = true;
 			}
 		}
-		else
+		else if (tapeUiTick)
 		{
+			tapeUiStateValid = false;
 			lastTapeLoaded = false;
 			lastTapeLoadGeneration = 0;
 		}
@@ -578,8 +848,8 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		if (emulating == EMULATING_1551)
 		{
-			led = pi1551.drive.IsLEDOn();
-			motor = pi1551.drive.IsMotorOn();
+			led = hasPi1551Snapshot && pi1551Snapshot.led;
+			motor = hasPi1551Snapshot && pi1551Snapshot.motor;
 		}
 #else
 		if (emulating == EMULATING_1541)
@@ -618,7 +888,7 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		// TCBM bus signal plotting
 		// note: numbers below: 29, 35, 41 depend on template text from FileBrowser.cpp:DisplayStatusBar()
-        value = TCBM_Bus::GetPI_DAV();
+        value = hasPi1551Snapshot && pi1551Snapshot.dav;
         if (options.GraphIEC())
         {
             bottom = top2 - 2;
@@ -639,7 +909,7 @@ void UpdateScreen()
 			screen.PrintText(false, 29 * 8, y, tempBuffer, textColour, bgColour);
 		}
 
-		value = TCBM_Bus::GetPI_ACK();
+		value = hasPi1551Snapshot && pi1551Snapshot.ack;
 		if (options.GraphIEC())
 		{
 			bottom = top - 2;
@@ -660,7 +930,7 @@ void UpdateScreen()
 			screen.PrintText(false, 35 * 8, y, tempBuffer, textColour, bgColour);
 		}
 
-		u8 statusValue = TCBM_Bus::GetPI_Status();
+		u8 statusValue = hasPi1551Snapshot ? pi1551Snapshot.status : 0;
 		if (options.GraphIEC())
 		{
 			bottom = screenHeight - 1;
@@ -830,7 +1100,7 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		if (emulating == EMULATING_1551)
 		{
-			track = pi1551.drive.Track();
+			track = hasPi1551Snapshot ? pi1551Snapshot.track : oldTrack;
 			if (track != oldTrack)
 			{
 				oldTrack = track;
@@ -885,41 +1155,38 @@ void UpdateScreen()
 
 #if defined(PI1551SUPPORT)
 		// Tape player status display (browse and emulation modes)
-		if (g_tapePlayer)
+		if (g_tapePlayer && tapeUiTick)
 		{
 			g_tapePlayer->Tick10ms();
 			
-			TapeUIState tapeState;
-			g_tapePlayer->GetUIState(tapeState);
-			
 			// Display tape counter (3 digits) - always update when loaded
-			if (tapeState.isLoaded)
+			if (tapeUiStateValid)
 			{
-				if (tapeState.tapeCounter != oldTapeCounter)
+				if (tapeUiState.tapeCounter != oldTapeCounter)
 				{
-					oldTapeCounter = tapeState.tapeCounter;
+					oldTapeCounter = tapeUiState.tapeCounter;
 				}
-				snprintf(tempBuffer, tempBufferSize, "%03d", tapeState.tapeCounter);
+				snprintf(tempBuffer, tempBufferSize, "%03d", tapeUiState.tapeCounter);
 				screen.PrintText(false, 0, y - 36, tempBuffer, textColour, bgColour);
 			}
 			
 			// Display motor status
-			if (tapeState.isLoaded)
+			if (tapeUiStateValid)
 			{
-				if (tapeState.motorActive != oldTapeMotor)
+				if (tapeUiState.motorActive != oldTapeMotor)
 				{
-					oldTapeMotor = tapeState.motorActive;
+					oldTapeMotor = tapeUiState.motorActive;
 					char motorText[4];
-					strcpy(motorText, tapeState.motorActive ? "ON " : "OFF");
+					strcpy(motorText, tapeUiState.motorActive ? "ON " : "OFF");
 					screen.PrintText(false, 4 * 8, y - 36, motorText, textColour, bgColour);
 				}
 				
 				// Display END if at end of tape
-				if (tapeState.atEnd != oldTapeAtEnd)
+				if (tapeUiState.atEnd != oldTapeAtEnd)
 				{
-					oldTapeAtEnd = tapeState.atEnd;
+					oldTapeAtEnd = tapeUiState.atEnd;
 					char endText[4];
-					strcpy(endText, tapeState.atEnd ? "END" : "   ");
+					strcpy(endText, tapeUiState.atEnd ? "END" : "   ");
 					screen.PrintText(false, 8 * 8, y - 36, endText, textColour, bgColour);
 				}
 				
@@ -935,20 +1202,20 @@ void UpdateScreen()
 				}
 				
 				// Display position/total and percentage (only update when time changes)
-				if (tapeState.currentTimeMs != oldTapeCurrentTimeMs)
+				if (tapeUiState.currentTimeMs != oldTapeCurrentTimeMs)
 				{
-					oldTapeCurrentTimeMs = tapeState.currentTimeMs;
+					oldTapeCurrentTimeMs = tapeUiState.currentTimeMs;
 					
 					// Format: "MM:SS / MM:SS (XX%)"
-					u32 currentMin = tapeState.currentTimeMs / 60000;
-					u32 currentSec = (tapeState.currentTimeMs / 1000) % 60;
-					u32 totalMin = tapeState.totalTimeMs / 60000;
-					u32 totalSec = (tapeState.totalTimeMs / 1000) % 60;
+					u32 currentMin = tapeUiState.currentTimeMs / 60000;
+					u32 currentSec = (tapeUiState.currentTimeMs / 1000) % 60;
+					u32 totalMin = tapeUiState.totalTimeMs / 60000;
+					u32 totalSec = (tapeUiState.totalTimeMs / 1000) % 60;
 					
 					snprintf(tempBuffer, tempBufferSize, "%02lu:%02lu / %02lu:%02lu (%d%%)",
 						(unsigned long)currentMin, (unsigned long)currentSec,
 						(unsigned long)totalMin, (unsigned long)totalSec,
-						(int)tapeState.percentage);
+						(int)tapeUiState.percentage);
 					screen.PrintText(false, 12 * 8, y - 36, tempBuffer, textColour, bgColour);
 				}
 			}
@@ -1004,20 +1271,15 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
 				{
-					currentPC = pi1551.m6502.GetPC();
-					currentA = pi1551.m6502.GetA();
-					currentX = pi1551.m6502.GetX();
-					currentY = pi1551.m6502.GetY();
-					pi1551.m6502.GetRegs(currentPC, currentSP, currentA, currentX, currentY, currentStatus);
-					// Read drive memory at 0x4000-0x4005
-					mem4000[0] = peek6502_1551(0x4000);
-					mem4000[1] = peek6502_1551(0x4001);
-					mem4000[2] = peek6502_1551(0x4002);
-					mem4000[3] = peek6502_1551(0x4003);
-					mem4000[4] = peek6502_1551(0x4004);
-					mem4000[5] = peek6502_1551(0x4005);
-                    // Read CPU port value
-                    cpuPort1551 = pi1551.TPI.PeekCPUPort();
+					currentPC = pi1551Snapshot.pc;
+					currentA = pi1551Snapshot.a;
+					currentX = pi1551Snapshot.x;
+					currentY = pi1551Snapshot.y;
+					currentSP = pi1551Snapshot.sp;
+					currentStatus = pi1551Snapshot.cpuStatus;
+					for (int index = 0; index < 6; ++index)
+						mem4000[index] = pi1551Snapshot.mem4000[index];
+					cpuPort1551 = pi1551Snapshot.cpuPort;
 				}
 #endif
 				// Get 3 memory bytes at current PC
@@ -1025,13 +1287,14 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 				if (emulating == EMULATING_1551)
 				{
-					memByte1 = peek6502_1551(currentPC);
-					memByte2 = peek6502_1551(currentPC + 1);
-					memByte3 = peek6502_1551(currentPC + 2);
+					memByte1 = pi1551Snapshot.memAtPc[0];
+					memByte2 = pi1551Snapshot.memAtPc[1];
+					memByte3 = pi1551Snapshot.memAtPc[2];
 				}
 #endif
-				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu", 
-					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3, g_overrunCounter);
+				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu",
+					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3,
+					hasPi1551Snapshot ? pi1551Snapshot.overrunCounter : g_overrunCounter);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 
                 // Display drive memory 0x4000-0x4005 above CPU state line (+ CPU port on 1551)
@@ -1043,12 +1306,12 @@ void UpdateScreen()
 				if (emulating == EMULATING_1551)
 				{
 					// Hardware pin status line above memory line
-					bool pinDAV = TCBM_Bus::GetPI_DAV();
-					bool pinACK = TCBM_Bus::GetPI_ACK();
-					u8 pinSTATUS = TCBM_Bus::GetPI_Status();
+					bool pinDAV = hasPi1551Snapshot && pi1551Snapshot.dav;
+					bool pinACK = hasPi1551Snapshot && pi1551Snapshot.ack;
+					u8 pinSTATUS = hasPi1551Snapshot ? pi1551Snapshot.status : 0;
 					int pinST0 = (pinSTATUS & 0x01) ? 1 : 0;
 					int pinST1 = (pinSTATUS & 0x02) ? 1 : 0;
-					u8 pinDIO = TCBM_Bus::GetPI_Data();
+					u8 pinDIO = hasPi1551Snapshot ? pi1551Snapshot.data : 0;
 					snprintf(tempBuffer, tempBufferSize, "DAV:%d ACK:%d ST0:%d ST1:%d DIO:%02X",
 						pinDAV ? 1 : 0, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
 					screen.PrintText(false, 49*8, y-36, tempBuffer, textColour, bgColour);
@@ -1660,6 +1923,19 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	unsigned char oldHeadDir = 0;
 	int resetCount = 0;
 	bool refreshOutsAfterCPUStep = true;
+	int uiPollCountdown = 0;
+	bool slowUiTick = false;
+	bool exitEmulation = false;
+	bool exitDoAutoLoad = false;
+	bool nextDisk = false;
+	bool prevDisk = false;
+	unsigned directDiskSwapRequest = 0;
+#if defined(RPI2) || defined(RPI3)
+	u32 cpuCycleStart = 0;
+	u32 cpuCycleMidpoint = 0;
+	u32 previousCpuCycleTicks = clockCycles1MHz;
+	bool cpuCycleCounterAvailable = false;
+#endif
 	unsigned numberOfImages = diskCaddy.GetNumberOfImages();
 	unsigned numberOfImagesMax = numberOfImages;
 	if (numberOfImagesMax > 10)
@@ -1733,26 +2009,46 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
 	RPI_SetGpioHi(RPI_GPIO1);
 
-#if defined(RPI2)
-	asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctBefore));
-#else
-	ctBefore = read32(ARM_SYSTIMER_CLO);
+#if defined(RPI2) || defined(RPI3)
+	EnableCpuCycleCounter();
+	u32 cpuCounterProbeStart = ReadCpuCycleCounter();
+	u32 systemCounterProbeStart = read32(ARM_SYSTIMER_CLO);
+	do
+	{
+		ctAfter = read32(ARM_SYSTIMER_CLO);
+	} while (ctAfter == systemCounterProbeStart);
+	cpuCycleCounterAvailable = (ReadCpuCycleCounter() - cpuCounterProbeStart) != 0;
 #endif
+	ctBefore = read32(ARM_SYSTIMER_CLO);
 
 	while (exitReason == EXIT_UNKNOWN)
 	{
-		TCBM_Bus::PollGPIOInputs1551();
-		// Always check keyboard input first, even when halted
-		TCBM_Bus::ReadGPIOUserInput();
-
-		// Other core will check the uart (as it is slow) (could enable uart irqs - will they execute on this core?)
-#if not defined(EXPERIMENTALZERO)
-		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#if defined(RPI2) || defined(RPI3)
+		if (cpuCycleCounterAvailable)
+		{
+			cpuCycleStart = ReadCpuCycleCounter();
+			cpuCycleMidpoint = clockCycles1MHz / 3;
+			if (cpuCycleMidpoint == 0)
+				cpuCycleMidpoint = 1;
+		}
 #endif
-		inputMappings->CheckButtonsEmulationMode();
+		TCBM_Bus::PollGPIOInputs1551();
+		slowUiTick = (--uiPollCountdown <= 0);
+		if (slowUiTick)
+		{
+			uiPollCountdown = PI1551_UI_POLL_CYCLES;
+			Pi1551EmulationCommands commands;
+			ConsumePi1551EmulationCommands(commands);
+			exitEmulation = commands.exitEmulation;
+			exitDoAutoLoad = commands.autoLoad;
+			nextDisk = commands.nextDisk;
+			prevDisk = commands.prevDisk;
+			directDiskSwapRequest = commands.directDiskSwapRequest;
+		}
 
 		// Timing marker on GPIO1:
-		// low = first 2MHz cycle, high = second cycle + housekeeping.
+		// low = first 2MHz cycle plus any wait to the measured midpoint,
+		// high = second 2MHz cycle + drive update + housekeeping.
 		RPI_SetGpioLo(RPI_GPIO1);
 		if (pi1551.m6502.SYNC())	// About to start a new instruction.
 		{
@@ -1761,6 +2057,15 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		}
 		pi1551.m6502.Step();
 		pi1551.Update();
+#if defined(RPI2) || defined(RPI3)
+		if (cpuCycleCounterAvailable)
+		{
+			do
+			{
+				ctAfter = ReadCpuCycleCounter();
+			} while ((ctAfter - cpuCycleStart) < cpuCycleMidpoint);
+		}
+#endif
 		RPI_SetGpioHi(RPI_GPIO1);
 		pi1551.m6502.Step();
 		if (pi1551.m6502.SYNC())	// About to start a new instruction.
@@ -1799,9 +2104,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			}
 		}
 
-		bool exitEmulation = inputMappings->Exit();
-		bool exitDoAutoLoad = inputMappings->AutoLoad();
-
 		bool reset = TCBM_Bus::IsReset();
 		if (reset)
 			resetCount++;
@@ -1823,12 +2125,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				exitReason = EXIT_AUTOLOAD;
 		}
 
-#if defined(RPI2)
-		do  // Sync to the 1MHz clock
-		{
-			asm volatile ("mrc p15,0,%0,c9,c13,0" : "=r" (ctAfter));
-		} while ((ctAfter - ctBefore) < clockCycles1MHz);
-#else
 		do	// Sync to the 1MHz clock
 		{
 			ctAfter = read32(ARM_SYSTIMER_CLO);
@@ -1840,8 +2136,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				++g_overrunCounter;
 			}
 		} while (ctAfter == ctBefore);
-#endif
 		ctBefore = ctAfter;
+#if defined(RPI2) || defined(RPI3)
+		if (cpuCycleCounterAvailable)
+			previousCpuCycleTicks = ReadCpuCycleCounter() - cpuCycleStart;
+#endif
 
 		if (options.SoundOnGPIO() && headSoundCounter > 0)
 		{
@@ -1861,11 +2160,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		// LED and buzzer are not TPI registers; push them to GPIO when they change (RefreshOuts1551 early-outs if unchanged).
 		TCBM_Bus::RefreshOuts1551();
+		if (slowUiTick)
+			PublishPi1551UiSnapshot(options.DisplayPC());
 
-		if (numberOfImages > 1)
+		if (slowUiTick && numberOfImages > 1)
 		{
-			bool nextDisk = inputMappings->NextDisk();
-			bool prevDisk = inputMappings->PrevDisk();
 			if (nextDisk)
 			{
 				pi1551.drive.Insert(diskCaddy.PrevDisk());
@@ -1881,11 +2180,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 #endif
 			}
 #if not defined(EXPERIMENTALZERO)
-			else if (inputMappings->directDiskSwapRequest != 0)
+			else if (directDiskSwapRequest != 0)
 			{
 				for (caddyIndex = 0; caddyIndex < numberOfImagesMax; ++caddyIndex)
 				{
-					if (inputMappings->directDiskSwapRequest & (1 << caddyIndex))
+					if (directDiskSwapRequest & (1 << caddyIndex))
 					{
 						DiskImage* diskImage = diskCaddy.SelectImage(caddyIndex);
 						if (diskImage && diskImage != pi1551.drive.GetDiskImage())
@@ -1895,9 +2194,12 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 						}
 					}
 				}
-				inputMappings->directDiskSwapRequest = 0;
+				directDiskSwapRequest = 0;
 			}
 #endif
+			nextDisk = false;
+			prevDisk = false;
+			directDiskSwapRequest = 0;
 		}
 	}
 	return exitReason;
@@ -2630,6 +2932,9 @@ extern "C"
 		// Core 1: main emulator (cycle-accurate 1MHz loop)
 		if (core == 1)
 		{
+#if defined(RPI2) || defined(RPI3)
+			EnableCpuCycleCounter();
+#endif
 			emulator();
 		}
 		// Core 2: dedicated TAP playback engine

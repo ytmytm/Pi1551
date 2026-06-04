@@ -391,6 +391,9 @@ void Drive::Insert(DiskImage* diskImage)
 {
 	Eject();
 	this->diskImage = diskImage;
+	cachedheadTrackPos = -1;
+	cachedbyteOffset = -1;
+	UpdateHeadSectorPosition();
 	newDiskImageQueuedCylesRemaining = DISK_SWAP_CYCLES_DISK_EJECTING + DISK_SWAP_CYCLES_NO_DISK + DISK_SWAP_CYCLES_DISK_INSERTING;
 }
 
@@ -411,7 +414,11 @@ void Drive::OnPortOut(void* pThis, unsigned char status)
 	if (pDrive->motor)
 		pDrive->MoveHead(status & 3);
 	pDrive->motor = (status & 4) != 0;		// CPU P2 (0=off, 1=on)
-	pDrive->CLOCK_SEL_AB = ((status >> 5) & 3);	// CPU P5..P6
+	int clockSel = ((status >> 5) & 3);	// CPU P5..P6
+	if (pDrive->CLOCK_SEL_AB != clockSel)
+	{
+		pDrive->CLOCK_SEL_AB = clockSel;
+	}
 	pDrive->LED = (status & 8) == 0;			// CPU P3 (0=on, 1=off)
 }
 
@@ -466,7 +473,11 @@ bool Drive::Update()
 		return false;
 	}
 
-	if (!(diskImage && motor && m_pTPI))
+	bool diskSpinning = motor;
+#if defined(PI1551_FORCE_DISK_SPINNING)
+	diskSpinning = true;
+#endif
+	if (!(diskImage && diskSpinning && m_pTPI))
 		return false;
 
 		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
@@ -477,7 +488,9 @@ bool Drive::Update()
 		// So we need to simulate 16 cycles for every 1 CPU cycle
 #if defined(EXPERIMENTALZERO)
 		if (writing)
+		{
 			DriveLoopWrite();
+		}
 		else
 		{
 			if (fluxReversalCyclesLeft > 16 && cyclesLeftForBit > 16)
