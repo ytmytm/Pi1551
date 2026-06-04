@@ -106,6 +106,15 @@ this branch: timing-exploration: 20260321
 
 pi1551.Update - ~350-400ns when drive busy and spinning
 
+# This branch (pi1551-refactor-attempt)
+
+- pi1551.update much faster thanks to targeted published messages about status of the device (one way) and buttons (another way)
+- HDMI/OLED/buttons checked in UI core much less frequently
+- acceptable timing (1MHz with some jitter) and duty cycle (30%)
+- both bitfire demos (carrion 121) and hypaload (VDC challenge, carrion gfx, standalone hypaload) work
+- corruption game doesn't but problem seems somewhere else:
+  - it starts in xplus4, it does disk init (head back from track 29 to 18), then fastloader starts it even works in xplus4 (hypaload doesn't)
+  - but pi1551 doesn't go to track 18, gets stuck earlier
 
 # Tests
 
