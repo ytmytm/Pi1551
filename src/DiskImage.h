@@ -102,7 +102,7 @@ public:
 
 	inline void SetBit(u32 track, u32 byte, u32 bit, bool value)
 	{
-		if (attachedImageSize == 0)
+		if (attachedImageSize == 0 || readOnly)
 			return;
 
 #if defined(EXPERIMENTALZERO)
