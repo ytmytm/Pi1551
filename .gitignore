@@ -1,3 +1,5 @@
+.DS_Store
+
 *.o
 *.a
 *.elf
@@ -10,3 +12,11 @@ sdcard/demos
 docs/pitap*
 docs/cbmtapepi*
 docs/tap/*
+
+# graphify (local index; rebuild: .venv/bin/graphify update .)
+.venv/
+graphify-out/
+
+# Claude Code artifacts (this repo uses Cursor only)
+.claude/
+CLAUDE.md

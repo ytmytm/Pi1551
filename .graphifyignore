@@ -1,0 +1,4 @@
+# Index only src/ (Pi1541 firmware); ignore the rest of the repo.
+*
+!src/
+!src/**

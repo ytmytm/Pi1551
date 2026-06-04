@@ -1,0 +1,21 @@
+---
+description: graphify knowledge graph — query src/ before grepping
+alwaysApply: true
+---
+
+This project has a graphify knowledge graph at `graphify-out/` (corpus: **`src/` only**, see `.graphifyignore`).
+
+## Cursor agent workflow
+
+- Run commands from the **repository root** using **`.venv/bin/graphify`** (not bare `graphify` — CLI lives in the project venv).
+- For questions about `src/` architecture, symbols, or call flow: when `graphify-out/graph.json` exists, run:
+  - `.venv/bin/graphify query "<question>"`
+  - `.venv/bin/graphify path "<A>" "<B>"` or `.venv/bin/graphify explain "<concept>"`
+- Prefer query results over grepping `src/` or opening many files.
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review.
+- After editing files under `src/` in this session: `.venv/bin/graphify update .` (AST-only, no API cost).
+- For full `/graphify` rebuild flags and edge cases, follow `.cursor/skills/graphify/SKILL.md`.
+
+## Out of scope
+
+Do not expect graph coverage for `uspi/`, `docs/`, or repo-root build files — only `src/` is indexed.
