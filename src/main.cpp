@@ -177,7 +177,6 @@ static const int PI1551_UI_POLL_CYCLES = 20000; // 50Hz at the 1MHz emulation ca
 static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 10;
 // HYPALOAD7 polls in the 2nd 6502 half; stretch it after all 16 encoder ticks between halves.
 static const unsigned PI1551_ENCODER_TICKS_PER_US = 16;
-static const unsigned PI1551_SECOND_HALF_DELAY_ITERATIONS = 100;
 
 struct Pi1551UiSnapshot
 {
@@ -1986,7 +1985,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		pi1551.m6502.Step();
 
-		pi1551.Update(16);
+		pi1551.Update(PI1551_ENCODER_TICKS_PER_US);
 		pi1551.EndMicrosecond();
 
 		cycleCount++;
@@ -2042,13 +2041,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				pi1551.Update(PI1551_ENCODER_TICKS_PER_US);
 				TCBM_Bus::RefreshOuts1551();
 			}
-#if PI1551_SECOND_HALF_DELAY_ITERATIONS > 0
-			else
-			{
-				for (volatile unsigned delayIter = 0; delayIter < PI1551_SECOND_HALF_DELAY_ITERATIONS; ++delayIter)
-					;
-			}
-#endif
 		}
 
 		pi1551.EndMicrosecond();
