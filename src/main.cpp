@@ -214,19 +214,25 @@ struct Pi1551EmulationCommands
 
 static volatile unsigned g_pi1551CommandSequence = 0;
 static volatile Pi1551EmulationCommands g_pi1551Commands = {};
+static Pi1551EmulationCommands g_pi1551PendingCommands = {};
+static unsigned g_pi1551LastConsumedSequence = 0;
 
 static inline void Pi1551DataBarrier()
 {
 	asm volatile ("dmb" ::: "memory");
 }
 
-static void PublishPi1551EmulationCommands(unsigned numberOfImages, unsigned numberOfImagesMax)
+static inline bool Pi1551EmulationCommandsAny(const Pi1551EmulationCommands& commands)
 {
-	TCBM_Bus::PollGPIOUserInput1551();
-#if not defined(EXPERIMENTALZERO)
-	inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
-#endif
-	inputMappings->CheckButtonsEmulationMode();
+	return commands.exitEmulation || commands.autoLoad || commands.nextDisk
+		|| commands.prevDisk || commands.directDiskSwapRequest != 0;
+}
+
+static void ResetPi1551EmulationCommandChannel()
+{
+	g_pi1551PendingCommands = {};
+	g_pi1551LastConsumedSequence = 0;
+	TCBM_Bus::ClearRotaryDiskSteps();
 
 	unsigned sequence = g_pi1551CommandSequence + 1;
 	if ((sequence & 1) == 0)
@@ -234,12 +240,61 @@ static void PublishPi1551EmulationCommands(unsigned numberOfImages, unsigned num
 	g_pi1551CommandSequence = sequence;
 	Pi1551DataBarrier();
 
-	g_pi1551Commands.exitEmulation = inputMappings->Exit();
-	g_pi1551Commands.autoLoad = inputMappings->AutoLoad();
-	g_pi1551Commands.nextDisk = inputMappings->NextDisk();
-	g_pi1551Commands.prevDisk = inputMappings->PrevDisk();
-	g_pi1551Commands.directDiskSwapRequest = inputMappings->directDiskSwapRequest;
+	g_pi1551Commands.exitEmulation = false;
+	g_pi1551Commands.autoLoad = false;
+	g_pi1551Commands.nextDisk = false;
+	g_pi1551Commands.prevDisk = false;
+	g_pi1551Commands.directDiskSwapRequest = 0;
+
+	Pi1551DataBarrier();
+	g_pi1551CommandSequence = sequence + 1;
+}
+
+static void AccumulatePi1551EmulationCommands(unsigned numberOfImages, unsigned numberOfImagesMax)
+{
+	bool rotaryNextDisk = false;
+	bool rotaryPrevDisk = false;
+	TCBM_Bus::ConsumeRotaryDiskSteps(rotaryNextDisk, rotaryPrevDisk);
+	if (rotaryNextDisk)
+		g_pi1551PendingCommands.nextDisk = true;
+	if (rotaryPrevDisk)
+		g_pi1551PendingCommands.prevDisk = true;
+
+#if not defined(EXPERIMENTALZERO)
+	inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+#endif
+	inputMappings->CheckButtonsEmulationMode();
+
+	if (inputMappings->Exit())
+		g_pi1551PendingCommands.exitEmulation = true;
+	if (inputMappings->AutoLoad())
+		g_pi1551PendingCommands.autoLoad = true;
+	if (inputMappings->NextDisk())
+		g_pi1551PendingCommands.nextDisk = true;
+	if (inputMappings->PrevDisk())
+		g_pi1551PendingCommands.prevDisk = true;
+	if (inputMappings->directDiskSwapRequest != 0)
+		g_pi1551PendingCommands.directDiskSwapRequest |= inputMappings->directDiskSwapRequest;
 	inputMappings->directDiskSwapRequest = 0;
+}
+
+static void PublishPi1551EmulationCommands()
+{
+	if (!Pi1551EmulationCommandsAny(g_pi1551PendingCommands))
+		return;
+
+	unsigned sequence = g_pi1551CommandSequence + 1;
+	if ((sequence & 1) == 0)
+		sequence++;
+	g_pi1551CommandSequence = sequence;
+	Pi1551DataBarrier();
+
+	g_pi1551Commands.exitEmulation = g_pi1551PendingCommands.exitEmulation;
+	g_pi1551Commands.autoLoad = g_pi1551PendingCommands.autoLoad;
+	g_pi1551Commands.nextDisk = g_pi1551PendingCommands.nextDisk;
+	g_pi1551Commands.prevDisk = g_pi1551PendingCommands.prevDisk;
+	g_pi1551Commands.directDiskSwapRequest = g_pi1551PendingCommands.directDiskSwapRequest;
+	g_pi1551PendingCommands = {};
 
 	Pi1551DataBarrier();
 	g_pi1551CommandSequence = sequence + 1;
@@ -247,7 +302,6 @@ static void PublishPi1551EmulationCommands(unsigned numberOfImages, unsigned num
 
 static void ConsumePi1551EmulationCommands(Pi1551EmulationCommands& commands)
 {
-	static unsigned lastConsumedSequence = 0;
 	unsigned sequenceBefore;
 	unsigned sequenceAfter;
 
@@ -265,7 +319,7 @@ static void ConsumePi1551EmulationCommands(Pi1551EmulationCommands& commands)
 	}
 	while ((sequenceBefore != sequenceAfter) || (sequenceAfter & 1));
 
-	if (sequenceAfter == lastConsumedSequence)
+	if (sequenceAfter == g_pi1551LastConsumedSequence)
 	{
 		commands.exitEmulation = false;
 		commands.autoLoad = false;
@@ -274,7 +328,7 @@ static void ConsumePi1551EmulationCommands(Pi1551EmulationCommands& commands)
 		commands.directDiskSwapRequest = 0;
 		return;
 	}
-	lastConsumedSequence = sequenceAfter;
+	g_pi1551LastConsumedSequence = sequenceAfter;
 }
 
 static void PublishPi1551UiSnapshot(bool includeDebug)
@@ -731,17 +785,23 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 		if (emulating == EMULATING_1551)
 		{
-			static u32 nextPi1551MinimalUiTick = 0;
-			u32 now = read32(ARM_SYSTIMER_CLO);
-			if ((int)(now - nextPi1551MinimalUiTick) < 0)
-				continue;
-			nextPi1551MinimalUiTick = now + PI1551_UI_POLL_CYCLES;
+			// Button debounce/repeat counters advance once per GPIO sample
+			// (INPUT_BUTTON_DEBOUNCE_THRESHOLD == 20000). Emulate1541 polls every
+			// emulated microsecond; keep the same cadence here on core0.
+			TCBM_Bus::PollGPIOUserInput1551();
 
 			unsigned numberOfImages = diskCaddy.GetNumberOfImages();
 			unsigned numberOfImagesMax = numberOfImages;
 			if (numberOfImagesMax > 10)
 				numberOfImagesMax = 10;
-			PublishPi1551EmulationCommands(numberOfImages, numberOfImagesMax);
+			AccumulatePi1551EmulationCommands(numberOfImages, numberOfImagesMax);
+			PublishPi1551EmulationCommands();
+
+			static u32 nextPi1551MinimalUiTick = 0;
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			if ((int)(now - nextPi1551MinimalUiTick) < 0)
+				continue;
+			nextPi1551MinimalUiTick = now + PI1551_UI_POLL_CYCLES;
 
 			Pi1551UiSnapshot pi1551Snapshot = {};
 			ReadPi1551UiSnapshot(pi1551Snapshot);
@@ -805,11 +865,6 @@ void UpdateScreen()
 		{
 			ReadPi1551UiSnapshot(pi1551Snapshot);
 			hasPi1551Snapshot = pi1551Snapshot.valid;
-			unsigned numberOfImages = diskCaddy.GetNumberOfImages();
-			unsigned numberOfImagesMax = numberOfImages;
-			if (numberOfImagesMax > 10)
-				numberOfImagesMax = 10;
-			PublishPi1551EmulationCommands(numberOfImages, numberOfImagesMax);
 		}
 		if (tapeUiTick && g_tapePlayer && g_tapePlayer->IsLoaded())
 		{
@@ -1946,6 +2001,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	inputMappings->directDiskSwapRequest = 0;
 	// Force an update on all the buttons now before we start emulation mode. 
 	TCBM_Bus::ReadBrowseMode();
+	ResetPi1551EmulationCommandChannel();
 
 	bool extraRAM = options.GetExtraRAM();
 	DataBusReadFn dataBusRead = extraRAM ? read6502ExtraRAM_1551 : read6502_1551;
@@ -2112,19 +2168,19 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (slowUiTick)
 			PublishPi1551UiSnapshot(options.DisplayPC());
 
-		if (slowUiTick && numberOfImages > 1)
+		if (slowUiTick && diskCaddy.GetNumberOfImages() > 1)
 		{
 			if (nextDisk)
 			{
 				pi1551.drive.Insert(diskCaddy.PrevDisk());
-#if defined(EXPERIMENTALZERO)
+#if not defined(EXPERIMENTALZERO)
 				diskCaddy.Update();
 #endif
 			}
 			else if (prevDisk)
 			{
 				pi1551.drive.Insert(diskCaddy.NextDisk());
-#if defined(EXPERIMENTALZERO)
+#if not defined(EXPERIMENTALZERO)
 				diskCaddy.Update();
 #endif
 			}
@@ -2650,6 +2706,7 @@ void emulator()
 			if ((exitReason == EXIT_RESET) && (options.GetOnResetChangeToStartingFolder() || selectedViaIECCommands))
 				fileBrowser->DisplayRoot(); // TO CHECK
 
+			ResetPi1551EmulationCommandChannel();
 			inputMappings->WaitForClearButtons();
 
 #if not defined(EXPERIMENTALZERO)

@@ -354,6 +354,8 @@ public:
 	static void PollGPIOUserInput1551(void);
 	/// Sample reset line and GPLEV0 for buttons/rotary (no TPI input merge). Call once per emulation loop before ReadGPIOUserInput when not using ReadEmulationMode1551 every step.
 	static void PollGPIOInputs1551(void);
+	static void ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk);
+	static void ClearRotaryDiskSteps(void);
 	static void ReadEmulationMode1551(bool updateTIAStatus = true);
 
 	static void WaitUntilReset(void)
@@ -613,6 +615,9 @@ private:
 	static bool rotaryEncoderEnable;
 	//ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 	static bool rotaryEncoderInvert;
+
+	static volatile bool rotaryDiskStepNext;
+	static volatile bool rotaryDiskStepPrev;
 
 };
 #endif

@@ -147,15 +147,20 @@ void InputMappings::WaitForClearButtons()
 		
 		usDelay(1);
 	} while (insertButtonPressedPrev || enterButtonPressedPrev);
+
+	enterButtonPressedPrev = false;
+	insertButtonPressedPrev = false;
 }
 
 void InputMappings::CheckButtonsEmulationMode()
 {
 	buttonFlags = 0;
 
-	if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
+	if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP)
+		|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_UP))
 		SetButtonFlag(NEXT_FLAG);
-	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN)
+		|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_DOWN))
 		SetButtonFlag(PREV_FLAG);
 	//else if (BUS_API::GetInputButtonPressed(INPUT_BUTTON_BACK))
 	//	SetButtonFlag(BACK_FLAG);

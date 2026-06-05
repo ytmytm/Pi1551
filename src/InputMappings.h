@@ -102,6 +102,10 @@ public:
 	{
 		keyboardFlags = 0;
 		buttonFlags = 0;
+		enterButtonPressedPrev = false;
+		enterButtonPressed = false;
+		insertButtonPressedPrev = false;
+		insertButtonPressed = false;
 	}
 
 	void SetKeyboardBrowseLCDScreen(bool value)

@@ -68,6 +68,8 @@ RotaryEncoder TCBM_Bus::rotaryEncoder;
 bool TCBM_Bus::rotaryEncoderEnable;
 //ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
 bool TCBM_Bus::rotaryEncoderInvert;
+volatile bool TCBM_Bus::rotaryDiskStepNext = false;
+volatile bool TCBM_Bus::rotaryDiskStepPrev = false;
 u8 TCBM_Bus::lastDirA = 0xff; // force initial programming of pin functions
 u8 TCBM_Bus::lastDirC = 0xff; // force initial programming of Port C functions
 u32 TCBM_Bus::lastSet = 0;
@@ -91,6 +93,20 @@ void TCBM_Bus::ReadGPIOUserInput()
 void TCBM_Bus::PollGPIOUserInput1551()
 {
 	ReadGPIOUserInput(read32(ARM_GPIO_GPLEV0));
+}
+
+void TCBM_Bus::ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk)
+{
+	nextDisk = rotaryDiskStepNext;
+	prevDisk = rotaryDiskStepPrev;
+	rotaryDiskStepNext = false;
+	rotaryDiskStepPrev = false;
+}
+
+void TCBM_Bus::ClearRotaryDiskSteps()
+{
+	rotaryDiskStepNext = false;
+	rotaryDiskStepPrev = false;
 }
 
 void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
@@ -150,11 +166,13 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
 			case RotateNegative:
 				SetButtonState(indexUp, true);
 				rotationUpCounter = ROTATION_BUTTON_HOLD_CYCLES;
+				rotaryDiskStepNext = true;
 				break;
 
 			case RotatePositive:
 				SetButtonState(indexDown, true);
 				rotationDownCounter = ROTATION_BUTTON_HOLD_CYCLES;
+				rotaryDiskStepPrev = true;
 				break;
 
 			case NoChange:
