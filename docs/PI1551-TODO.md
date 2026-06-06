@@ -70,6 +70,8 @@ this branch: timing-exploration: 20260321
 
 # Timings (relative to 83b3e75b577dedec378b96b8fcdebc59185cd355 )
 
+Note: this is obsolete, pi1551-refactor-attempt fixed the problem
+
 - timing on gpio1 (28) with low just before the cycle2MHz loop starts
   and high just after 2nd round (with housekeeping and sync to 1MHz)
   with extra delay for cycle=1 enabled with busy loop for 100 iterations (VDC challenge works)
@@ -111,10 +113,20 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 - pi1551.update much faster thanks to targeted published messages about status of the device (one way) and buttons (another way)
 - HDMI/OLED/buttons checked in UI core much less frequently
 - acceptable timing (1MHz with some jitter) and duty cycle (30%)
-- both bitfire demos (carrion 121) and hypaload (VDC challenge, carrion gfx, standalone hypaload) work
+- both bitfire demos (carrion 121) and hypaload (VDC challenge, carrion gfx, standalone hypaload) work; demo Plus4 XL works on Plus4, not on C16 with 6510 replacement
 - corruption game doesn't but problem seems somewhere else:
   - it starts in xplus4, it does disk init (head back from track 29 to 18), then fastloader starts it even works in xplus4 (hypaload doesn't)
   - but pi1551 doesn't go to track 18, gets stuck earlier
+  - 6510 replacement in C16 is not the (only) issue, gets stuck the same on Plus4
+
+# TODO:
+
+- disable 'disk always spinning' option for pi1551 update
+- OLED screen gets garbled in emulation mode when switching disk images
+- rotary encoder doesn't work so well in emulation mode, skips wrong direction a lot more
+  than in browser mode (it's not perfect there either)
+- disassemble 'Corruption' and test standalone, it must be known if this is a h/w or s/w issue
+  (although it randomly worked before)
 
 # Tests
 
@@ -158,6 +170,11 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 Symptom on Pi1551: head stays around **track 29** (loader area); on xplus4/VICE head goes to **track 18** then fastloader runs.
 
 This is **1551 DOS / sector read**, not TCBM burst timing. Use `docs/1551-rom-disassembly.asm` (Grósz / AAY1541).
+
+Demo plus/4 XL doesn't start on C16 with 6510 replacement, but DOES start on real plus4
+
+Corrupion game (and Fish too) react the same on Plus4 as on C16 - lock up instead of
+initializing disk and entering fastloader.
 
 # Build on MacOS
 
