@@ -118,6 +118,11 @@ pi1551.Update - ~350-400ns when drive busy and spinning
   - it starts in xplus4, it does disk init (head back from track 29 to 18), then fastloader starts it even works in xplus4 (hypaload doesn't)
   - but pi1551 doesn't go to track 18, gets stuck earlier
   - 6510 replacement in C16 is not the (only) issue, gets stuck the same on Plus4
+  - it got stuck b/c it uses mirrored registers at $FEFx instead of $FEEx, I have corrected
+    this on 18th March (rev1.4 branch in tcbm2sd) and promptly forgotten
+    as of b67dad72b760f7d691d280998bac5c6af160f812 it initializes drive, goes to track 18,
+    then to track 1, then to track 24 and stays there (should load from track 24)
+    ? loads sth from track 1? but fails from track 24? too long?
 
 # TODO:
 
@@ -125,8 +130,8 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 - OLED screen gets garbled in emulation mode when switching disk images
 - rotary encoder doesn't work so well in emulation mode, skips wrong direction a lot more
   than in browser mode (it's not perfect there either)
-- disassemble 'Corruption' and test standalone, it must be known if this is a h/w or s/w issue
-  (although it randomly worked before)
+- disable 1MHz output to reduce EM noise
+- disassemble 'Corruption' loader and test standalone, it's a software issue
 
 # Tests
 
@@ -165,16 +170,22 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback
 
-# Corruption (game) — hang before fastloader (not HYPALOAD7/Bitfire)
+# Corruption (game
 
-Symptom on Pi1551: head stays around **track 29** (loader area); on xplus4/VICE head goes to **track 18** then fastloader runs.
+Like on old VICE: goes to track 18, then to track 1, VICE gets stuck here
+but Pi1551 goes to track 24 (where it should load) and then gets stuck
 
-This is **1551 DOS / sector read**, not TCBM burst timing. Use `docs/1551-rom-disassembly.asm` (Grósz / AAY1541).
+Earlier problem was old firmware on tcbm2sd: must mirror registers at $FEEx in $FEFx
+because someone made a mistake 30 years ago.
 
-Demo plus/4 XL doesn't start on C16 with 6510 replacement, but DOES start on real plus4
+Sometimes (rarely) loads through track 25 until 'swap disk'. This is not the computer-side
+timing issue (transmission has handshake) NOR hardware incompatibility.
+Seems like drive-side speedloader thing and emulation problem.
 
-Corrupion game (and Fish too) react the same on Plus4 as on C16 - lock up instead of
-initializing disk and entering fastloader.
+## Requirements
+
+- tcbm2sd with register mirroring enabled
+- original 1551 ROM
 
 # Build on MacOS
 

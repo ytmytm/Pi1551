@@ -24,9 +24,9 @@
 #include "DiskImage.h"
 #include <stdlib.h>
 
-#if defined(PI1551SUPPORT) && !defined(PI1551_DISABLE_FORCE_DISK_SPINNING)
-#define PI1551_FORCE_DISK_SPINNING 1
-#endif
+// Define PI1551_FORCE_DISK_SPINNING to keep the encoder running when the emulated
+// CPU motor line is off (debug only; not realistic drive behaviour).
+// #define PI1551_FORCE_DISK_SPINNING 1
 
 #if defined(EXPERIMENTALZERO)
 inline int ceil(float num) {

@@ -46,6 +46,9 @@ extern "C"
 #include "Pi1581.h"
 #endif
 
+// Uncomment to drive GPIO1 as a 1MHz duty-cycle probe during Emulate1551.
+// #define PI1551_GPIO1_TIMING_PROBE
+
 // Global overrun counter for 1us timing overruns
 unsigned long long g_overrunCounter = 0;
 #include "FileBrowser.h"
@@ -610,7 +613,7 @@ void InitialiseLCD()
 //		printf("\E[1ALED %s%d\E[0m Motor %d Track %0d.%d ATN %d DAT %d CLK %d %s\r\n", LED ? termainalTextRed : termainalTextNormal, LED, Motor, Track >> 1, Track & 1 ? 5 : 0, ATN, DATA, CLOCK, roms.ROMNames[romIndex]);
 //}
 
-void UpdateLCD(const char* track, unsigned temperature)
+void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = false)
 {
 	if (screenLCD)
 	{
@@ -626,6 +629,7 @@ void UpdateLCD(const char* track, unsigned temperature)
 
 		// Prepare display text
 		bool showTapeInfo = false;
+		bool caddyChanged = false;
 		bool inEmulation = (emulating != IEC_COMMANDS);
 #if defined(PI1551SUPPORT)
 		// Check if tape is loaded and playing - show counter and percentage on OLED
@@ -659,8 +663,13 @@ void UpdateLCD(const char* track, unsigned temperature)
 			else
 				snprintf(tempBuffer, tempBufferSize, "%s", track);
 			screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
-			screenLCD->RefreshRows(0, 1);
 		}
+
+		if (refreshCaddyList)
+			caddyChanged = diskCaddy.Update();
+
+		if (!showTapeInfo && !caddyChanged)
+			screenLCD->RefreshRows(0, 1);
 
 #if defined(PI1551SUPPORT)
 		TCBM_Bus::WaitMicroSeconds(100);
@@ -784,12 +793,18 @@ void UpdateScreen()
 			else
 				snprintf(lcdText, sizeof(lcdText), "%s", tempBufferTrack);
 
-			if (strcmp(lcdText, pi1551MinimalLcdText) != 0)
+			bool row0Changed = (strcmp(lcdText, pi1551MinimalLcdText) != 0);
+			bool multiImageCaddy = (diskCaddy.GetNumberOfImages() > 1);
+			if (row0Changed || multiImageCaddy)
 			{
-				strncpy(pi1551MinimalLcdText, lcdText, sizeof(pi1551MinimalLcdText) - 1);
-				pi1551MinimalLcdText[sizeof(pi1551MinimalLcdText) - 1] = 0;
-				UpdateLCD(tempBufferTrack, temperature);
-				oldTemperature = temperature;
+				if (row0Changed)
+				{
+					strncpy(pi1551MinimalLcdText, lcdText, sizeof(pi1551MinimalLcdText) - 1);
+					pi1551MinimalLcdText[sizeof(pi1551MinimalLcdText) - 1] = 0;
+					oldTemperature = temperature;
+				}
+				// OLED/I2C is core0-only: never call diskCaddy.Update() from Emulate1551.
+				UpdateLCD(tempBufferTrack, temperature, multiImageCaddy);
 			}
 			continue;
 		}
@@ -2016,8 +2031,10 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	// Self test code done. Begin realtime emulation.
 	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
 	TCBM_Bus::RefreshOuts1551();
+#if defined(PI1551_GPIO1_TIMING_PROBE)
 	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
 	RPI_SetGpioHi(RPI_GPIO1);
+#endif
 
 	ctBefore = read32(ARM_SYSTIMER_CLO);
 
@@ -2038,7 +2055,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		}
 
 		// Timing marker on GPIO1: low = 6502 halves + interleaved drive; high = housekeeping + SYSTIMER.
+#if defined(PI1551_GPIO1_TIMING_PROBE)
 		RPI_SetGpioLo(RPI_GPIO1);
+#endif
 
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
@@ -2130,19 +2149,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (slowUiTick && diskCaddy.GetNumberOfImages() > 1)
 		{
 			if (nextDisk)
-			{
 				pi1551.drive.Insert(diskCaddy.PrevDisk());
-#if not defined(EXPERIMENTALZERO)
-				diskCaddy.Update();
-#endif
-			}
 			else if (prevDisk)
-			{
 				pi1551.drive.Insert(diskCaddy.NextDisk());
-#if not defined(EXPERIMENTALZERO)
-				diskCaddy.Update();
-#endif
-			}
 #if not defined(EXPERIMENTALZERO)
 			else if (directDiskSwapRequest != 0)
 			{
@@ -2166,7 +2175,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			directDiskSwapRequest = 0;
 		}
 
+#if defined(PI1551_GPIO1_TIMING_PROBE)
 		RPI_SetGpioHi(RPI_GPIO1);
+#endif
 
 		do	// Sync to the 1MHz clock
 		{
