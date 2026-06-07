@@ -340,9 +340,10 @@ extern "C"
 //
 // Because of a few demos using this ridiculous technique we need to emulate the changing write protect status using a timer.
 // Using a real drive you can actually break some of these demos (during the disk swap) just by the manual way you eject the disks.
-#define DISK_SWAP_CYCLES_DISK_EJECTING 400000
-#define DISK_SWAP_CYCLES_NO_DISK 200000
-#define DISK_SWAP_CYCLES_DISK_INSERTING 400000
+// Pi1551 has no swap animation or eject sound — emulate WP edges (~100ms total).
+#define DISK_SWAP_CYCLES_DISK_EJECTING 40000
+#define DISK_SWAP_CYCLES_NO_DISK 20000
+#define DISK_SWAP_CYCLES_DISK_INSERTING 40000
 
 Drive::Drive()
 	: diskImage(0)
