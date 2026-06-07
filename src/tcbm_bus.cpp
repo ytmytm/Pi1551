@@ -79,9 +79,31 @@ u8 TCBM_Bus::lastOutC = 0xff; // invalid
 bool TCBM_Bus::lastOutputLED = false;
 bool TCBM_Bus::lastOutputSound = false;
 
+// TCBM bus inputs sampled by the drive emulator (long cable / missing series R can glitch).
+static const u32 TCBM_GPIO_INPUT_MASK =
+	PIGPIO_MASK_ANY_DIO | PIGPIO_MASK_IN_DAV |
+	PIGPIO_MASK_OUT_STATUS0 | PIGPIO_MASK_OUT_STATUS1 |
+	PIGPIO_MASK_OUT_ACK | PIGPIO_MASK_OUT_DEV |
+	PIGPIO_MASK_IN_RESET;
+
+static const unsigned TCBM_GPIO_STABLE_MAX_ATTEMPTS = 32;
+
+static u32 ReadStableGplev0ForTCBM(void)
+{
+	u32 sample = read32(ARM_GPIO_GPLEV0);
+	for (unsigned attempt = 0; attempt < TCBM_GPIO_STABLE_MAX_ATTEMPTS; ++attempt)
+	{
+		u32 next = read32(ARM_GPIO_GPLEV0);
+		if ((sample & TCBM_GPIO_INPUT_MASK) == (next & TCBM_GPIO_INPUT_MASK))
+			return next;
+		sample = next;
+	}
+	return sample;
+}
+
 void TCBM_Bus::PollGPIOInputs1551(void)
 {
-	gplev0 = read32(ARM_GPIO_GPLEV0);
+	gplev0 = ReadStableGplev0ForTCBM();
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
@@ -212,7 +234,7 @@ void TCBM_Bus::ReadBrowseMode(void)
 /// @param  
 void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
 {
-    gplev0 = read32(ARM_GPIO_GPLEV0);
+    gplev0 = ReadStableGplev0ForTCBM();
 
     if (TPI)
     {
