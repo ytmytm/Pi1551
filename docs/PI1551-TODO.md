@@ -196,6 +196,13 @@ Seems like drive-side speedloader thing and emulation problem.
 - cable should be short (<50cm) and have 100R in-series to reduce noise (not tested)
 - did GPIO debouncing in software, in 1f4d223da737e41e5c87a6c52e26549fbecf73a0 - that didn't break bitfire/hypaload loaders even on long cable
 
+# Next problem
+
+- both 'Corruption' and 'Fish' save something to disk #1
+  upon startup, I'm not sure if this is right, it may
+  corrupt the image, is 14cf1e68246ba45ae228068f9da53d9ae9b7b16d a problem?
+- in fact I didn't test saving to disk image from DOS either since a9254104447ececfebd3b748912e5fd40ad32c8f
+
 # Build on MacOS
 
 make clean && make RASPPI=3 V=1 PREFIX="/Applications/ArmGNUToolchain/15.2.rel1/arm-none-eabi/bin/arm-none-eabi-" -j12
