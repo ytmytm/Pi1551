@@ -487,7 +487,8 @@ bool Drive::Update(unsigned encoderTicks)
 	if (!(diskImage && diskSpinning && m_pTPI))
 		return false;
 
-		// TIA PC bit 4 MODE: 0=write mode, 1=read mode
+		// TIA PC bit 4 MODE: 0=write mode, 1=read mode.  Some drive-side loaders (e.g.
+		// Corruption) strobe $4002 for TCBM; the bit stream must keep advancing anyway.
         bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10);
 		if (writing && diskImage->GetReadOnly())
 			writing = false;
@@ -522,25 +523,17 @@ bool Drive::Update(unsigned encoderTicks)
 #else
 		for (unsigned cycles = 0; cycles < encoderTicks; ++cycles)
 		{
+			if (++cyclesForBit >= cyclesPerBit)
+			{
+				cyclesForBit -= cyclesPerBit;
+				if (GetNextBit())
+					ResetEncoderDecoder(18.0f, 20.0f);
+			}
 			if (!writing)
 			{
-				if (++cyclesForBit >= cyclesPerBit)
-				{
-					cyclesForBit -= cyclesPerBit;
-					// Any 1 bit coming from the disk will come in the form of a flux reversal. (Non return to zero inverted emulation.)
-					if (GetNextBit())
-					{
-						// We have a genuine flux reversal.
-						// Pin 12 of UE5D is the BIT SYNC Input. When a positive pulse is applied to pin 12, the output of UE5D(pin 13) is applied to the load line (of UE7),
-						// causing the encoder/decoder clock to terminate the current cycle early and begin a new one.
-						ResetEncoderDecoder(18.0f, 20.0f); // Start seeing random flux reversals 18us-20us from now (ie since the last real flux reversal).
-					}
-				}
-				// The video amplifiers will often oscillate with no data in, but these oscillations are high enough in frequency that they "seldom" get past the valid pulse detector.
-				// Some do and some copy protections rely on this random behaviour so we need to emultate it.
-				// For example, 720 will read a byte from the disk multiple times and check that the values read each time were infact different. It does not matter what the values are just that they are different.
-				randomFluxReversalTime -= 0.0625f;	// One 16th of a micro second.
-				if (randomFluxReversalTime <= 0) ResetEncoderDecoder(2.0f, 25.0f); // Trigger a random noise generated zero crossing and start seeing more anywhere between 2us and 25us after this one.
+				randomFluxReversalTime -= 0.0625f;
+				if (randomFluxReversalTime <= 0)
+					ResetEncoderDecoder(2.0f, 25.0f);
 			}
 			if (++UE7Counter == 0x10) // The count carry (bit 4) clocks UF4.
 			{
