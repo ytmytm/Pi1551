@@ -170,7 +170,7 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback
 
-# Corruption (game
+# Corruption (game)
 
 Like on old VICE: goes to track 18, then to track 1, VICE gets stuck here
 but Pi1551 goes to track 24 (where it should load) and then gets stuck
@@ -186,6 +186,15 @@ Seems like drive-side speedloader thing and emulation problem.
 
 - tcbm2sd with register mirroring enabled
 - original 1551 ROM
+
+## Conclusions
+
+- shorter cable works better!
+- had to shorten the times after disk switch (it was 1s, I was faster, now it's 100ms)
+- still will sometimes fail, we need to check if 100R in series will help and allow to use longer cable
+- it seems the whole unreliability is due to electrical(!) issues
+- cable should be short (<50cm) and have 100R in-series to reduce noise (not tested)
+- did GPIO debouncing in software, in 1f4d223da737e41e5c87a6c52e26549fbecf73a0 - that didn't break bitfire/hypaload loaders even on long cable
 
 # Build on MacOS
 
