@@ -18,6 +18,9 @@
 
 #include "tcbm_bus.h"
 #include "InputMappings.h"
+#include "options.h"
+
+extern Options options;
 
 int TCBM_Bus::buttonCount = sizeof(ButtonPinFlags) / sizeof(unsigned);
 
@@ -313,9 +316,9 @@ void TCBM_Bus::RefreshOuts1551(void)
 		IOPort* portC = TPI->GetPortC();
 		u8 ddrC = portC->GetDirection();
 		u8 pc = portC->GetOutput();
-		// Early exit if nothing changed since last time (including LED/Sound)
-		if (dir == lastDirA && out == lastOutA && ddrC == lastDirC && pc == lastOutC && OutputLED == lastOutputLED && OutputSound == lastOutputSound)
-			return;
+		// Early exit only for TPI port state; LED/buzzer are pushed unconditionally below.
+		if (dir == lastDirA && out == lastOutA && ddrC == lastDirC && pc == lastOutC)
+			goto push_led_sound;
 		u8 changed = dir ^ lastDirA;
 		static const u8 masksA[8] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80 };
 		static const rpi_gpio_pin_t pinsA[8] = {
@@ -371,25 +374,35 @@ void TCBM_Bus::RefreshOuts1551(void)
 		lastDirC = ddrC;
 		lastOutA = out;
 		lastOutC = pc;
-		lastOutputLED = OutputLED;
-		lastOutputSound = OutputSound;
+
+		// Avoid redundant TPI writes; also skip zero writes but keep cache correct
+		if (clear != lastClear) {
+			if (clear) write32(ARM_GPIO_GPCLR0, clear);
+			lastClear = clear;
+		}
+		if (set != lastSet) {
+			if (set) write32(ARM_GPIO_GPSET0, set);
+			lastSet = set;
+		}
 	}
 
-	if (OutputLED) set |= 1 << PIGPIO_OUT_LED;
-	else clear |= 1 << PIGPIO_OUT_LED;
+push_led_sound:
+	lastOutputLED = OutputLED;
+	lastOutputSound = OutputSound;
 
-	if (OutputSound) set |= 1 << PIGPIO_OUT_SOUND;
-	else clear |= 1 << PIGPIO_OUT_SOUND;
-
-	// Avoid redundant writes; also skip zero writes but keep cache correct
-	if (clear != lastClear) {
-		if (clear) write32(ARM_GPIO_GPCLR0, clear);
-		lastClear = clear;
+	// LED is not a TPI register; drive every call (IEC RefreshOuts1541 style).
+	unsigned ledSoundClear = 0;
+	unsigned ledSoundSet = 0;
+	if (OutputLED) ledSoundSet |= 1u << PIGPIO_OUT_LED;
+	else ledSoundClear |= 1u << PIGPIO_OUT_LED;
+	// SoundOnGPIO=1: square-wave buzzer on GPIO13.  SoundOnGPIO=0: PWM sample via ALT0 — do not drive digitally.
+	if (options.SoundOnGPIO())
+	{
+		if (OutputSound) ledSoundSet |= 1u << PIGPIO_OUT_SOUND;
+		else ledSoundClear |= 1u << PIGPIO_OUT_SOUND;
 	}
-	if (set != lastSet) {
-		if (set) write32(ARM_GPIO_GPSET0, set);
-		lastSet = set;
-	}
+	write32(ARM_GPIO_GPCLR0, ledSoundClear);
+	write32(ARM_GPIO_GPSET0, ledSoundSet);
 }
 
 // called whenever the emulated 6502 writes to port A ($4000) or DDRA ($4003)

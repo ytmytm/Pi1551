@@ -1507,6 +1507,8 @@ DMA_ControlBlock dmaSoundCB =
 #if not defined(EXPERIMENTALZERO)
 static void PlaySoundDMA()
 {
+	RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_ALT0);
+	write32(PWM_CTL, PWM_USEF2 + PWM_PWEN2 + PWM_USEF1 + PWM_PWEN1 + PWM_CLRF1);
 	write32(PWM_DMAC, PWM_ENAB + 0x0001);
 	write32(DMA_ENABLE, 1);	// DMA_EN0
 	write32(DMA0_BASE + DMA_CONBLK_AD, (u32)&dmaSoundCB);
@@ -2127,22 +2129,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				exitReason = EXIT_AUTOLOAD;
 		}
 
-		if (options.SoundOnGPIO() && headSoundCounter > 0)
-		{
-			headSoundFreqCounter--;
-			if (headSoundFreqCounter <= 0)
-			{
-				headSoundFreqCounter = headSoundFreq;
-				headSoundCounter -= headSoundFreq * 8;
-				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
-			}
-		}
-		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
-		{
-			TCBM_Bus::OutputSound = false;
-		}
-
-		TCBM_Bus::RefreshOuts1551();
 		if (slowUiTick)
 			PublishPi1551UiSnapshot(options.DisplayPC());
 
@@ -2187,6 +2173,23 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				++g_overrunCounter;
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
+
+		if (options.SoundOnGPIO() && headSoundCounter > 0)
+		{
+			headSoundFreqCounter--;
+			if (headSoundFreqCounter <= 0)
+			{
+				headSoundFreqCounter = headSoundFreq;
+				headSoundCounter -= headSoundFreq * 8;
+				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
+			}
+		}
+		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
+		{
+			TCBM_Bus::OutputSound = false;
+		}
+
+		TCBM_Bus::RefreshOuts1551();
 	}
 	return exitReason;
 }
@@ -3596,6 +3599,8 @@ extern "C"
 		pi1551.drive.SetTPI(&pi1551.TPI);
 		pi1551.TPI.GetPortA()->SetPortOut(0, TCBM_Bus::PortA_OnPortOut);
 		TCBM_Bus::Initialise();
+		if (!options.SoundOnGPIO())
+			RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_ALT0);
 		// Ensure DEV line reflects current device ID after GPIO init clears outputs
 		GlobalSetDeviceID(deviceID);
 

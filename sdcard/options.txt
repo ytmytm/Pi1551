@@ -66,10 +66,14 @@ OnResetChangeToStartingFolder = 1
 // This option displays the IEC bus activity on the bottom of the Pi's screen
 GraphIEC = 1
 
-// If you have hardware with a peizo buzzer (the type without a generator) then you can use this option to hear the head step
+// Head-step sound on GPIO 13 (Pi1551 hat SOUND pin). NOT HDMI audio.
+// Name is confusing: this is NOT a simple on/off mute switch.
+//   SoundOnGPIO = 0 (default): legacy Pi1541 — short PWM/DMA sample (PlaySoundDMA) on GPIO13 in ALT0 mode.
+//   SoundOnGPIO = 1: square-wave buzzer on GPIO13 (for piezo without built-in generator). Uses Duration/Freq below.
+// On Pi1551 hardware with a buzzer on GPIO13, use SoundOnGPIO = 1.
 //SoundOnGPIO = 1
-//SoundOnGPIODuration = 1000 // Length of buzz in micro seconds
-//SoundOnGPIOFreq = 1200 // Frequency of buzz in Hz
+//SoundOnGPIODuration = 1000 // Buzz length in milliseconds (only when SoundOnGPIO = 1)
+//SoundOnGPIOFreq = 1200 // Buzz frequency in Hz (only when SoundOnGPIO = 1)
 
 // You can create 320x200 PNG files with the same name as your disk images. With this option turned on they will be displayed on the Pi's screen.
 //DisplayPNGIcons = 1

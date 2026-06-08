@@ -81,19 +81,52 @@ Legend
   - Buttons: `SW1`=GPIO27, `SW2`=GPIO22, `SW3`=GPIO17, `SW4`=GPIO4, `SW5`=GPIO5
   - Rotary encoder (`SW1`, `SW2`, `SW3`)
   - I2C display: `SDA1`=GPIO2, `SCL1`=GPIO3
-  - Sound (PWM): GPIO13
+  - Sound / head-step: GPIO13 (physical pin 33) — see **Head step sound** below
   - LED: GPIO10
- - Tape interface:
-   All signals are unidirectional. All are connected through a NPN transistor with appropriate 10K pullup on collector: to 3.3V for inputs, to 5V (from C16 side, NOT from RPi3) for outputs.
-   Input signal goes through 10K resistor to base, emitter goes to GND. Collector is also connected to the signal output.
-   Any NPN works: 2n3904, S8050, BC547
-   - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
-   - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
-   - `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
-   - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
-    - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
-    - When SENSE=1 (senseLineState=true): GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active state (PLAY pressed)
-    - When SENSE=0 (senseLineState=false): GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive state (PLAY released)
+
+### Head step sound (`SoundOnGPIO` in `options.txt`)
+
+The option name is misleading: it does **not** mean “sound on/off”. It selects **how** head-step audio is driven on **GPIO 13** (the `SOUND` line on the Pi1551 hat). Audio does **not** go to HDMI or the Pi’s 3.5 mm jack — Pi1541/Pi1551 firmware is bare-metal and only uses the SoC **PWM peripheral** or **GPIO bit-banging** on that pin.
+
+| `SoundOnGPIO` | What the firmware does | What you hear |
+|---------------|------------------------|---------------|
+| **0** (default in `options.cpp`) | On head move: `PlaySoundDMA()` — DMA feeds embedded `Sample.bin` into the PWM FIFO (~8-bit mono, comment in code: 44100 Hz). GPIO 13 must be in **ALT0** (PWM1), not digital output. | Short “click” from the sample (legacy Pi1541 path). |
+| **1** | On head move: start a square-wave buzzer on GPIO 13 (`OutputSound` toggled in the emulation loop). `SoundOnGPIODuration` / `SoundOnGPIOFreq` apply. GPIO 13 stays a **digital output**. | Continuous buzz while the head steps (~duration ms, ~freq Hz). |
+
+**Recommended on Pi1551 hardware** (piezo/buzzer wired to GPIO 13): `SoundOnGPIO = 1`.
+
+#### Two different code paths (easy to confuse)
+
+1. **Head direction change** (`Emulate1551` in `main.cpp`): `if (options.SoundOnGPIO())` → start GPIO buzzer counter; `else` → `PlaySoundDMA()`.
+2. **Per-microsecond buzzer loop**: `if (options.SoundOnGPIO() && headSoundCounter > 0)` → toggle `TCBM_Bus::OutputSound`. When `SoundOnGPIO = 0`, this block never runs — there is **no** GPIO square wave in that loop (that part is “off”), but `PlaySoundDMA()` may still run from (1).
+
+So `0` means “do not use the GPIO buzzer loop”, not “mute everything” in the original upstream design — unless `PlaySoundDMA()` is also removed or fails.
+
+#### Where the legacy PWM signal appears (Raspberry Pi 3 / BCM2835)
+
+- DMA destination: `PWM_FIF1` (PWM channel 1 FIFO), see `PlaySoundDMA()` and `TCBM_Bus::Initialise()` in `tcbm_bus.h`.
+- PWM1 on BCM2835 is available on **GPIO 13** or GPIO 19 when the pin is **ALT0**.
+- On Pi1551, GPIO 13 is the hat `SOUND` net; GPIO 18/19 are used for TCBM/tape and are not free for PWM audio.
+- **HDMI**: not used for this sound path.
+
+#### Implementation notes (Pi1551 branch)
+
+- `RefreshOuts1551()` must not drive GPIO 13 as a digital line when `SoundOnGPIO = 0`, or it blocks PWM on the same pin.
+- With `SoundOnGPIO = 1`, LED and buzzer are pushed every refresh (IEC-style), independent of the TPI early-exit optimisation.
+
+### Tape interface
+
+All signals are unidirectional. All are connected through a NPN transistor with appropriate 10K pullup on collector: to 3.3V for inputs, to 5V (from C16 side, NOT from RPi3) for outputs.
+Input signal goes through 10K resistor to base, emitter goes to GND. Collector is also connected to the signal output.
+Any NPN works: 2n3904, S8050, BC547
+
+- `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
+- `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
+- `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
+- `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
+  - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
+  - When SENSE=1 (senseLineState=true): GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active state (PLAY pressed)
+  - When SENSE=0 (senseLineState=false): GPIO is set LOW, hardware inverts to output HIGH, computer sees HIGH = inactive state (PLAY released)
 
 Note: check in `defs.h` if the support for MOTOR line is enabled or if we assume motor is always active: `TAPE_MOTOR_SUPPORT`
 
