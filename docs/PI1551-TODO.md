@@ -52,7 +52,7 @@
 + (done) bitfire loader, it requires that 1551 porta bits on input are pulled high when other end is high-z - but RPi pullups are not sufficient
   (it also requires that status bits can switch direction but that was already handled in tcbm2sd)
   (external pullups to 3.3V on DIO1-8 required - just in case they should be on all lines: ST0/ST1/DAV/ACK)
-- 'VDC Challenge' (and some other gfx slideshows) use HYPALOAD7 fastloader, that relies on timing.
++ (done) 'VDC Challenge' (and some other gfx slideshows) use HYPALOAD7 fastloader, that relies on timing.
    Root cause: phase of `Update(16)` vs 6502 halves + 2nd-half stretch for HYPALOAD7 poll window.
    Fix: `Update(16)` after 1st half only; busy-loop delay after 2nd `Step()`; strict 1MHz SYSTIMER (see Emulate1551).
 
@@ -126,12 +126,20 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 
 # TODO:
 
-- disable 'disk always spinning' option for pi1551 update
-- OLED screen gets garbled in emulation mode when switching disk images
-- rotary encoder doesn't work so well in emulation mode, skips wrong direction a lot more
-  than in browser mode (it's not perfect there either)
-- disable 1MHz output to reduce EM noise
-- disassemble 'Corruption' loader and test standalone, it's a software issue
++ (done) disable 'disk always spinning' option for pi1551 update
++ (done) OLED screen gets garbled in emulation mode when switching disk images
++ (done) rotary encoder doesn't work so well in emulation mode, skips wrong direction a lot more than in browser mode (it's not perfect there either)
++ (done) disable 1MHz output to reduce EM noise
++ (done) disassemble 'Corruption' loader and test standalone, it's a software issue
+
+- star file option doesn't seem to work, need output on HDMI to see what is going on
+- rebrand to pi1551
+- credit myself
+- remove irrlevant options from options.txt
+- remove dead code and 1541/1581 stuff
+- prepare full bootable sd card for download
+- support U0 commands from tcbm2sd (fastload protocol, device number change)
+- in browser mode support d71/81/80/82 disk images via the same library as tcbm2sd but r+w
 
 # Tests
 
@@ -170,7 +178,7 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback
 
-# Corruption (game)
+# (done) Corruption (game)
 
 Like on old VICE: goes to track 18, then to track 1, VICE gets stuck here
 but Pi1551 goes to track 24 (where it should load) and then gets stuck
@@ -196,12 +204,13 @@ Seems like drive-side speedloader thing and emulation problem.
 - cable should be short (<50cm) and have 100R in-series to reduce noise (not tested)
 - did GPIO debouncing in software, in 1f4d223da737e41e5c87a6c52e26549fbecf73a0 - that didn't break bitfire/hypaload loaders even on long cable
 
-# Next problem
+# (done) Next problem
 
 - both 'Corruption' and 'Fish' save something to disk #1
   upon startup, I'm not sure if this is right, it may
   corrupt the image, is 14cf1e68246ba45ae228068f9da53d9ae9b7b16d a problem?
 - in fact I didn't test saving to disk image from DOS either since a9254104447ececfebd3b748912e5fd40ad32c8f
+- fixed by e96305ee3423e4718ec5bd8aa370753714587a61
 
 # Build on MacOS
 
