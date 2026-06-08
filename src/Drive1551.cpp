@@ -527,7 +527,10 @@ bool Drive::Update(unsigned encoderTicks)
 			if (++cyclesForBit >= cyclesPerBit)
 			{
 				cyclesForBit -= cyclesPerBit;
-				if (GetNextBit())
+				// Advance bit-cell timing in read and write; only read flux from the disk
+				// during read.  GetNextBit() also advances headBitOffset, so it must not run
+				// while writing — SetNextBit() already advances the head once per written bit.
+				if (!writing && GetNextBit())
 					ResetEncoderDecoder(18.0f, 20.0f);
 			}
 			if (!writing)
