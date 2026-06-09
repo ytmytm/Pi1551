@@ -1,5 +1,6 @@
 // Pi1541 - A Commodore 1541 disk drive emulator
 // Copyright(C) 2018 Stephen White
+// Copyright(C) 2024-2026 Maciej Witkowiak
 //
 // This file is part of Pi1541.
 // 

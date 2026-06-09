@@ -1,3 +1,21 @@
+// Pi1551 - TCBM browser-mode command handler
+// Copyright(C) 2024-2026 Maciej Witkowiak
+//
+// This file is part of Pi1551.
+//
+// Pi1551 is free software : you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Pi1551 is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with Pi1551. If not, see <http://www.gnu.org/licenses/>.
+
 #include "tcbm_commands.h"
 
 #include "tcbm_bus.h"

@@ -1,5 +1,6 @@
 // Pi1541 - A Commodore 1541 disk drive emulator
 // Copyright(C) 2018 Stephen White
+// Copyright(C) 2024-2026 Maciej Witkowiak
 //
 // This file is part of Pi1541.
 // 
@@ -562,7 +563,7 @@ void InitialiseLCD()
 		if ( (height == 64) && (strcasecmp(options.GetLcdLogoName(), "1541ii") == 0) )
 		{
 			screenLCD->PlotRawImage(logo_ssd_1541ii, 0, 0, width, height);
-			snprintf(tempBuffer, tempBufferSize, "Pi1541 V%d.%02d", versionMajor, versionMinor);
+			snprintf(tempBuffer, tempBufferSize, "%s V%d.%02d", PI_DRIVE_NAME, versionMajor, versionMinor);
 			screenLCD->PrintText(false, 16, 0, tempBuffer, 0xffffffff);
 			logo_done = true;
 		}
@@ -589,7 +590,7 @@ void InitialiseLCD()
 
 		if (!logo_done)
 		{
-			snprintf(tempBuffer, tempBufferSize, "Pi1541 V%d.%02d", versionMajor, versionMinor);
+			snprintf(tempBuffer, tempBufferSize, "%s V%d.%02d", PI_DRIVE_NAME, versionMajor, versionMinor);
 			int x = (width - 8*strlen(tempBuffer) ) /2;
 			int y = (height-16)/2;
 			screenLCD->PrintText(false, x, y, tempBuffer, 0x0);
@@ -3504,7 +3505,13 @@ extern "C"
 		InitialiseLCD();
 #if not defined(EXPERIMENTALZERO)
 		int y_pos = 184;
-		snprintf(tempBuffer, tempBufferSize, "Copyright(C) 2018 Stephen White, 2024 Maciej Witkowiak");
+#if defined(PI1551SUPPORT)
+		snprintf(tempBuffer, tempBufferSize, "Copyright(C) 2024-2026 Maciej Witkowiak");
+		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+		snprintf(tempBuffer, tempBufferSize, "Based on Pi1541 Copyright(C) 2018 Stephen White");
+#else
+		snprintf(tempBuffer, tempBufferSize, "Copyright(C) 2018 Stephen White");
+#endif
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 		snprintf(tempBuffer, tempBufferSize, "This program comes with ABSOLUTELY NO WARRANTY.");
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
