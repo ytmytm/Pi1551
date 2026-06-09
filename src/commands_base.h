@@ -92,6 +92,8 @@ public:
 
 	const char* GetNameOfImageSelected() const { return selectedImageName; }
 	const FILINFO* GetImageSelected() const { return &filInfoSelectedImage; }
+	void ClearPendingImageSelection();
+	const char* GetLastOpenPath() const { return lastOpenPath; }
 
 	void SetHeaderVersion();
 	int CreateNewDisk(char* filenameNew, char* ID, bool automount);
@@ -232,6 +234,7 @@ protected:
 
 	char selectedImageName[256];
 	FILINFO filInfoSelectedImage;
+	char lastOpenPath[256];
 
 	const char* starFileName;
 

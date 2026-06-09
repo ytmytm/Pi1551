@@ -2576,20 +2576,11 @@ void emulator()
 								{
 									g_tapePlayer->LoadTap(filInfoSelected);
 								}
-								fileBrowserSelectedName = 0;
-								m_TCBM_Commands.Reset();
 							}
 							else if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
 							{
 								if (fileBrowser->SelectLST(fileBrowserSelectedName))
-								{
 									emulating = BeginEmulating(fileBrowser, fileBrowserSelectedName);
-								}
-								else
-								{
-									m_TCBM_Commands.Reset();
-									fileBrowserSelectedName = 0;
-								}
 							}
 							else if (DiskImage::IsDiskImageExtention(fileBrowserSelectedName))
 							{
@@ -2599,17 +2590,9 @@ void emulator()
 
 								if (diskCaddy.Insert(filInfoSelected, readOnly))
 									emulating = BeginEmulating(fileBrowser, filInfoSelected->fname);
-								else
-									fileBrowserSelectedName = 0;
-							}
-							else
-							{
-								fileBrowserSelectedName = 0;
 							}
 
-							if (fileBrowserSelectedName == 0)
-								m_TCBM_Commands.Reset();
-
+							m_TCBM_Commands.ClearPendingImageSelection();
 							selectedViaIECCommands = true;
 							break;
 						case TCBM_Commands::DIR_PUSHED:
@@ -2675,6 +2658,7 @@ void emulator()
 				TCBM_Bus::WaitMicroSeconds(2 * 1000000);
 
 			TCBM_Bus::WaitUntilReset();
+			m_TCBM_Commands.ClearPendingImageSelection();
 			emulating = IEC_COMMANDS;
 	
 			if ((exitReason == EXIT_RESET) && (options.GetOnResetChangeToStartingFolder() || selectedViaIECCommands))

@@ -162,12 +162,19 @@ Commands_Base::Commands_Base()
 	newDiskType = DiskImage::D64;
 }
 
+void Commands_Base::ClearPendingImageSelection()
+{
+	selectedImageName[0] = 0;
+	filInfoSelectedImage.fname[0] = 0;
+}
+
 void Commands_Base::Reset(void)
 {
 	receivedCommand = false;
 	receivedEOI = false;
 	secondaryAddress = 0;
-	selectedImageName[0] = 0;
+	ClearPendingImageSelection();
+	lastOpenPath[0] = 0;
 	atnSequence = ATN_SEQUENCE_IDLE;
 	deviceRole = DEVICE_ROLE_PASSIVE;
 	commandCode = 0;
@@ -300,6 +307,16 @@ static int ParsePartition(char** buf)
 		(*buf)++;
 	}
 	return 0;
+}
+
+static const char* StripPartitionPrefix(const char* path)
+{
+	const char* p = path;
+	while (isdigit(*p & 0x7f))
+		++p;
+	if (p > path && p[0] == ':')
+		return p + 1;
+	return path;
 }
 
 static inline char NormaliseCbmChar(char value)
@@ -1515,17 +1532,12 @@ void Commands_Base::OpenFile()
 
 			if (starRequested)
 			{
-				// Always construct absolute path under DEFAULT_BROWSE_DIR
-				// If starFileName starts with '/', trim it and prepend DEFAULT_BROWSE_DIR
-				// Examples: 'a.prg' -> '/1551/a.prg', '/a.prg' -> '/1551/a.prg', '/games/a.prg' -> '/1551/games/a.prg'
-				const char* starPath = starFileName;
-				if (starFileName[0] == '/')
-				{
-					// Skip leading '/' to make it relative to DEFAULT_BROWSE_DIR
-					starPath = starFileName + 1;
-				}
-				
-				// Construct absolute path: DEFAULT_BROWSE_DIR + '/' + starPath
+				// Always construct absolute path under DEFAULT_BROWSE_DIR.
+				// StarFileName is a bare filename (boot.t2sd); strip optional 0: partition prefix.
+				const char* starPath = StripPartitionPrefix(starFileName);
+				if (starPath[0] == '/')
+					++starPath;
+
 				size_t browseDirLen = strlen(DEFAULT_BROWSE_DIR);
 				size_t starPathLen = strlen(starPath);
 				if (browseDirLen + 1 + starPathLen < sizeof(filename))
@@ -1535,6 +1547,8 @@ void Commands_Base::OpenFile()
 					strncpy(filename + browseDirLen + 1, starPath, sizeof(filename) - browseDirLen - 1);
 					filename[browseDirLen + 1 + starPathLen] = '\0';
 				}
+				strncpy(lastOpenPath, filename, sizeof(lastOpenPath) - 1);
+				lastOpenPath[sizeof(lastOpenPath) - 1] = '\0';
 			}
 			
 
@@ -1603,6 +1617,8 @@ void Commands_Base::OpenFile()
 
 				if (!found)
 				{
+					strncpy(lastOpenPath, filename, sizeof(lastOpenPath) - 1);
+					lastOpenPath[sizeof(lastOpenPath) - 1] = '\0';
 					DEBUG_LOG("Can't find %s", filename);
 					Error(ERROR_62_FILE_NOT_FOUND);
 				}

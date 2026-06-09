@@ -81,6 +81,7 @@ void TCBM_Commands::Reset(void)
 
 void TCBM_Commands::SimulateIECBegin(void)
 {
+    ClearPendingImageSelection();
     SetHeaderVersion();
     ResetStateMachine();
 
@@ -311,6 +312,8 @@ void TCBM_Commands::UpdateDebugOverlay()
         FSIZE_t pos = f_tell(const_cast<FIL*>(&ch.file));
         SetDebugLine(8, "FILE  pos:%lu size:%lu", static_cast<unsigned long>(pos), static_cast<unsigned long>(ch.fileSize));
     }
+    else if (lastOpenPath[0] != '\0')
+        SetDebugLine(8, "OPEN: %s", lastOpenPath);
 
     int lineIndex = debugLineCount;
     for (int i = 0; i < debugHistoryCount && lineIndex < DEBUG_LINE_CAPACITY; ++i, ++lineIndex)
@@ -657,7 +660,10 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		else
 		{
 			tcbmState = TCBM_STATE_LOAD;
-			PushDebugLine("LOAD error channel %u", channel);
+			if (lastOpenPath[0] != '\0')
+				PushDebugLine("LOAD fail: %s", lastOpenPath);
+			else
+				PushDebugLine("LOAD error ch %u cmd:%s", channel, reinterpret_cast<const char*>(ch.command));
 		}
 		return false;
 	}

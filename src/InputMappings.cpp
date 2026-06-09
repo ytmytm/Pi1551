@@ -157,21 +157,20 @@ void InputMappings::CheckButtonsEmulationMode()
 {
 	buttonFlags = 0;
 
-	if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP)
-		|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_UP))
-		SetButtonFlag(NEXT_FLAG);
-	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN)
-		|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_DOWN))
-		SetButtonFlag(PREV_FLAG);
-	//else if (BUS_API::GetInputButtonPressed(INPUT_BUTTON_BACK))
-	//	SetButtonFlag(BACK_FLAG);
-	//else if (BUS_API::GetInputButtonPressed(INPUT_BUTTON_INSERT))
-	//	SetButtonFlag(INSERT_FLAG);
-	else {
-		enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
-		if (enterButtonPressedPrev && !enterButtonPressed)
-			SetButtonFlag(ESC_FLAG);
-		enterButtonPressedPrev = enterButtonPressed;
+	enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
+	if (enterButtonPressedPrev && !enterButtonPressed)
+		SetButtonFlag(ESC_FLAG);
+	enterButtonPressedPrev = enterButtonPressed;
+
+	// Rotary exit (SW1) must win over stale rotation UP/DOWN pulses.
+	if (!(buttonFlags & ESC_FLAG))
+	{
+		if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP)
+			|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_UP))
+			SetButtonFlag(NEXT_FLAG);
+		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN)
+			|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_DOWN))
+			SetButtonFlag(PREV_FLAG);
 	}
 }
 
