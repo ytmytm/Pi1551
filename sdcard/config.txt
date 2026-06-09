@@ -1,3 +1,4 @@
 kernel_address=0x1f00000
 force_turbo=1
+dtparam=spi=off
 force_eeprom_read=0

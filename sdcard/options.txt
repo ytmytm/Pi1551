@@ -8,7 +8,11 @@
 
 // 1551 DOS ROM file. Searched in SD root and /roms. Default in firmware: dos1551.bin
 ROM1551 = dos1551.bin
+// https://plus4world.powweb.com/software/Super_DOS_1551
+// format disks as "N0:diskname,id+" for 40-track
 //ROM1551 = super_dos_1551.rom
+// https://github.com/ytmytm/1551-RAMBOard
+// utilizes RAMBOard for track cache, supported by Hyparam loader and Parobek utility ROM
 //ROM1551 = dos1551-ram.bin
 
 // The rate (in seconds) a long selection is scrolled in browse mode
@@ -48,8 +52,8 @@ SoundOnGPIOFreq = 1200 // Buzz frequency in Hz (only when SoundOnGPIO = 1)
 // With this option turned on they will be displayed on the HDMI screen.
 //DisplayPNGIcons = 1
 
-// File loaded by DLOAD"*" / LOAD"*". Partition prefix (e.g. 0:) is accepted but optional.
-StarFileName = 0:boot.t2sd
+// File loaded by DLOAD"*" / LOAD"*". Filename only (boot.t2sd), not the DOS form (0:boot.t2sd).
+StarFileName = boot.t2sd
 
 // Alt-N creates a new disk image in the current browse folder.
 // Names are formed automatically as autoname001.d64, autoname002.d64 etc...
