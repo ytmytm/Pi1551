@@ -139,7 +139,7 @@ public:
 
 	void DumpTrack(unsigned track);
 
-	const char* GetName() { return fileInfo->fname; }
+	const char* GetName() { return fileInfo ? fileInfo->fname : ""; }
 
 	inline unsigned BitsInTrack(unsigned track) const { return trackLengths[track] << 3; }
 	inline unsigned TrackLength(unsigned track) const { return trackLengths[track]; }
@@ -257,6 +257,8 @@ private:
 	bool dirty;
 	unsigned attachedImageSize;
 	DiskType diskType;
+	void CopyFileInfo(const FILINFO* src);
+	FILINFO fileInfoStorage;
 	const FILINFO* fileInfo;
 	unsigned hash;
 

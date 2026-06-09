@@ -20,18 +20,31 @@
 #ifndef ROMs_H
 #define ROMs_H
 
+#include "defs.h"
 #include "types.h"
+
+class Screen;
+class ScreenBase;
 
 class ROMs
 {
 public:
 	ROMs() :
 		currentROMIndex(0),
-		ROM1551Size(16384)  // Default to 16k
+		lastManualSelectedROMIndex(0),
+		longestRomNameLen(0)
+#if defined(PI1551SUPPORT)
+		, ROM1551SlotCount(0)
+#endif
 	{
+#if defined(PI1551SUPPORT)
+		for (unsigned i = 0; i < MAX_ROMS; ++i)
+			ROM1551Sizes[i] = 0;
+#endif
 	}
 
 	void SelectROM(const char* ROMName);
+	void SelectROMIndex(unsigned index);
 
 	inline u8 Read(u16 address)
 	{
@@ -39,11 +52,16 @@ public:
 	}
 	inline u8 Read1551(u16 address)
 	{
-		// For 16k ROM: mask to 0x3fff, for 32k ROM: mask to 0x7fff
+#if defined(PI1551SUPPORT)
+		unsigned romSize = Get1551ROMSize();
+		if (romSize == 32768)
+			return ROMImage1551[currentROMIndex][address & 0x7fff];
+		return ROMImage1551[currentROMIndex][address & 0x3fff];
+#else
 		if (ROM1551Size == 32768)
 			return ROMImage1551[address & 0x7fff];
-		else
-			return ROMImage1551[address & 0x3fff];
+		return ROMImage1551[address & 0x3fff];
+#endif
 	}
 	inline u8 Read1581(u16 address)
 	{
@@ -58,7 +76,14 @@ public:
 	static const int MAX_ROMS = 7;
 
 	unsigned char ROMImages[MAX_ROMS][ROM_SIZE];
+#if defined(PI1551SUPPORT)
+	unsigned char ROMImage1551[MAX_ROMS][ROM1551_SIZE];
+	unsigned ROM1551Sizes[MAX_ROMS];
+	unsigned ROM1551SlotCount;
+#else
 	unsigned char ROMImage1551[ROM1551_SIZE];
+	unsigned ROM1551Size;  // Actual size of loaded ROM: 16384 (16k) or 32768 (32k)
+#endif
 	unsigned char ROMImage1581[ROM1581_SIZE];
 	char ROMName1551[256];
 	char ROMName1581[256];
@@ -67,7 +92,6 @@ public:
 
 	unsigned currentROMIndex;
 	unsigned lastManualSelectedROMIndex;
-	unsigned ROM1551Size;  // Actual size of loaded ROM: 16384 (16k) or 32768 (32k)
 
 	unsigned GetLongestRomNameLen() { return longestRomNameLen; }
 	unsigned UpdateLongestRomNameLen(unsigned maybeLongest);
@@ -76,6 +100,14 @@ public:
 	{
 		return ROMNames[currentROMIndex];
 	}
+
+#if defined(PI1551SUPPORT)
+	unsigned Get1551ROMSize() const { return ROM1551Sizes[currentROMIndex]; }
+	unsigned CountValid1551ROMs() const;
+	unsigned NextValid1551ROMIndex(unsigned from, int delta) const;
+	void Display1551ROMSelector(unsigned selectedIndex, Screen* screen, ScreenBase* screenLCD, bool inEmulation);
+#endif
+
 protected:
 	unsigned longestRomNameLen;
 };

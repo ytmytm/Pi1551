@@ -356,6 +356,7 @@ public:
 	static void PollGPIOInputs1551(void);
 	static void ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk);
 	static void ClearRotaryDiskSteps(void);
+	static void ClearRotarySynthesizedButtons(void);
 	static void ReadEmulationMode1551(bool updateTIAStatus = true);
 
 	static void WaitUntilReset(void)

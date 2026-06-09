@@ -171,7 +171,7 @@ Options::Options(void)
 	strcpy(autoBaseName, "autoname");
 	C128BootSectorName[0] = 0;
 	starFileName[0] = 0;
-	ROMName[0] = 0;
+	strcpy(ROMName, "dos1551.bin");
 	ROMNameSlot2[0] = 0;
 	ROMNameSlot3[0] = 0;
 	ROMNameSlot4[0] = 0;
@@ -180,7 +180,7 @@ Options::Options(void)
 	ROMNameSlot7[0] = 0;
 	ROMNameSlot8[0] = 0;
 	ROMName1581[0] = 0;
-	strcpy(ROMName1551, "dos1551.bin");
+	ROMName1551[0] = 0;
 	LCDName[0] = 0;
 	newDiskType[0] = 0;
 }
@@ -269,6 +269,34 @@ void Options::Process(char* buffer)
 			else if (strcasecmp(pValue, "sh1106_128x64") == 0)
 				i2cLcdModel = LCD_1106_128x64;
 		}
+		else if ((strcasecmp(pOption, "ROM1") == 0) || (strcasecmp(pOption, "ROM") == 0))
+		{
+			strncpy(ROMName, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM2") == 0))
+		{
+			strncpy(ROMNameSlot2, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM3") == 0))
+		{
+			strncpy(ROMNameSlot3, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM4") == 0))
+		{
+			strncpy(ROMNameSlot4, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM5") == 0))
+		{
+			strncpy(ROMNameSlot5, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM6") == 0))
+		{
+			strncpy(ROMNameSlot6, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "ROM7") == 0))
+		{
+			strncpy(ROMNameSlot7, pValue, 255);
+		}
 		else if ((strcasecmp(pOption, "ROM1551") == 0))
 		{
 			strncpy(ROMName1551, pValue, 255);
@@ -301,6 +329,15 @@ float Options::GetFloat(char* pString)
 
 const char* Options::GetRomName(int index) const
 {
+	if (index == 0)
+	{
+		if (ROMName[0] != 0)
+			return ROMName;
+		if (ROMName1551[0] != 0)
+			return ROMName1551;
+		return "dos1551.bin";
+	}
+
 	switch (index)
 	{
 	case 1:

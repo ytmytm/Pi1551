@@ -144,10 +144,20 @@ DiskImage::DiskImage()
 	: readOnly(false)
 	, dirty(false)
 	, attachedImageSize(0)
-	, fileInfo(0)
+	, fileInfo(&fileInfoStorage)
 {
+	fileInfoStorage.fname[0] = 0;
 	memset(tracks, 0x55, sizeof(tracks));
 	memset(trackUsed, 0, sizeof(trackUsed));
+}
+
+void DiskImage::CopyFileInfo(const FILINFO* src)
+{
+	if (src)
+		fileInfoStorage = *src;
+	else
+		fileInfoStorage.fname[0] = 0;
+	fileInfo = &fileInfoStorage;
 }
 
 void DiskImage::Close()
@@ -221,7 +231,7 @@ bool DiskImage::OpenD64(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	unsigned offset = 0;
 
@@ -393,7 +403,7 @@ bool DiskImage::OpenD71(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	unsigned offset = 0;
 
@@ -554,7 +564,7 @@ bool DiskImage::OpenD81(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	unsigned offsetSource = 0;
 
@@ -852,7 +862,7 @@ bool DiskImage::OpenG64(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 {
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	attachedImageSize = size;
 
@@ -1043,7 +1053,7 @@ bool DiskImage::OpenNIB(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 	int track, t_index = 0, h_index = 0;
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	attachedImageSize = size;
 
@@ -1254,7 +1264,7 @@ bool DiskImage::OpenT64(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	attachedImageSize = size;
 
@@ -1350,7 +1360,7 @@ bool DiskImage::OpenPRG(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	Close();
 
-	this->fileInfo = fileInfo;
+	CopyFileInfo(fileInfo);
 
 	attachedImageSize = size;
 

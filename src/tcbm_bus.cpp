@@ -134,6 +134,15 @@ void TCBM_Bus::ClearRotaryDiskSteps()
 	rotaryDiskStepPrev = false;
 }
 
+void TCBM_Bus::ClearRotarySynthesizedButtons()
+{
+	if (!rotaryEncoderEnable)
+		return;
+
+	SetButtonState(InputMappings::INPUT_BUTTON_UP, false);
+	SetButtonState(InputMappings::INPUT_BUTTON_DOWN, false);
+}
+
 void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
 {
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...

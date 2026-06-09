@@ -214,7 +214,23 @@ struct Pi1551EmulationCommands
 	bool nextDisk;
 	bool prevDisk;
 	unsigned directDiskSwapRequest;
+	bool applyRomSwitch;
+	unsigned romSwitchIndex;
 };
+
+struct Pi1551ROMSelectState
+{
+	bool active;
+	unsigned previewIndex;
+	bool enterHeldPrev;
+	bool suppressNextRelease;
+	u32 enterPressStartCycles;
+};
+
+static Pi1551ROMSelectState g_romSelect = {};
+static FileBrowser* g_pi1551FileBrowser = nullptr;
+static const u32 PI1551_ROM_SELECT_LONG_PRESS_CYCLES = 2000000; // 2 seconds
+static const u32 PI1551_ROM_SELECT_SUPPRESS_ENTER_CYCLES = 400000; // 400ms — block normal enter only after this
 
 // Core 0 posts user input; core 1 takes it on each 20ms UI tick. A monotonic
 // generation counter replaces the pending buffer and odd/even sequence lock.
@@ -231,6 +247,207 @@ static void ResetPi1551UserInput()
 {
 	g_pi1551CommandGenerationAck = g_pi1551CommandGeneration;
 	TCBM_Bus::ClearRotaryDiskSteps();
+	g_romSelect.active = false;
+	g_romSelect.enterHeldPrev = false;
+	g_romSelect.suppressNextRelease = false;
+	g_romSelect.enterPressStartCycles = 0;
+}
+
+static void Pi1551RunFastBoot()
+{
+	int cycleCount = 0;
+	while (cycleCount < FAST_BOOT_CYCLES_1551)
+	{
+		pi1551.m6502.SYNC();
+		pi1551.m6502.Step();
+		pi1551.Update(PI1551_ENCODER_TICKS_PER_US);
+		pi1551.EndMicrosecond();
+		++cycleCount;
+		if (pi1551.m6502.GetPC() == FAST_BOOT_PC_1551)
+			break;
+	}
+	TCBM_Bus::RefreshOuts1551();
+}
+
+static void ApplyPi1551ROMSwitch(unsigned romIndex, bool resetCpu)
+{
+	if (romIndex >= ROMs::MAX_ROMS || !roms.ROMValid[romIndex])
+		return;
+
+	roms.SelectROMIndex(romIndex);
+	DEBUG_LOG("1551 ROM switch to %d %s\r\n", romIndex, roms.ROMNames[romIndex]);
+
+	if (resetCpu)
+	{
+		pi1551.m6502.Reset();
+		pi1551.Reset();
+		TCBM_Bus::RefreshOuts1551();
+		Pi1551RunFastBoot();
+	}
+}
+
+static void Pi1551ShowROMSelector()
+{
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Acquire();
+#endif
+	bool inEmulation = (emulating == EMULATING_1551);
+	roms.Display1551ROMSelector(g_romSelect.previewIndex, &screen, screenLCD, inEmulation);
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Release();
+#endif
+}
+
+static inline bool Pi1551RotarySwitchHeld()
+{
+	// Rotary SW1 maps to ENTER via edge events; GetInputButtonHeld() never goes true.
+	return !TCBM_Bus::GetInputButtonReleased(InputMappings::INPUT_BUTTON_ENTER);
+}
+
+// Hold rotary SW1 for 2s to open ROM selector, release, turn to pick, short press+release to apply.
+static bool Pi1551ROMSelectPoll(bool rotaryNext, bool rotaryPrev, bool& applyRom, unsigned& applyRomIndex)
+{
+	applyRom = false;
+	applyRomIndex = 0;
+
+	if (roms.CountValid1551ROMs() <= 1)
+		return false;
+
+	bool enterHeld = Pi1551RotarySwitchHeld();
+
+	if (enterHeld && !g_romSelect.active)
+	{
+		if (g_romSelect.enterPressStartCycles == 0)
+			g_romSelect.enterPressStartCycles = read32(ARM_SYSTIMER_CLO);
+		else
+		{
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			if ((int)(now - g_romSelect.enterPressStartCycles) >= (int)PI1551_ROM_SELECT_LONG_PRESS_CYCLES)
+			{
+				g_romSelect.active = true;
+				g_romSelect.suppressNextRelease = true;
+				g_romSelect.previewIndex = roms.currentROMIndex;
+				Pi1551ShowROMSelector();
+			}
+		}
+	}
+	else if (!enterHeld)
+	{
+		g_romSelect.enterPressStartCycles = 0;
+	}
+
+	if (g_romSelect.active)
+	{
+		if (rotaryNext)
+		{
+			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, 1);
+			Pi1551ShowROMSelector();
+		}
+		else if (rotaryPrev)
+		{
+			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, -1);
+			Pi1551ShowROMSelector();
+		}
+
+		if (g_romSelect.enterHeldPrev && !enterHeld)
+		{
+			if (g_romSelect.suppressNextRelease)
+				g_romSelect.suppressNextRelease = false;
+			else
+			{
+				g_romSelect.active = false;
+				applyRom = true;
+				applyRomIndex = g_romSelect.previewIndex;
+			}
+		}
+	}
+	g_romSelect.enterHeldPrev = enterHeld;
+
+	return false;
+}
+
+static bool Pi1551ROMSelectSuppressesNormalEnter()
+{
+	if (g_romSelect.active)
+		return true;
+	if (g_romSelect.enterPressStartCycles == 0)
+		return false;
+	u32 now = read32(ARM_SYSTIMER_CLO);
+	return (int)(now - g_romSelect.enterPressStartCycles) >= (int)PI1551_ROM_SELECT_SUPPRESS_ENTER_CYCLES;
+}
+
+bool Pi1551ROMSelectConsumingInput()
+{
+	return Pi1551ROMSelectSuppressesNormalEnter();
+}
+
+static bool Pi1551ROMSelectBlocksBackgroundInput()
+{
+	return g_romSelect.active;
+}
+
+static void Pi1551ROMSelectClearConsumedRotaryButtons()
+{
+	if (Pi1551ROMSelectBlocksBackgroundInput())
+		TCBM_Bus::ClearRotarySynthesizedButtons();
+}
+
+static void Pi1551ROMSelectAbsorbEnterRelease()
+{
+	if (inputMappings)
+		inputMappings->SyncEnterButtonEdgeState();
+}
+
+void ApplyPi1551ROMSwitchFromUI(unsigned romIndex)
+{
+	bool inEmulation = (emulating == EMULATING_1551);
+	ApplyPi1551ROMSwitch(romIndex, inEmulation);
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Acquire();
+#endif
+	if (inEmulation)
+		diskCaddy.Display();
+	if (g_pi1551FileBrowser)
+		g_pi1551FileBrowser->ShowDeviceAndROM();
+#if not defined(EXPERIMENTALZERO)
+	core0RefreshingScreen.Release();
+#endif
+}
+
+// Returns true when browse/disk background input must be ignored (ROM selector foreground).
+static bool Pi1551ROMSelectBrowseUpdate(FileBrowser* fileBrowser)
+{
+	if (!options.RotaryEncoderEnable() || roms.CountValid1551ROMs() <= 1)
+		return false;
+
+	TCBM_Bus::ReadBrowseMode();
+	bool rotaryNext = false;
+	bool rotaryPrev = false;
+	TCBM_Bus::ConsumeRotaryDiskSteps(rotaryNext, rotaryPrev);
+
+	bool applyRom = false;
+	unsigned applyRomIndex = 0;
+	Pi1551ROMSelectPoll(rotaryNext, rotaryPrev, applyRom, applyRomIndex);
+	Pi1551ROMSelectClearConsumedRotaryButtons();
+	if (applyRom || g_romSelect.active)
+		Pi1551ROMSelectAbsorbEnterRelease();
+	if (applyRom)
+	{
+		TCBM_Bus::ClearRotarySynthesizedButtons();
+		ApplyPi1551ROMSwitchFromUI(applyRomIndex);
+		if (fileBrowser)
+		{
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Acquire();
+#endif
+			fileBrowser->RefeshDisplay();
+#if not defined(EXPERIMENTALZERO)
+			core0RefreshingScreen.Release();
+#endif
+		}
+		return true;
+	}
+	return Pi1551ROMSelectBlocksBackgroundInput();
 }
 
 static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfImagesMax)
@@ -241,30 +458,54 @@ static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfIma
 	bool rotaryNextDisk = false;
 	bool rotaryPrevDisk = false;
 	TCBM_Bus::ConsumeRotaryDiskSteps(rotaryNextDisk, rotaryPrevDisk);
-	cmd.nextDisk = rotaryNextDisk;
-	cmd.prevDisk = rotaryPrevDisk;
+
+	bool applyRom = false;
+	unsigned applyRomIndex = 0;
+	Pi1551ROMSelectPoll(rotaryNextDisk, rotaryPrevDisk, applyRom, applyRomIndex);
+	bool blockBackground = Pi1551ROMSelectBlocksBackgroundInput();
+	Pi1551ROMSelectClearConsumedRotaryButtons();
+	if (applyRom || blockBackground)
+		Pi1551ROMSelectAbsorbEnterRelease();
+	if (applyRom)
+	{
+		cmd.applyRomSwitch = true;
+		cmd.romSwitchIndex = applyRomIndex;
+		TCBM_Bus::ClearRotarySynthesizedButtons();
+#if not defined(EXPERIMENTALZERO)
+		core0RefreshingScreen.Acquire();
+#endif
+		diskCaddy.Display();
+#if not defined(EXPERIMENTALZERO)
+		core0RefreshingScreen.Release();
+#endif
+	}
+	else if (!blockBackground)
+	{
+		cmd.nextDisk = rotaryNextDisk;
+		cmd.prevDisk = rotaryPrevDisk;
 
 #if not defined(EXPERIMENTALZERO)
-	inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
+		inputMappings->CheckKeyboardEmulationMode(numberOfImages, numberOfImagesMax);
 #endif
-	inputMappings->CheckButtonsEmulationMode();
+		inputMappings->CheckButtonsEmulationMode();
 
-	if (inputMappings->Exit())
-		cmd.exitEmulation = true;
-	if (inputMappings->AutoLoad())
-		cmd.autoLoad = true;
-	if (inputMappings->NextDisk())
-		cmd.nextDisk = true;
-	if (inputMappings->PrevDisk())
-		cmd.prevDisk = true;
-	if (inputMappings->directDiskSwapRequest != 0)
-	{
-		cmd.directDiskSwapRequest = inputMappings->directDiskSwapRequest;
-		inputMappings->directDiskSwapRequest = 0;
+		if (inputMappings->Exit())
+			cmd.exitEmulation = true;
+		if (inputMappings->AutoLoad())
+			cmd.autoLoad = true;
+		if (inputMappings->NextDisk())
+			cmd.nextDisk = true;
+		if (inputMappings->PrevDisk())
+			cmd.prevDisk = true;
+		if (inputMappings->directDiskSwapRequest != 0)
+		{
+			cmd.directDiskSwapRequest = inputMappings->directDiskSwapRequest;
+			inputMappings->directDiskSwapRequest = 0;
+		}
 	}
 
 	if (!cmd.exitEmulation && !cmd.autoLoad && !cmd.nextDisk && !cmd.prevDisk
-		&& cmd.directDiskSwapRequest == 0)
+		&& cmd.directDiskSwapRequest == 0 && !cmd.applyRomSwitch)
 		return;
 
 	Pi1551DataBarrier();
@@ -273,6 +514,8 @@ static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfIma
 	g_pi1551Commands.nextDisk = cmd.nextDisk;
 	g_pi1551Commands.prevDisk = cmd.prevDisk;
 	g_pi1551Commands.directDiskSwapRequest = cmd.directDiskSwapRequest;
+	g_pi1551Commands.applyRomSwitch = cmd.applyRomSwitch;
+	g_pi1551Commands.romSwitchIndex = cmd.romSwitchIndex;
 	Pi1551DataBarrier();
 	++g_pi1551CommandGeneration;
 }
@@ -284,6 +527,8 @@ static void TakePi1551Commands(Pi1551EmulationCommands& commands)
 	commands.nextDisk = false;
 	commands.prevDisk = false;
 	commands.directDiskSwapRequest = 0;
+	commands.applyRomSwitch = false;
+	commands.romSwitchIndex = 0;
 
 	unsigned generation = g_pi1551CommandGeneration;
 	if (generation == g_pi1551CommandGenerationAck)
@@ -295,6 +540,8 @@ static void TakePi1551Commands(Pi1551EmulationCommands& commands)
 	commands.nextDisk = g_pi1551Commands.nextDisk;
 	commands.prevDisk = g_pi1551Commands.prevDisk;
 	commands.directDiskSwapRequest = g_pi1551Commands.directDiskSwapRequest;
+	commands.applyRomSwitch = g_pi1551Commands.applyRomSwitch;
+	commands.romSwitchIndex = g_pi1551Commands.romSwitchIndex;
 	Pi1551DataBarrier();
 	g_pi1551CommandGenerationAck = generation;
 }
@@ -1933,7 +2180,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	EXIT_TYPE exitReason = EXIT_UNKNOWN;
 	unsigned ctBefore = 0;
 	unsigned ctAfter = 0;
-	int cycleCount = 0;
 	unsigned caddyIndex;
 	int headSoundCounter = 0;
 	int headSoundFreqCounter = 0;
@@ -1996,24 +2242,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	// During this time we don't need to set outputs.
 	// Boot ends when PC reaches mainloop at $eabd or after FAST_BOOT_CYCLES_1551 cycles.
 
-	while (cycleCount < FAST_BOOT_CYCLES_1551)
-	{
-		pi1551.m6502.SYNC();
-
-		pi1551.m6502.Step();
-
-		pi1551.Update(PI1551_ENCODER_TICKS_PER_US);
-		pi1551.EndMicrosecond();
-
-		cycleCount++;
-
-		// Check if we've reached the mainloop (boot complete)
-		// PC at $eabd indicates the drive has finished booting and is in the main wait loop
-		if (pi1551.m6502.GetPC() == FAST_BOOT_PC_1551)
-		{
-			break;
-		}
-	}
+	Pi1551RunFastBoot();
 
 	// Self test code done. Begin realtime emulation.
 	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
@@ -2039,6 +2268,9 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			nextDisk = commands.nextDisk;
 			prevDisk = commands.prevDisk;
 			directDiskSwapRequest = commands.directDiskSwapRequest;
+
+			if (commands.applyRomSwitch)
+				ApplyPi1551ROMSwitchFromUI(commands.romSwitchIndex);
 		}
 
 		// Timing marker on GPIO1: low = 6502 halves + interleaved drive; high = housekeeping + SYSTIMER.
@@ -2468,6 +2700,7 @@ void emulator()
 
 	diskCaddy.SetScreen(&screen, screenLCD, &roms);
 	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
+	g_pi1551FileBrowser = fileBrowser;
 
 	// Initialize tape player
 	g_tapePlayer = new TapePlayer();
@@ -2542,7 +2775,8 @@ void emulator()
 							CheckAutoMountImage(EXIT_UNKNOWN, fileBrowser);
 							break;
 						case TCBM_Commands::NONE:
-							fileBrowser->Update();
+							if (!Pi1551ROMSelectBrowseUpdate(fileBrowser))
+								fileBrowser->Update();
 							// Check selections made via FileBrowser
 							if (fileBrowser->SelectionsMade())
 								emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
@@ -2619,7 +2853,8 @@ void emulator()
 						g_tapePlayer->ToggleTapeSense();
 					}
 					
-					fileBrowser->Update();
+					if (!Pi1551ROMSelectBrowseUpdate(fileBrowser))
+						fileBrowser->Update();
 					if (fileBrowser->SelectionsMade())
 						emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
 					usDelay(1);
@@ -3006,8 +3241,14 @@ int DisplayOptions(int y_pos)
 	// print confirmation of parsed options
 	snprintf(tempBuffer, tempBufferSize, "deviceID = %d\r\n", options.GetDeviceID());
 	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
-	snprintf(tempBuffer, tempBufferSize, "ROM1551 = %s\r\n", options.GetRomName1551());
-	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+	for (int romIndex = 0; romIndex < ROMs::MAX_ROMS; ++romIndex)
+	{
+		const char* romName = options.GetRomName(romIndex);
+		if (romName[0] == 0)
+			continue;
+		snprintf(tempBuffer, tempBufferSize, "ROM%d = %s\r\n", romIndex + 1, romName);
+		screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+	}
 	snprintf(tempBuffer, tempBufferSize, "ChargenFont = %s\r\n", options.GetRomFontName());
 	screen.PrintText(false, 0, y_pos += 16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 	snprintf(tempBuffer, tempBufferSize, "ignoreReset = %d\r\n", options.IgnoreReset());
@@ -3104,94 +3345,89 @@ static void CheckOptions()
 	}
 #endif
 #if defined(PI1551SUPPORT)
-    // In PI1551 builds, only honor ROM1551 (with its default from options).
-    const char* ROMName1551 = options.GetRomName1551();
-    if (ROMName1551)
-    {
-        FIL fp;
-        FRESULT res;
-        char ROMName1551_copy[256];
-        strncpy(ROMName1551_copy, ROMName1551, 255);
-        ROMName1551_copy[255] = 0;
-        
-        char ROMName2[256] = "/roms/";
-        if (ROMName1551_copy[0] != '/')	// not a full path, prepend /roms/
-            strncat (ROMName2, ROMName1551_copy, 240);
-        else
-            ROMName2[0] = 0;
-        
-        if ( (FR_OK == f_open(&fp, ROMName1551_copy, FA_READ))
-            || (FR_OK == f_open(&fp, ROMName2, FA_READ)) )
-        {
-            u32 bytesRead;
-            FSIZE_t fileSize = f_size(&fp);
-            
-            screen.Clear(COLOUR_BLACK);
-            snprintf(tempBuffer, tempBufferSize, "Loading ROM %s\r\n", ROMName1551);
-            screen.MeasureText(false, tempBuffer, &widthText, &heightText);
-            xpos = (widthScreen - widthText) >> 1;
-            ypos = (heightScreen - heightText) >> 1;
-            screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-            
-            SetACTLed(true);
-            
-            // Determine ROM size: 16k (16384) or 32k (32768)
-            if (fileSize == (FSIZE_t)32768)
-            {
-                res = f_read(&fp, roms.ROMImage1551, 32768, &bytesRead);
-                if (res == FR_OK && bytesRead == 32768)
-                {
-                    roms.ROM1551Size = 32768;
-                }
-            }
-            else if (fileSize == (FSIZE_t)16384)
-            {
-                // Default to 16k
-                res = f_read(&fp, roms.ROMImage1551, 16384, &bytesRead);
-                if (res == FR_OK && bytesRead == 16384)
-                {
-                    roms.ROM1551Size = 16384;
-                }
-            }
-            else
-            {
-                // Invalid size
-                res = FR_INVALID_PARAMETER;
-                bytesRead = 0;
-            }
-            
-            SetACTLed(false);
-            
-            if (res == FR_OK && (bytesRead == 16384 || bytesRead == 32768))
-            {
-                strncpy(roms.ROMName1551, ROMName1551, 255);
-                roms.UpdateLongestRomNameLen(strlen(roms.ROMName1551));
-            }
-            else
-            {
-                snprintf(tempBuffer, tempBufferSize, "Invalid 1551 ROM file size!\r\nExpected 16k or 32k, got %lu bytes.", (unsigned long)bytesRead);
-                screen.MeasureText(false, tempBuffer, &widthText, &heightText);
-                xpos = (widthScreen - widthText) >> 1;
-                ypos = (heightScreen - heightText) >> 1;
-                screen.Clear(COLOUR_RED);
-                screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-                f_close(&fp);
-                do { } while (1);
-            }
-            
-            f_close(&fp);
-        }
-        else
-        {
-            snprintf(tempBuffer, tempBufferSize, "No 1551 ROM file found!\r\nExpected '%s' in SD root or /roms.\r\nSet ROM1551 in options.txt if different.", ROMName1551);
-            screen.MeasureText(false, tempBuffer, &widthText, &heightText);
-            xpos = (widthScreen - widthText) >> 1;
-            ypos = (heightScreen - heightText) >> 1;
-            screen.Clear(COLOUR_RED);
-            screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
-            do { } while (1);
-        }
-    }
+	{
+		int ROMIndex;
+		bool anyROM = false;
+		roms.ROM1551SlotCount = 0;
+
+		for (ROMIndex = 0; ROMIndex < ROMs::MAX_ROMS; ++ROMIndex)
+		{
+			roms.ROMValid[ROMIndex] = false;
+			roms.ROM1551Sizes[ROMIndex] = 0;
+			const char* ROMName = options.GetRomName(ROMIndex);
+			if (ROMName[0] == 0)
+				continue;
+
+			char ROMName2[256] = "/roms/";
+			if (ROMName[0] != '/')
+				strncat(ROMName2, ROMName, 240);
+			else
+				ROMName2[0] = 0;
+
+			if ((FR_OK != f_open(&fp, ROMName, FA_READ))
+				&& (FR_OK != f_open(&fp, ROMName2, FA_READ)))
+				continue;
+
+			u32 bytesRead = 0;
+			FSIZE_t fileSize = f_size(&fp);
+			unsigned romSize = 0;
+
+			screen.Clear(COLOUR_BLACK);
+			snprintf(tempBuffer, tempBufferSize, "Loading ROM%d %s\r\n", ROMIndex + 1, ROMName);
+			screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+			xpos = (widthScreen - widthText) >> 1;
+			ypos = (heightScreen - heightText) >> 1;
+			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+
+			SetACTLed(true);
+			if (fileSize == (FSIZE_t)32768)
+			{
+				res = f_read(&fp, roms.ROMImage1551[ROMIndex], 32768, &bytesRead);
+				if (res == FR_OK && bytesRead == 32768)
+					romSize = 32768;
+			}
+			else if (fileSize == (FSIZE_t)16384)
+			{
+				res = f_read(&fp, roms.ROMImage1551[ROMIndex], 16384, &bytesRead);
+				if (res == FR_OK && bytesRead == 16384)
+					romSize = 16384;
+			}
+			SetACTLed(false);
+			f_close(&fp);
+
+			if (romSize != 0)
+			{
+				strncpy(roms.ROMNames[ROMIndex], ROMName, 255);
+				roms.ROMValid[ROMIndex] = true;
+				roms.ROM1551Sizes[ROMIndex] = romSize;
+				roms.UpdateLongestRomNameLen(strlen(roms.ROMNames[ROMIndex]));
+				++roms.ROM1551SlotCount;
+				anyROM = true;
+			}
+		}
+
+		if (!anyROM)
+		{
+			snprintf(tempBuffer, tempBufferSize,
+				"No 1551 ROM files found!\r\nSet ROM1= / ROM2= / ROM3= in options.txt.");
+			screen.MeasureText(false, tempBuffer, &widthText, &heightText);
+			xpos = (widthScreen - widthText) >> 1;
+			ypos = (heightScreen - heightText) >> 1;
+			screen.Clear(COLOUR_RED);
+			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
+			do { } while (1);
+		}
+
+		for (ROMIndex = 0; ROMIndex < ROMs::MAX_ROMS; ++ROMIndex)
+		{
+			if (roms.ROMValid[ROMIndex])
+			{
+				roms.currentROMIndex = ROMIndex;
+				roms.lastManualSelectedROMIndex = ROMIndex;
+				break;
+			}
+		}
+	}
 #else
 	const char* ROMName1581 = options.GetRomName1581();
 	if (ROMName1581)

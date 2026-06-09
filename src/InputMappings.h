@@ -109,6 +109,9 @@ public:
 		insertButtonPressed = false;
 	}
 
+	// Absorb enter press/release edges after ROM selector handled them.
+	void SyncEnterButtonEdgeState();
+
 	void SetKeyboardBrowseLCDScreen(bool value)
 	{
 		keyboardBrowseLCDScreen = value;

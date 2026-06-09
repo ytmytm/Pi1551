@@ -29,6 +29,11 @@
 #define BUS_API IEC_Bus
 #endif
 #include "debug.h"
+#include "options.h"
+extern Options options;
+#if defined(PI1551SUPPORT)
+extern bool Pi1551ROMSelectConsumingInput();
+#endif
 extern "C"
 {
 #include "rpi-aux.h"
@@ -57,9 +62,25 @@ InputMappings::InputMappings()
 {
 }
 
+void InputMappings::SyncEnterButtonEdgeState()
+{
+	enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
+	enterButtonPressedPrev = enterButtonPressed;
+}
+
 bool InputMappings::CheckButtonsBrowseMode()
 {
 	buttonFlags = 0;
+
+#if defined(PI1551SUPPORT)
+	if (options.RotaryEncoderEnable() && Pi1551ROMSelectConsumingInput())
+	{
+		insertButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_INSERT);
+		insertButtonPressedPrev = insertButtonPressed;
+		SyncEnterButtonEdgeState();
+		return false;
+	}
+#endif
 
 	if (BUS_API::GetInputButtonHeld(INPUT_BUTTON_INSERT))	// Change DeviceID
 	{
@@ -87,27 +108,32 @@ bool InputMappings::CheckButtonsBrowseMode()
 	}
 	else if (BUS_API::GetInputButtonHeld(INPUT_BUTTON_ENTER))	// Change ROMs
 	{
-		if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
+#if defined(PI1551SUPPORT)
+		if (!options.RotaryEncoderEnable())
+#endif
 		{
-			SetButtonFlag(FUNCTION_FLAG);
-			inputROMOrDevice = 1;
+			if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
+			{
+				SetButtonFlag(FUNCTION_FLAG);
+				inputROMOrDevice = 1;
+			}
+			else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+			{
+				SetButtonFlag(FUNCTION_FLAG);
+				inputROMOrDevice = 2;
+			}
+			else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_BACK))
+			{
+				SetButtonFlag(FUNCTION_FLAG);
+				inputROMOrDevice = 3;
+			}
+			else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_INSERT))
+			{
+				SetButtonFlag(FUNCTION_FLAG);
+				inputROMOrDevice = 4;
+			}
+			enterButtonPressedPrev = false;
 		}
-		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
-		{
-			SetButtonFlag(FUNCTION_FLAG);
-			inputROMOrDevice = 2;
-		}
-		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_BACK))
-		{
-			SetButtonFlag(FUNCTION_FLAG);
-			inputROMOrDevice = 3;
-		}
-		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_INSERT))
-		{
-			SetButtonFlag(FUNCTION_FLAG);
-			inputROMOrDevice = 4;
-		}
-		enterButtonPressedPrev = false;
 	}
 	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		SetButtonFlag(UP_FLAG);
@@ -125,7 +151,12 @@ bool InputMappings::CheckButtonsBrowseMode()
 
 		enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 		if (enterButtonPressedPrev && !enterButtonPressed)
-			SetButtonFlag(ENTER_FLAG);
+		{
+#if defined(PI1551SUPPORT)
+			if (!Pi1551ROMSelectConsumingInput())
+#endif
+				SetButtonFlag(ENTER_FLAG);
+		}
 		enterButtonPressedPrev = enterButtonPressed;
 	}
 
@@ -159,18 +190,28 @@ void InputMappings::CheckButtonsEmulationMode()
 
 	enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 	if (enterButtonPressedPrev && !enterButtonPressed)
-		SetButtonFlag(ESC_FLAG);
+	{
+#if defined(PI1551SUPPORT)
+		if (!Pi1551ROMSelectConsumingInput())
+#endif
+			SetButtonFlag(ESC_FLAG);
+	}
 	enterButtonPressedPrev = enterButtonPressed;
 
 	// Rotary exit (SW1) must win over stale rotation UP/DOWN pulses.
 	if (!(buttonFlags & ESC_FLAG))
 	{
-		if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP)
-			|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_UP))
-			SetButtonFlag(NEXT_FLAG);
-		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN)
-			|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_DOWN))
-			SetButtonFlag(PREV_FLAG);
+#if defined(PI1551SUPPORT)
+		if (!Pi1551ROMSelectConsumingInput())
+#endif
+		{
+			if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP)
+				|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_UP))
+				SetButtonFlag(NEXT_FLAG);
+			else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN)
+				|| BUS_API::GetInputButtonPressed(INPUT_BUTTON_DOWN))
+				SetButtonFlag(PREV_FLAG);
+		}
 	}
 }
 

@@ -1395,10 +1395,15 @@ bool FileBrowser::SelectROMOrDevice(u32 index)
 	index--;
 	if ((index < ROMs::MAX_ROMS) && (roms->ROMValid[index]))
 	{
+#if defined(PI1551SUPPORT)
+		extern void ApplyPi1551ROMSwitchFromUI(unsigned romIndex);
+		ApplyPi1551ROMSwitchFromUI(index);
+#else
 		roms->currentROMIndex = index;
 		roms->lastManualSelectedROMIndex = index;
 		DEBUG_LOG("Swap ROM %d %s\r\n", index, roms->ROMNames[index]);
 		ShowDeviceAndROM();
+#endif
 		return true;
 	}
 	return false;

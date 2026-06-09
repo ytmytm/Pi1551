@@ -6,14 +6,13 @@
 // If you would like to change the drive number then specify it here (8 is the default)
 //deviceID = 9
 
-// 1551 DOS ROM file. Searched in SD root and /roms. Default in firmware: dos1551.bin
-ROM1551 = dos1551.bin
-// https://plus4world.powweb.com/software/Super_DOS_1551
-// format disks as "N0:diskname,id+" for 40-track
-//ROM1551 = super_dos_1551.rom
-// https://github.com/ytmytm/1551-RAMBOard
-// utilizes RAMBOard for track cache, supported by Hyparam loader and Parobek utility ROM
-//ROM1551 = dos1551-ram.bin
+// 1551 DOS ROM slots (ROM1-ROM7). Files are searched in SD root and /roms.
+// Switch ROMs: hold rotary SW1 for 2s (selector opens), release, turn to pick, press+release SW1 to apply.
+ROM1 = dos1551.bin
+ROM2 = dos1551-ram.bin
+ROM3 = super_dos_1551.rom
+// Legacy single-ROM option (use ROM1 instead):
+//ROM1551 = dos1551.bin
 
 // The rate (in seconds) a long selection is scrolled in browse mode
 scrollHighlightRate = 0.07
@@ -100,6 +99,9 @@ IgnoreReset = 0
 //       GPIO 27  -  Encoder pushbutton   -  hat SW1
 //
 //    RotaryEncoderInvert flips direction for encoders that turn the wrong way.
+//
+//    Hold rotary SW1 for 2s to open the ROM selector (browse or emulation).
+//    Release, turn to highlight a ROM, then press and release SW1 to apply (emulation: CPU reset + fast boot).
 //
 RotaryEncoderEnable = 1
 //RotaryEncoderInvert = 1

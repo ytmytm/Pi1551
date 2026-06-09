@@ -39,7 +39,7 @@ u8 read6502_1551(u16 address)
 	if (address & 0x8000)
 	{
 		bool ramBoard = options.GetRAMBOard();
-		unsigned romSize = roms.ROM1551Size;
+		unsigned romSize = roms.Get1551ROMSize();
 		
 		if (ramBoard && romSize == 16384)
 		{
@@ -163,7 +163,7 @@ void write6502_1551(u16 address, const u8 value)
 	if (address & 0x8000)
 	{
 		bool ramBoard = options.GetRAMBOard();
-		unsigned romSize = roms.ROM1551Size;
+		unsigned romSize = roms.Get1551ROMSize();
 		
 		if (ramBoard && romSize == 16384)
 		{
