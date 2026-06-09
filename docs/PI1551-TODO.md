@@ -132,14 +132,19 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + (done) disable 1MHz output to reduce EM noise
 + (done) disassemble 'Corruption' loader and test standalone, it's a software issue
 
-- star file option doesn't seem to work, need output on HDMI to see what is going on
-- rebrand to pi1551
-- credit myself
-- remove irrlevant options from options.txt
++ star file option doesn't seem to work, need output on HDMI to see what is going on
++ with single disk image in flip list pressing rotary button doesn't exit the emulation - it goes immediately back
++ .lst files supported
++ rebrand to pi1551
++ credit myself
++ remove irrlevant options from options.txt
++ restore multiple ROM option (it was ROM1/ROM2 etc.) on longpress
++ SW4 in emulation mapped to exit emulation
++ prepare full bootable sd card for download
+- update readme and descriptions, original readme didn't have full information (it was on the website)
 - remove dead code and 1541/1581 stuff
-- prepare full bootable sd card for download
 - support U0 commands from tcbm2sd (fastload protocol, device number change)
-- in browser mode support d71/81/80/82 disk images via the same library as tcbm2sd but r+w
+- in browser mode support d71/81/80/82 disk images via the same library as tcbm2sd but r+w (writing in 81/82 based on VICE docs of disk images, note that the library also had bugs, so verify everything)
 
 # Tests
 
