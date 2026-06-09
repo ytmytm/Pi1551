@@ -338,14 +338,15 @@ static bool Pi1551ROMSelectPoll(bool rotaryNext, bool rotaryPrev, bool& applyRom
 
 	if (g_romSelect.active)
 	{
+		// Match disk flip: rotaryNext -> PrevDisk (delta -1), rotaryPrev -> NextDisk (delta +1).
 		if (rotaryNext)
 		{
-			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, 1);
+			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, -1);
 			Pi1551ShowROMSelector();
 		}
 		else if (rotaryPrev)
 		{
-			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, -1);
+			g_romSelect.previewIndex = roms.NextValid1551ROMIndex(g_romSelect.previewIndex, 1);
 			Pi1551ShowROMSelector();
 		}
 
