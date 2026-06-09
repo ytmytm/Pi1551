@@ -123,7 +123,7 @@ bool TextParser::ParseComment()
 Options::Options(void)
 	: TextParser()
 	, deviceID(8)
-	, onResetChangeToStartingFolder(0)
+	, onResetChangeToStartingFolder(1)
 	, extraRAM(0)
 	, RAMBOard(0)
 	, disableSD2IECCommands(0)
@@ -138,7 +138,7 @@ Options::Options(void)
 	, soundOnGPIOFreq(1200)
 	, invertIECInputs(0)
 	, invertIECOutputs(1)
-	, splitIECLines(0)
+	, splitIECLines(1)
 	, ignoreReset(0)
 	, tapeMotorAlwaysOn(1)
 	, skipMotorSpinUpDelay(0)
@@ -155,7 +155,7 @@ Options::Options(void)
 	, i2cLcdOnContrast(127)
 	, i2cLcdUseCBMChar(0)
 	, i2cLcdModel(LCD_UNKNOWN)
-	, scrollHighlightRate(0.125f)
+	, scrollHighlightRate(0.07f)
 	, keyboardBrowseLCDScreen(0)
         , buttonEnter(1)
         , buttonUp(2)
@@ -167,7 +167,7 @@ Options::Options(void)
 {
 	autoMountImageName[0] = 0;
 	strcpy(ROMFontName, "chargen");
-	strcpy(LcdLogoName, "1541ii");
+	strcpy(LcdLogoName, "1541classic");
 	strcpy(autoBaseName, "autoname");
 	C128BootSectorName[0] = 0;
 	starFileName[0] = 0;
@@ -180,7 +180,8 @@ Options::Options(void)
 	ROMNameSlot7[0] = 0;
 	ROMNameSlot8[0] = 0;
 	ROMName1581[0] = 0;
-	ROMName1551[0] = 0;
+	strcpy(ROMName1551, "dos1551.bin");
+	LCDName[0] = 0;
 	newDiskType[0] = 0;
 }
 
@@ -209,6 +210,7 @@ void Options::Process(char* buffer)
 		/*char* equals = */GetToken();
 		char* pValue = GetToken();
 
+		// Pi1551 options.txt — only settings that vary per installation.
 		if ((strcasecmp(pOption, "Font") == 0) || (strcasecmp(pOption, "ChargenFont") == 0))
 		{
 			strncpy(ROMFontName, pValue, 255);
@@ -219,40 +221,21 @@ void Options::Process(char* buffer)
 		}
 		ELSE_CHECK_DECIMAL_OPTION(deviceID)
 		ELSE_CHECK_DECIMAL_OPTION(onResetChangeToStartingFolder)
-		ELSE_CHECK_DECIMAL_OPTION(extraRAM)
 		ELSE_CHECK_DECIMAL_OPTION(RAMBOard)
 		ELSE_CHECK_DECIMAL_OPTION(disableSD2IECCommands)
-		ELSE_CHECK_DECIMAL_OPTION(supportUARTInput)
 		ELSE_CHECK_DECIMAL_OPTION(graphIEC)
-		ELSE_CHECK_DECIMAL_OPTION(displayTracks)
 		ELSE_CHECK_DECIMAL_OPTION(quickBoot)
 		ELSE_CHECK_DECIMAL_OPTION(showOptions)
 		ELSE_CHECK_DECIMAL_OPTION(displayPNGIcons)
 		ELSE_CHECK_DECIMAL_OPTION(soundOnGPIO)
 		ELSE_CHECK_DECIMAL_OPTION(soundOnGPIODuration)
 		ELSE_CHECK_DECIMAL_OPTION(soundOnGPIOFreq)
-		ELSE_CHECK_DECIMAL_OPTION(invertIECInputs)
-		ELSE_CHECK_DECIMAL_OPTION(invertIECOutputs)
-		ELSE_CHECK_DECIMAL_OPTION(splitIECLines)
 		ELSE_CHECK_DECIMAL_OPTION(ignoreReset)
 		ELSE_CHECK_DECIMAL_OPTION(tapeMotorAlwaysOn)
 		ELSE_CHECK_DECIMAL_OPTION(skipMotorSpinUpDelay)
 		ELSE_CHECK_DECIMAL_OPTION(lowercaseBrowseModeFilenames)
-		ELSE_CHECK_DECIMAL_OPTION(autoBootFB128)
 		ELSE_CHECK_DECIMAL_OPTION(displayTemperature)
 		ELSE_CHECK_DECIMAL_OPTION(displayPC)
-		ELSE_CHECK_DECIMAL_OPTION(screenWidth)
-		ELSE_CHECK_DECIMAL_OPTION(screenHeight)
-		else if (strcasecmp(pOption, "i2cBusMaster") == 0)
-		{
-			unsigned nValue = 0;
-			if ((nValue = GetDecimal(pValue)) != INVALID_VALUE)
-			{
-				// Bus 0 (pins 27/28) is permanently disabled as GPIO0/GPIO1 are used for TAPE_SENSE
-				// Force bus 1 (pins 3/5) if 0 is specified
-				i2cBusMaster = (nValue == 0) ? 1 : nValue;
-			}
-		}
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdAddress)
 		ELSE_CHECK_DECIMAL_OPTION(i2cScan)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdFlip)
@@ -261,27 +244,18 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdDimTime)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdUseCBMChar)
 		ELSE_CHECK_FLOAT_OPTION(scrollHighlightRate)
-		ELSE_CHECK_DECIMAL_OPTION(keyboardBrowseLCDScreen)
-		ELSE_CHECK_DECIMAL_OPTION(buttonEnter)
-		ELSE_CHECK_DECIMAL_OPTION(buttonUp)
-		ELSE_CHECK_DECIMAL_OPTION(buttonDown)
-		ELSE_CHECK_DECIMAL_OPTION(buttonBack)
-		ELSE_CHECK_DECIMAL_OPTION(buttonInsert)
 		ELSE_CHECK_DECIMAL_OPTION(rotaryEncoderEnable) //ROTARY:
 		ELSE_CHECK_DECIMAL_OPTION(rotaryEncoderInvert) //ROTARY:
-		else if ((strcasecmp(pOption, "AutoBaseName") == 0))
-		{
-			strncpy(autoBaseName, pValue, 255);
-		}
-		else if ((strcasecmp(pOption, "128BootSectorName") == 0))
-		{
-			strncpy(C128BootSectorName, pValue, 255);
-		}
 		else if ((strcasecmp(pOption, "StarFileName") == 0))
 		{
 			strncpy(starFileName, pValue, 255);
 		}
-		else if ((strcasecmp(pOption, "LCDLogoName") == 0))
+		else if ((strcasecmp(pOption, "AutoBaseName") == 0))
+		{
+			strncpy(autoBaseName, pValue, 255);
+		}
+		else if ((strcasecmp(pOption, "LCDLogoName") == 0)
+			|| (strcasecmp(pOption, "LcdLogoName") == 0))
 		{
 			strncpy(LcdLogoName, pValue, 255);
 		}
@@ -295,45 +269,9 @@ void Options::Process(char* buffer)
 			else if (strcasecmp(pValue, "sh1106_128x64") == 0)
 				i2cLcdModel = LCD_1106_128x64;
 		}
-		else if ((strcasecmp(pOption, "ROM1581") == 0))
-		{
-			strncpy(ROMName1581, pValue, 255);
-		}
 		else if ((strcasecmp(pOption, "ROM1551") == 0))
 		{
 			strncpy(ROMName1551, pValue, 255);
-		}
-		else if ((strcasecmp(pOption, "ROM") == 0) || (strcasecmp(pOption, "ROM1") == 0))
-		{
-			strncpy(ROMName, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM2") == 0)
-		{
-			strncpy(ROMNameSlot2, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM3") == 0)
-		{
-			strncpy(ROMNameSlot3, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM4") == 0)
-		{
-			strncpy(ROMNameSlot4, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM5") == 0)
-		{
-			strncpy(ROMNameSlot5, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM6") == 0)
-		{
-			strncpy(ROMNameSlot6, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM7") == 0)
-		{
-			strncpy(ROMNameSlot7, pValue, 255);
-		}
-		else if (strcasecmp(pOption, "ROM8") == 0)
-		{
-			strncpy(ROMNameSlot8, pValue, 255);
 		}
 		else if ((strcasecmp(pOption, "NewDiskType") == 0))
 		{
@@ -341,20 +279,8 @@ void Options::Process(char* buffer)
 		}
 	}
 
-	if (!SplitIECLines())
-	{
-		invertIECInputs = false;
-		// If using non split lines then only the 1st bus master can be used (as ATN is using the 2nd)
-		// However, bus 0 (pins 27/28) is permanently disabled as GPIO0/GPIO1 are used for TAPE_SENSE
-		// So we must use bus 1 (pins 3/5) even for non-split lines
-		i2cBusMaster = 1;
-	}
-	
-	// Ensure bus 0 is never used (pins 27/28 are reserved for TAPE_SENSE)
-	if (i2cBusMaster == 0)
-	{
-		i2cBusMaster = 1;
-	}
+	// Pi1551 hat: OLED is always on I2C bus 1 (GPIO3/GPIO5). Bus 0 is reserved for tape sense.
+	i2cBusMaster = 1;
 }
 
 unsigned Options::GetDecimal(char* pString)
