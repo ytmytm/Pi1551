@@ -1568,7 +1568,19 @@ void Commands_Base::OpenFile()
 
 			if (needFileToExist)
 			{
-				if (FindFirst(dir, filename, channel.filInfo))
+				// Star file uses an absolute path; FindFirst only pattern-matches
+				// basenames in the current directory.
+				if (starRequested)
+				{
+					res = f_open(&channel.file, filename, mode);
+					if (res == FR_OK)
+					{
+						found = true;
+						channel.open = true;
+						f_stat(filename, &channel.filInfo);
+					}
+				}
+				else if (FindFirst(dir, filename, channel.filInfo))
 				{
 					res = FR_OK;
 					while ((channel.filInfo.fattrib & AM_DIR) == AM_DIR)
