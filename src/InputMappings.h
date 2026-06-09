@@ -72,6 +72,9 @@ protected:
 	bool enterButtonPressedPrev;
 	bool enterButtonPressed;
 
+	bool backButtonPressedPrev;
+	bool backButtonPressed;
+
 	unsigned keyboardNumLetter;
 	unsigned inputROMOrDevice;
 
@@ -107,10 +110,12 @@ public:
 		enterButtonPressed = false;
 		insertButtonPressedPrev = false;
 		insertButtonPressed = false;
+		backButtonPressedPrev = false;
+		backButtonPressed = false;
 	}
 
-	// Absorb enter press/release edges after ROM selector handled them.
 	void SyncEnterButtonEdgeState();
+	void SyncBackButtonEdgeState();
 
 	void SetKeyboardBrowseLCDScreen(bool value)
 	{

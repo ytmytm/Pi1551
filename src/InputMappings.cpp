@@ -59,6 +59,8 @@ InputMappings::InputMappings()
 	, insertButtonPressed(false)
 	, enterButtonPressedPrev(false)
 	, enterButtonPressed(false)
+	, backButtonPressedPrev(false)
+	, backButtonPressed(false)
 {
 }
 
@@ -66,6 +68,12 @@ void InputMappings::SyncEnterButtonEdgeState()
 {
 	enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 	enterButtonPressedPrev = enterButtonPressed;
+}
+
+void InputMappings::SyncBackButtonEdgeState()
+{
+	backButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_BACK);
+	backButtonPressedPrev = backButtonPressed;
 }
 
 bool InputMappings::CheckButtonsBrowseMode()
@@ -78,9 +86,28 @@ bool InputMappings::CheckButtonsBrowseMode()
 		insertButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_INSERT);
 		insertButtonPressedPrev = insertButtonPressed;
 		SyncEnterButtonEdgeState();
+		SyncBackButtonEdgeState();
 		return false;
 	}
 #endif
+
+	bool allowBrowseBack = true;
+	if (BUS_API::GetInputButtonHeld(INPUT_BUTTON_INSERT))
+		allowBrowseBack = false;
+	else if (BUS_API::GetInputButtonHeld(INPUT_BUTTON_ENTER))
+	{
+#if defined(PI1551SUPPORT)
+		if (!options.RotaryEncoderEnable())
+#endif
+			allowBrowseBack = false;
+	}
+	if (allowBrowseBack)
+	{
+		backButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_BACK);
+		if (backButtonPressedPrev && !backButtonPressed)
+			SetButtonFlag(BACK_FLAG);
+		backButtonPressedPrev = backButtonPressed;
+	}
 
 	if (BUS_API::GetInputButtonHeld(INPUT_BUTTON_INSERT))	// Change DeviceID
 	{
@@ -98,11 +125,6 @@ bool InputMappings::CheckButtonsBrowseMode()
 		{
 			SetButtonFlag(FUNCTION_FLAG);
 			inputROMOrDevice = 10;
-		}
-		else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_BACK))
-		{
-			SetButtonFlag(FUNCTION_FLAG);
-			inputROMOrDevice = 11;
 		}
 		insertButtonPressedPrev = false;
 	}
@@ -135,12 +157,10 @@ bool InputMappings::CheckButtonsBrowseMode()
 			enterButtonPressedPrev = false;
 		}
 	}
-	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
+	else if (!buttonFlags && BUS_API::GetInputButtonRepeating(INPUT_BUTTON_UP))
 		SetButtonFlag(UP_FLAG);
-	else if (BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
+	else if (!buttonFlags && BUS_API::GetInputButtonRepeating(INPUT_BUTTON_DOWN))
 		SetButtonFlag(DOWN_FLAG);
-	else if (BUS_API::GetInputButtonPressed(INPUT_BUTTON_BACK))
-		SetButtonFlag(BACK_FLAG);
 	else
 	{
 		// edge detection
@@ -176,12 +196,16 @@ void InputMappings::WaitForClearButtons()
 
 		enterButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_ENTER);
 		enterButtonPressedPrev = enterButtonPressed;
+
+		backButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_BACK);
+		backButtonPressedPrev = backButtonPressed;
 		
 		usDelay(1);
-	} while (insertButtonPressedPrev || enterButtonPressedPrev);
+	} while (insertButtonPressedPrev || enterButtonPressedPrev || backButtonPressedPrev);
 
 	enterButtonPressedPrev = false;
 	insertButtonPressedPrev = false;
+	backButtonPressedPrev = false;
 }
 
 void InputMappings::CheckButtonsEmulationMode()
@@ -197,6 +221,16 @@ void InputMappings::CheckButtonsEmulationMode()
 			SetButtonFlag(ESC_FLAG);
 	}
 	enterButtonPressedPrev = enterButtonPressed;
+
+	backButtonPressed = !BUS_API::GetInputButtonReleased(INPUT_BUTTON_BACK);
+	if (backButtonPressedPrev && !backButtonPressed)
+	{
+#if defined(PI1551SUPPORT)
+		if (!Pi1551ROMSelectConsumingInput())
+#endif
+			SetButtonFlag(ESC_FLAG);
+	}
+	backButtonPressedPrev = backButtonPressed;
 
 	// Rotary exit (SW1) must win over stale rotation UP/DOWN pulses.
 	if (!(buttonFlags & ESC_FLAG))
