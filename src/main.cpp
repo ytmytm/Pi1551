@@ -628,36 +628,20 @@ void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = 
 		IEC_Bus::WaitMicroSeconds(100);
 #endif
 
-		// Prepare display text
-		bool showTapeInfo = false;
 		bool caddyChanged = false;
 		bool inEmulation = (emulating != IEC_COMMANDS);
+		bool tapeLoaded = false;
 #if defined(PI1551SUPPORT)
-		// Check if tape is loaded and playing - show counter and percentage on OLED
-		// This works in both browse mode and emulation mode
 		if (g_tapePlayer)
-		{
-			TapeUIState tapeState;
-			g_tapePlayer->GetUIState(tapeState);
-			
-			if (tapeState.isLoaded)
-			{
-				showTapeInfo = true;
-				// Use helper function to update tape status (defined in FileBrowser.cpp)
-				extern void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature);
-				UpdateTapeStatusOnLCD(screenLCD, inEmulation, track, temperature);
-			}
-			else
-			{
-				// Tape not loaded - clear tape status row
-				extern void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature);
-				UpdateTapeStatusOnLCD(screenLCD, inEmulation, track, temperature);
-			}
-		}
+			tapeLoaded = g_tapePlayer->IsLoaded();
 #endif
-		
-		// Show normal track/temperature if not showing tape info
-		if (!showTapeInfo)
+
+		if (tapeLoaded)
+		{
+			extern void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature);
+			UpdateTapeStatusOnLCD(screenLCD, inEmulation, track, temperature);
+		}
+		else if (inEmulation)
 		{
 			if (options.DisplayTemperature())
 				snprintf(tempBuffer, tempBufferSize, "%s %02dC", track, temperature);
@@ -669,7 +653,7 @@ void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = 
 		if (refreshCaddyList)
 			caddyChanged = diskCaddy.Update();
 
-		if (!showTapeInfo && !caddyChanged)
+		if (inEmulation && !tapeLoaded && !caddyChanged)
 			screenLCD->RefreshRows(0, 1);
 
 #if defined(PI1551SUPPORT)
@@ -1372,7 +1356,7 @@ void UpdateScreen()
 #if defined(PI1551SUPPORT)
 				// In browse mode, update LCD periodically to show tape status even if nothing else changed
 				// This ensures tape counter is visible on OLED during playback in browse mode
-				if (emulating == IEC_COMMANDS && g_tapePlayer)
+				if (emulating == IEC_COMMANDS && g_tapePlayer && g_tapePlayer->IsLoaded())
 				{
 					// Update every 10 iterations (roughly every 100ms) in browse mode to keep tape counter updated
 					static u32 browseUpdateCounter = 0;

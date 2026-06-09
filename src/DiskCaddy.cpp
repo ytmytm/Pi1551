@@ -27,7 +27,6 @@ extern "C"
 #include "rpi-gpio.h"	// For SetACTLed
 }
 
-extern u8 deviceID;
 #if defined(PI1551SUPPORT)
 #include "tape_player.h"
 extern TapePlayer* g_tapePlayer;
@@ -385,7 +384,13 @@ void DiskCaddy::ShowSelectedImage(u32 index)
 			tapeRows = 1;  // Row 1 = tape status (row 0 = track/temp is always displayed)
 		}
 #endif
-		unsigned numberOfDisplayedImages = (screenLCD->Height()/screenLCD->GetFontHeight())-1-tapeRows;
+		unsigned fontHeight = screenLCD->GetFontHeight();
+		unsigned totalRows = screenLCD->Height() / fontHeight;
+		unsigned reservedRows = 1 + tapeRows; // row 0 = track/temp (+ row 1 = tape when loaded)
+		unsigned visibleImageRows = 0;
+		if (totalRows > reservedRows)
+			visibleImageRows = totalRows - reservedRows;
+
 		unsigned caddyIndex;
 
 		RGBA BkColour = RGBA(0, 0, 0, 0xFF);
@@ -406,27 +411,17 @@ void DiskCaddy::ShowSelectedImage(u32 index)
 			y = screenLCD->GetFontHeight();  // Skip row 0 (track/temp) when no tape
 		}
 
-		snprintf(buffer, 256, "D%02d D%d/%d %c %s"
-			, deviceID
-			, index + 1
-			, numberOfImages
-			, GetImage(index)->GetReadOnly() ? 'R' : ' '
-			, roms ? (image->IsD81() ? roms->ROMName1581 : roms->GetSelectedROMName()) : ""
-			);
-		screenLCD->PrintText(false, x, y, buffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
-		y += screenLCD->GetFontHeight();
-
-		if (numberOfImages > numberOfDisplayedImages && index > numberOfDisplayedImages-1)
+		unsigned scrollOffset = 0;
+		if (numberOfImages > visibleImageRows && visibleImageRows > 0)
 		{
-			if (numberOfImages - index < numberOfDisplayedImages)
-				caddyIndex = numberOfImages - numberOfDisplayedImages;
+			if (index < visibleImageRows)
+				scrollOffset = 0;
+			else if (index >= numberOfImages - visibleImageRows)
+				scrollOffset = numberOfImages - visibleImageRows;
 			else
-				caddyIndex = index;
+				scrollOffset = index - visibleImageRows + 1;
 		}
-		else
-		{
-			caddyIndex = 0;
-		}
+		caddyIndex = scrollOffset;
 
 		for (; caddyIndex < numberOfImages; ++caddyIndex)
 		{

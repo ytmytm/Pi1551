@@ -35,9 +35,9 @@ extern "C"
 }
 extern TapePlayer* g_tapePlayer;
 
-// Helper function to update tape status on OLED row 0 (browse mode) or row 1 (emulation mode)
-// Called without semaphore - assumes caller already has it
-// Can be called from both FileBrowser.cpp and main.cpp
+// Update tape counter on OLED when a tape is loaded (browse: row 0, emulation: row 1).
+// No-op when no tape is loaded — callers must not use this to clear file/disk rows.
+// Called without semaphore - assumes caller already has it.
 void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* track, unsigned temperature)
 {
 #if defined(PI1551SUPPORT)
@@ -47,9 +47,10 @@ void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* tra
 	TapeUIState tapeState;
 	g_tapePlayer->GetUIState(tapeState);
 	
-	if (tapeState.isLoaded)
-	{
-		u32 screenChars = screen->Width() / screen->GetFontWidth();
+	if (!tapeState.isLoaded)
+		return;
+
+	u32 screenChars = screen->Width() / screen->GetFontWidth();
 		char percentStr[8];
 		snprintf(percentStr, sizeof(percentStr), "%d%%", tapeState.percentage);
 		
@@ -85,31 +86,6 @@ void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* tra
 			screen->PrintText(false, percentX * screen->GetFontWidth(), 0, percentStr, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 			screen->RefreshRows(0, 1);
 		}
-	}
-	else
-	{
-		// Tape not loaded - clear row 0 (browse mode) or row 1 (emulation mode)
-		char clearBuffer[128] = { 0 };
-		u32 screenChars = screen->Width() / screen->GetFontWidth();
-		if (screenChars > sizeof(clearBuffer) - 1)
-			screenChars = sizeof(clearBuffer) - 1;
-		memset(clearBuffer, ' ', screenChars);
-		RGBA BkColour = RGBA(0, 0, 0, 0xFF);
-		
-		if (inEmulation)
-		{
-			// In emulation mode, clear row 1 (row 0 shows track/temperature)
-			u32 row1Y = screen->GetFontHeight();
-			screen->PrintText(false, 0, row1Y, clearBuffer, BkColour, BkColour);
-			screen->RefreshRows(1, 1);
-		}
-		else
-		{
-			// In browse mode, clear row 0
-			screen->PrintText(false, 0, 0, clearBuffer, BkColour, BkColour);
-			screen->RefreshRows(0, 1);
-		}
-	}
 #endif
 }
 
@@ -266,12 +242,11 @@ void FileBrowser::BrowsableListView::Refresh()
 #endif
 	y += yOffset;
 
-	// Update tape status on OLED (browse mode only - emulation mode uses UpdateLCD)
-	// This ensures tape status is visible and updated when list is refreshed
+	// Update tape status on OLED when a tape is loaded (browse mode only)
 #if defined(PI1551SUPPORT)
-	if (screen->IsLCD())
+	if (screen->IsLCD() && g_tapePlayer && g_tapePlayer->IsLoaded())
 	{
-		UpdateTapeStatusOnLCD(screen, false, "", 0);  // false = browse mode
+		UpdateTapeStatusOnLCD(screen, false, "", 0);
 	}
 #endif
 
@@ -1611,18 +1586,6 @@ void FileBrowser::ShowDeviceAndROM( const char* ROMName )
 
 	screenMain->PrintText(false, x, y, buffer, textColour, bgColour);
 #endif
-	if (screenLCD)
-	{
-		x = 0;
-		y = 0;
-
-		snprintf(buffer, 256, "D%2d %s"
-			, *deviceID
-			, ROMName
-			);
-		screenLCD->PrintText(false, x, y, buffer, textColour, bgColour);
-		screenLCD->SwapBuffers();
-	}
 }
 
 void FileBrowser::DisplayDiskInfo(DiskImage* diskImage, const char* filenameForIcon)
