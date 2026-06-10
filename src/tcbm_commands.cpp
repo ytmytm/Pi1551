@@ -19,6 +19,7 @@
 #include "tcbm_commands.h"
 
 #include "tcbm_bus.h"
+#include "m6523.h"
 #include "DiskImage.h"
 #include "FileBrowser.h"
 #include "Petscii.h"
@@ -699,13 +700,10 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	ch.bytesSent = 0;
 	statusActive = false;
 	directoryActive = false;
-	if (!fastMode)
+	if (ch.open)
 	{
-		u32 size = 0;
-		if (f_lseek(&ch.file, f_size(&ch.file)) == FR_OK)
-			size = static_cast<u32>(f_tell(&ch.file));
+		ch.fileSize = static_cast<u32>(f_size(&ch.file));
 		f_lseek(&ch.file, 0);
-		ch.fileSize = size;
 	}
 	if (fastMode)
 	{
@@ -1085,30 +1083,60 @@ void TCBM_Commands::ServiceLoadState()
 
                 u8 byte = 0;
                 u32 bytesRead = 0;
-                FRESULT res = f_read(&ch.file, &byte, 1, &bytesRead);
-                if (res != FR_OK)
+                if (IsCbmImageModeActive())
                 {
-                    WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
-                    Error(ERROR_74_DRlVE_NOT_READY);
-                    ch.Close();
-                    tcbmState = TCBM_STATE_IDLE;
-                    deviceRole = DEVICE_ROLE_PASSIVE;
-                    return;
+                    if (!ReadCbmImageChannelByte(secondaryAddress, byte))
+                    {
+                        WriteSerialPortByte(0x0D, true);
+                        CloseCbmImageChannel(secondaryAddress);
+                        ch.open = false;
+                        tcbmState = TCBM_STATE_IDLE;
+                        deviceRole = DEVICE_ROLE_PASSIVE;
+                        return;
+                    }
+                    bytesRead = 1;
+                }
+                else
+                {
+                    FRESULT res = f_read(&ch.file, &byte, 1, &bytesRead);
+                    if (res != FR_OK)
+                    {
+                        WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
+                        Error(ERROR_74_DRlVE_NOT_READY);
+                        ch.Close();
+                        tcbmState = TCBM_STATE_IDLE;
+                        deviceRole = DEVICE_ROLE_PASSIVE;
+                        return;
+                    }
                 }
 
                 if (bytesRead == 0)
                 {
                     WriteSerialPortByte(0x0D, true);
+                    if (IsCbmImageModeActive())
+                        CloseCbmImageChannel(secondaryAddress);
                     ch.Close();
                     tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
                     return;
                 }
 
-                bool eoi = (f_tell(&ch.file) >= ch.fileSize);
+                bool eoi = false;
+                if (IsCbmImageModeActive())
+                {
+                    u32 size = GetCbmImageChannelFileSize(secondaryAddress);
+                    u32 pos = GetCbmImageChannelPosition(secondaryAddress);
+                    eoi = (size > 0 && pos >= size);
+                }
+                else
+                {
+                    eoi = (f_tell(&ch.file) >= ch.fileSize);
+                }
                 WriteSerialPortByte(byte, eoi);
                 if (eoi)
                 {
+                    if (IsCbmImageModeActive())
+                        CloseCbmImageChannel(secondaryAddress);
                     ch.Close();
                     tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
@@ -1126,7 +1154,11 @@ void TCBM_Commands::ServiceLoadState()
                 if (data == CMD_UNTALK)
                 {
                     if (ch.open)
+                    {
+                        if (IsCbmImageModeActive())
+                            CloseCbmImageChannel(secondaryAddress);
                         ch.Close();
+                    }
                     tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
                     return;
@@ -1320,6 +1352,20 @@ bool TCBM_Commands::LoadFastByte(u8& data, bool& eoi)
 	{
 		fastCtx.status = TCBM_STATUS_SEND;
 		return false;
+	}
+
+	if (IsCbmImageModeActive())
+	{
+		if (!ReadCbmImageChannelByte(secondaryAddress, data))
+		{
+			fastCtx.status = TCBM_STATUS_EOI;
+			return false;
+		}
+		u32 size = GetCbmImageChannelFileSize(secondaryAddress);
+		u32 pos = GetCbmImageChannelPosition(secondaryAddress);
+		eoi = (size > 0 && pos >= size);
+		fastCtx.status = eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK;
+		return true;
 	}
 
 	u32 bytesRead = 0;
@@ -1589,4 +1635,67 @@ void TCBM_Commands::RequestPopDir()
     filInfoSelectedImage.fname[0] = 0;
 }
 
+bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
+{
+	if (length < 2 || data[0] != 'U' || data[1] != '0')
+		return false;
+
+	Channel& ch = channels[15];
+	ch.cursor = 0;
+	size_t copyLen = std::min(length, sizeof(ch.buffer));
+	std::memcpy(ch.buffer, data, copyLen);
+	ch.cursor = static_cast<u32>(copyLen);
+	return HandleU0Command(ch);
+}
+
+void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
+{
+	EnsureCbmImageModeFromMounted();
+	secondaryAddress = channel;
+	const bool fastMode = true;
+
+	if (channel == 15)
+	{
+		PrepareStatusResponse(fastMode);
+	}
+	else
+	{
+		Channel& ch = channels[channel];
+		if (ch.command[0] == '$' || (fastRequest.type == FAST_REQ_NONE && channel == 0))
+		{
+			if (ch.command[0] != '$')
+			{
+				ch.command[0] = '$';
+				ch.command[1] = '\0';
+			}
+			PrepareDirectoryResponse(channel, fastMode);
+		}
+		else
+		{
+			PrepareLoadChannel(channel, fastMode);
+		}
+	}
+}
+
+void TCBM_Commands::RunBrowserModeTransferUntilIdle()
+{
+	m6523* savedTpi = TCBM_Bus::TPI;
+	TCBM_Bus::TPI = 0;
+	PrepareBrowseIdleBus();
+
+	while (IsTransferActive())
+	{
+		if (TCBM_Bus::IsReset())
+		{
+			AbortBlockingTransfer("FAST handoff reset");
+			break;
+		}
+		SimulateIECUpdate();
+	}
+
+	TCBM_Bus::TPI = savedTpi;
+	if (savedTpi)
+		TCBM_Bus::port = savedTpi->GetPortA();
+	TCBM_Bus::RefreshOuts1551();
+}
 

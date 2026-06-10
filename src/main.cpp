@@ -1683,6 +1683,8 @@ EmulatingMode BeginEmulating(FileBrowser* fileBrowser, const char* filenameForIc
 	{
 #if defined(PI1551SUPPORT)
 		{
+			m_TCBM_Commands.SetMountedDiskImagePath(diskImage->GetName());
+			m_TCBM_Commands.DeactivateCbmImageMode();
 			pi1551.drive.Insert(diskImage);
 			fileBrowser->DisplayDiskInfo(diskImage, filenameForIcon);
 			fileBrowser->ShowDeviceAndROM();
@@ -2126,10 +2128,28 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 	if (pc == 0xc230)
 	{
 		u8 bufferLen = peek6502_1551(0xa4);
-		if (bufferLen >= 3)  // At least "CD_" or "CD."
+		if (bufferLen >= 2)
 		{
 			u8 byte0 = peek6502_1551(0x0200);
 			u8 byte1 = peek6502_1551(0x0201);
+
+			if (byte0 == 'U' && byte1 == '0')
+			{
+				u8 commandBuf[64];
+				u8 copyLen = bufferLen;
+				if (copyLen > sizeof(commandBuf))
+					copyLen = sizeof(commandBuf);
+				for (u8 i = 0; i < copyLen; ++i)
+					commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
+
+				if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
+				{
+					write6502_1551(0xa4, 0);
+					pi1551.m6502.SetPC(0xC283);
+				}
+			}
+			else if (bufferLen >= 3)
+			{
 			u8 byte2 = peek6502_1551(0x0202);
 
 			bool isPopDir = false;
@@ -2172,6 +2192,21 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 				emulating = IEC_COMMANDS;
 				exitReason = EXIT_CD;
 			}
+			}
+		}
+	}
+
+	// Fast TALK secondary (0x7x): hand off to browser-mode TCBM handler
+	if (pc == 0xC0E4)
+	{
+		u8 talkActive = peek6502_1551(0x5B);
+		u8 secondary = peek6502_1551(0x7D);
+		if (talkActive && (secondary & 0xF0) == 0x70)
+		{
+			u8 channel = secondary & 0x0F;
+			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
+			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
+			pi1551.m6502.SetPC(0xEABD);
 		}
 	}
 }
@@ -2801,14 +2836,23 @@ void emulator()
 								if (fileBrowser->SelectLST(fileBrowserSelectedName))
 									emulating = BeginEmulating(fileBrowser, fileBrowserSelectedName);
 							}
-							else if (DiskImage::IsDiskImageExtention(fileBrowserSelectedName))
+							else if (Commands_Base::IsCdMountableImage(fileBrowserSelectedName))
 							{
 								const FILINFO* filInfoSelected = m_TCBM_Commands.GetImageSelected();
-								DEBUG_LOG("IEC mounting %s\r\n", filInfoSelected->fname);
-								bool readOnly = (filInfoSelected->fattrib & AM_RDO) != 0;
+								if (Commands_Base::PathUsesQuasiMountOnly(filInfoSelected->fname))
+								{
+									m_TCBM_Commands.SetMountedDiskImagePath(filInfoSelected->fname);
+									if (!m_TCBM_Commands.ActivateCbmImageMode(filInfoSelected->fname))
+										DEBUG_LOG("Quasi mount failed %s\r\n", filInfoSelected->fname);
+								}
+								else
+								{
+									DEBUG_LOG("IEC mounting %s\r\n", filInfoSelected->fname);
+									bool readOnly = (filInfoSelected->fattrib & AM_RDO) != 0;
 
-								if (diskCaddy.Insert(filInfoSelected, readOnly))
-									emulating = BeginEmulating(fileBrowser, filInfoSelected->fname);
+									if (diskCaddy.Insert(filInfoSelected, readOnly))
+										emulating = BeginEmulating(fileBrowser, filInfoSelected->fname);
+								}
 							}
 
 							m_TCBM_Commands.ClearPendingImageSelection();

@@ -521,6 +521,7 @@ public:
 
 	void GetRegs(u16& PC, u8& SP, u8& A, u8& X, u8& Y, u8& Status) { PC = pc; SP = sp; A = a; X = x; Y = y; Status = status; }
 	u16 GetPC() const { return pc; }
+	void SetPC(u16 value) { pc = value; }
 	u8 GetA() const { return a; }
 	void SetA(u8 value) { a = value; }
 	u8 GetX() const { return x;	}

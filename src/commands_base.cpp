@@ -17,6 +17,7 @@
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
 #include "commands_base.h"
+#include "cbm_diskimage.h"
 #include "defs.h"
 #include "ff.h"
 #include "DiskImage.h"
@@ -102,7 +103,7 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 			msg = "WRITE ERROR";
 		break;
 		case ERROR_73_DOSVERSION:
-			snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s V%02d.%02d,%02d,%02d\r", errorCode,
+			snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s V%02d.%02d (TCBM2SD COMPAT),%02d,%02d\r", errorCode,
 						PI_DRIVE_NAME, versionMajor, versionMinor, track, sector);
 			return;
 		break;
@@ -155,6 +156,7 @@ void Commands_Base::Channel::Close()
 Commands_Base::Commands_Base()
 {
 	deviceID = 8;
+	mountedImagePath[0] = 0;
 	Reset();
 	starFileName = 0;
 	displayingDevices = false;
@@ -186,8 +188,258 @@ void Commands_Base::CloseAllChannels()
 {
 	for (int i = 0; i < 15; ++i)
 	{
+		if (cbm_image_is_mounted())
+			cbm_image_close_channel(static_cast<u8>(i));
 		channels[i].Close();
 	}
+}
+
+void Commands_Base::SetMountedDiskImagePath(const char* path)
+{
+	if (!path || path[0] == '\0')
+	{
+		mountedImagePath[0] = '\0';
+		return;
+	}
+	strncpy(mountedImagePath, path, sizeof(mountedImagePath) - 1);
+	mountedImagePath[sizeof(mountedImagePath) - 1] = '\0';
+}
+
+bool Commands_Base::PathUsesQuasiMountOnly(const char* path)
+{
+	return CbmImagePathQuasiMountOnly(path);
+}
+
+bool Commands_Base::PathUsesSectorEmulation(const char* path)
+{
+	if (PathUsesQuasiMountOnly(path))
+		return false;
+
+	CbmImageType type = CbmImagePathGetType(path);
+	if (type == CBM_IMG_D64 || type == CBM_IMG_D64_40 || type == CBM_IMG_D64_42)
+		return true;
+
+	return DiskImage::IsDiskImageExtention(path);
+}
+
+bool Commands_Base::IsCdMountableImage(const char* path)
+{
+	return PathUsesQuasiMountOnly(path) || PathUsesSectorEmulation(path);
+}
+
+bool Commands_Base::MountDiskImageFromCd(const char* path, const FILINFO& filInfo)
+{
+	if (PathUsesQuasiMountOnly(path))
+	{
+		SetMountedDiskImagePath(path);
+		if (!ActivateCbmImageMode(path))
+		{
+			Error(ERROR_62_FILE_NOT_FOUND);
+			return false;
+		}
+		selectedImageName[0] = '\0';
+		filInfoSelectedImage = filInfo;
+		return true;
+	}
+
+	if (PathUsesSectorEmulation(path))
+	{
+		DeactivateCbmImageMode();
+		strcpy((char*)selectedImageName, path);
+		SetMountedDiskImagePath(path);
+		filInfoSelectedImage = filInfo;
+		return true;
+	}
+
+	Error(ERROR_62_FILE_NOT_FOUND);
+	return false;
+}
+
+void Commands_Base::DeactivateCbmImageMode()
+{
+	cbm_image_unmount();
+}
+
+bool Commands_Base::ActivateCbmImageMode(const char* path)
+{
+	return cbm_image_mount(path);
+}
+
+bool Commands_Base::EnsureCbmImageModeFromMounted()
+{
+	if (cbm_image_is_mounted())
+		return true;
+	if (mountedImagePath[0] == '\0')
+		return false;
+	return ActivateCbmImageMode(mountedImagePath);
+}
+
+bool Commands_Base::IsCbmImageModeActive() const
+{
+	return cbm_image_is_mounted();
+}
+
+u32 Commands_Base::GetCbmImageChannelFileSize(u8 channel) const
+{
+	return cbm_image_channel_file_size(channel);
+}
+
+u32 Commands_Base::GetCbmImageChannelPosition(u8 channel) const
+{
+	return cbm_image_channel_position(channel);
+}
+
+void Commands_Base::SetCbmImageChannelPosition(u8 channel, u32 position)
+{
+	cbm_image_set_channel_position(channel, position);
+}
+
+bool Commands_Base::ReadCbmImageChannelByte(u8 channel, u8& data)
+{
+	return cbm_image_read_channel_byte(channel, data);
+}
+
+void Commands_Base::CloseCbmImageChannel(u8 secondary)
+{
+	cbm_image_close_channel(secondary);
+}
+
+void Commands_Base::AppendDirectoryStream(Channel& channel, const u8* data, size_t length)
+{
+	while (length > 0)
+	{
+		size_t space = sizeof(channel.buffer) - channel.cursor;
+		if (space == 0)
+		{
+			SendBuffer(channel, false);
+			space = sizeof(channel.buffer) - channel.cursor;
+		}
+		size_t copy = length < space ? length : space;
+		memcpy(channel.buffer + channel.cursor, data, copy);
+		channel.cursor += static_cast<u32>(copy);
+		data += copy;
+		length -= copy;
+		if (channel.cursor >= sizeof(channel.buffer) - 64)
+			SendBuffer(channel, false);
+	}
+}
+
+void Commands_Base::AppendCbmImageDirLine(Channel& channel, const u8* rawEntry)
+{
+	u8 line[64];
+	size_t i = 0;
+	u16 size = static_cast<u16>(rawEntry[28] | (rawEntry[29] << 8));
+	u8 type = rawEntry[0] & 7;
+	bool unclosed = !(rawEntry[0] & 0x80);
+	bool locked = rawEntry[0] & 0x40;
+	static const char* const ftype[] = { "DEL", "SEQ", "PRG", "USR", "REL", "+CBM", "???", "???" };
+	char name[17];
+
+	cbm_di_name_from_rawname(name, rawEntry + 3);
+
+	line[i++] = 1;
+	line[i++] = 1;
+	line[i++] = size & 0xff;
+	line[i++] = size >> 8;
+	if (size < 10) line[i++] = ' ';
+	if (size < 100) line[i++] = ' ';
+	if (size < 1000) line[i++] = ' ';
+	if (size < 10000) line[i++] = ' ';
+	line[i++] = '"';
+	for (int c = 0; c < 16 && name[c]; ++c)
+		line[i++] = static_cast<u8>(ascii2petscii(name[c]));
+	line[i++] = '"';
+	while (i < 6 + 1 + 16 + 1)
+		line[i++] = ' ';
+	line[i++] = unclosed ? static_cast<u8>('*') : static_cast<u8>(' ');
+	memcpy(line + i, ftype[type & 7], 3);
+	i += 3;
+	line[i++] = locked ? static_cast<u8>('<') : static_cast<u8>(' ');
+	line[i++] = ' ';
+	line[i++] = 0;
+	AppendDirectoryStream(channel, line, i);
+}
+
+void Commands_Base::LoadCbmImageDirectory()
+{
+	Channel& channel = channels[0];
+	CbmFsImage* di = cbm_image_get_fs();
+	if (!di)
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		return;
+	}
+
+	channel.cursor = 0;
+	channel.bytesSent = 0;
+	cbm_image_reset_dir_entry_serial();
+
+	u8 header[48];
+	size_t hi = 0;
+	header[hi++] = 1;
+	header[hi++] = 4;
+	header[hi++] = 1;
+	header[hi++] = 1;
+	header[hi++] = 0;
+	header[hi++] = 0;
+	header[hi++] = 0x12;
+	header[hi++] = '"';
+	u8* title = cbm_di_title(di);
+	for (int t = 0; t < 16; ++t)
+	{
+		u8 c = title[t];
+		header[hi++] = c == 0xa0 ? static_cast<u8>(' ') : c;
+	}
+	header[hi++] = '"';
+	header[hi++] = ' ';
+	memcpy(header + hi, title + 18, 5);
+	hi += 5;
+	for (size_t j = 8; j < hi; ++j)
+	{
+		if (header[j] == 0xa0)
+			header[j] = ' ';
+	}
+	header[hi++] = 0;
+	AppendDirectoryStream(channel, header, hi);
+
+	CbmImageFile* dirFile = cbm_di_open(di, "$", CBM_T_PRG);
+	if (dirFile)
+	{
+		u8 skip[254];
+		cbm_di_read(dirFile, skip, sizeof(skip));
+
+		u8 entry[32];
+		for (;;)
+		{
+			u8 chunk = 32;
+			u8 serial = cbm_image_dir_entry_serial() + 1;
+			if (serial == 8)
+			{
+				chunk = 30;
+				serial = 0;
+			}
+			cbm_image_set_dir_entry_serial(serial);
+			int got = cbm_di_read(dirFile, entry, chunk);
+			if (got < 30)
+				break;
+			if (entry[0] == 0)
+				continue;
+			AppendCbmImageDirLine(channel, entry);
+		}
+		cbm_di_close(dirFile);
+	}
+
+	u8 footer[8];
+	footer[0] = 1;
+	footer[1] = 1;
+	footer[2] = di->blocksfree & 0xff;
+	footer[3] = (di->blocksfree >> 8) & 0xff;
+	footer[4] = 0;
+	footer[5] = 0;
+	footer[6] = 0;
+	footer[7] = 0;
+	AppendDirectoryStream(channel, footer, sizeof(footer));
+	SendBuffer(channel, true);
 }
 
 static bool CopyFile(char* filenameNew, char* filenameOld, bool concatenate)
@@ -384,9 +636,16 @@ bool Commands_Base::Enter(DIR& dir, FILINFO& filInfo)
 {
 	filInfoSelectedImage = filInfo;
 
-	if (DiskImage::IsDiskImageExtention(filInfo.fname))
+	if (IsCdMountableImage(filInfo.fname))
 	{
+		if (PathUsesQuasiMountOnly(filInfo.fname))
+		{
+			MountDiskImageFromCd(filInfo.fname, filInfo);
+			return false;
+		}
+		DeactivateCbmImageMode();
 		strcpy((char*)selectedImageName, filInfo.fname);
+		SetMountedDiskImagePath(filInfo.fname);
 		return true;
 	}
 	else if (IsDirectory(filInfo))
@@ -570,6 +829,12 @@ struct greater
 
 void Commands_Base::LoadDirectory()
 {
+	if (cbm_image_is_mounted())
+	{
+		LoadCbmImageDirectory();
+		return;
+	}
+
 	DIR dir;
 	char* ext;
 	FRESULT res;
@@ -1162,10 +1427,14 @@ void Commands_Base::CD(int partition, char* filename)
 	DEBUG_LOG("CD %s\r\n", filenameEdited);
 	if (filenameEdited[0] == '_' && len == 1)
 	{
+		if (cbm_image_is_mounted())
+			DeactivateCbmImageMode();
 		updateAction = POP_DIR;
 	}
 	else if (filenameEdited[0] == '.' && filenameEdited[1] == '.' && len == 2)
 	{
+		if (cbm_image_is_mounted())
+			DeactivateCbmImageMode();
 		updateAction = POP_DIR;
 	}
 	else
@@ -1224,30 +1493,30 @@ void Commands_Base::CD(int partition, char* filename)
 
 						if (found)
 						{
-							if (DiskImage::IsDiskImageExtention(filInfo.fname))
+							if (IsCdMountableImage(filInfo.fname))
 							{
-								if (f_stat(filInfo.fname, &filInfoSelectedImage) == FR_OK)
-								{
-									strcpy((char*)selectedImageName, filInfo.fname);
-								}
-								else
+								if (f_stat(filInfo.fname, &filInfoSelectedImage) != FR_OK)
 								{
 									f_chdir(cwd);
 									Error(ERROR_62_FILE_NOT_FOUND);
 								}
-							}
-							else
-							{
-								if (f_chdir(filInfo.fname) != FR_OK)
-								{
-									Error(ERROR_62_FILE_NOT_FOUND);
+								else if (!MountDiskImageFromCd(filInfo.fname, filInfoSelectedImage))
 									f_chdir(cwd);
-								}
+							}
 								else
 								{
-									updateAction = DIR_PUSHED;
+									if (f_chdir(filInfo.fname) != FR_OK)
+									{
+										Error(ERROR_62_FILE_NOT_FOUND);
+										f_chdir(cwd);
+									}
+									else
+									{
+										if (cbm_image_is_mounted())
+											DeactivateCbmImageMode();
+										updateAction = DIR_PUSHED;
+									}
 								}
-							}
 						}
 						else
 						{
@@ -1263,10 +1532,10 @@ void Commands_Base::CD(int partition, char* filename)
 
 				if (found)
 				{
-					if (DiskImage::IsDiskImageExtention(filInfo.fname))
+					if (IsCdMountableImage(filInfo.fname))
 					{
 						if (f_stat(filInfo.fname, &filInfoSelectedImage) == FR_OK)
-							strcpy((char*)selectedImageName, filInfo.fname);
+							MountDiskImageFromCd(filInfo.fname, filInfoSelectedImage);
 						else
 							Error(ERROR_62_FILE_NOT_FOUND);
 					}
@@ -1275,7 +1544,11 @@ void Commands_Base::CD(int partition, char* filename)
 						if (f_chdir(filInfo.fname) != FR_OK)
 							Error(ERROR_62_FILE_NOT_FOUND);
 						else
+						{
+							if (cbm_image_is_mounted())
+								DeactivateCbmImageMode();
 							updateAction = DIR_PUSHED;
+						}
 					}
 				}
 				else
@@ -1458,6 +1731,11 @@ void Commands_Base::OpenFile()
 {
 	u8 secondary = secondaryAddress;
 	Channel& channel = channels[secondary];
+	if (cbm_image_is_mounted() && channel.command[0] != '$' && channel.command[0] != '#')
+	{
+		OpenCbmImageFile(secondary);
+		return;
+	}
 	if (channel.command[0] == '#')
 	{
 		// Direct access is unsupported. Allow derived classes to handle special cases
@@ -1635,6 +1913,43 @@ void Commands_Base::OpenFile()
 			}
 		}
 	}
+}
+
+void Commands_Base::OpenCbmImageFile(u8 secondary)
+{
+	Channel& ch = channels[secondary];
+	CloseCbmImageChannel(secondary);
+	ch.open = false;
+
+	if (!cbm_image_is_mounted())
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		return;
+	}
+
+	char filename[256];
+	char* in = (char*)ch.command;
+	int part = ParsePartition(&in);
+	(void)part;
+	if (*in == ':')
+		in++;
+	else
+		in = (char*)ch.command;
+	ParseName(in, filename, true, true);
+
+	u32 fileSize = 0;
+	if (!cbm_image_open_file(secondary, filename, fileSize))
+	{
+		strncpy(lastOpenPath, filename, sizeof(lastOpenPath) - 1);
+		lastOpenPath[sizeof(lastOpenPath) - 1] = '\0';
+		Error(ERROR_62_FILE_NOT_FOUND);
+		return;
+	}
+
+	ch.open = true;
+	ch.cursor = 0;
+	ch.bytesSent = 0;
+	ch.fileSize = fileSize;
 }
 
 void Commands_Base::Listen()

@@ -95,6 +95,20 @@ public:
 	void ClearPendingImageSelection();
 	const char* GetLastOpenPath() const { return lastOpenPath; }
 
+	void SetMountedDiskImagePath(const char* path);
+	static bool PathUsesQuasiMountOnly(const char* path);
+	static bool PathUsesSectorEmulation(const char* path);
+	static bool IsCdMountableImage(const char* path);
+	bool MountDiskImageFromCd(const char* path, const FILINFO& filInfo);
+	bool ActivateCbmImageMode(const char* path);
+	void DeactivateCbmImageMode();
+	bool IsCbmImageModeActive() const;
+	bool EnsureCbmImageModeFromMounted();
+	bool ReadCbmImageChannelByte(u8 channel, u8& data);
+	u32 GetCbmImageChannelFileSize(u8 channel) const;
+	u32 GetCbmImageChannelPosition(u8 channel) const;
+	void SetCbmImageChannelPosition(u8 channel, u32 position);
+
 	void SetHeaderVersion();
 	int CreateNewDisk(char* filenameNew, char* ID, bool automount);
 
@@ -154,7 +168,12 @@ protected:
 
 	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType);
 	virtual void LoadDirectory();
+	void LoadCbmImageDirectory();
+	void AppendDirectoryStream(Channel& channel, const u8* data, size_t length);
+	void AppendCbmImageDirLine(Channel& channel, const u8* rawEntry);
 	void OpenFile();
+	void OpenCbmImageFile(u8 secondary);
+	void CloseCbmImageChannel(u8 secondary);
 	void CloseFile(u8 secondary);
 	void CloseAllChannels();
 	void SendError();
@@ -235,6 +254,7 @@ protected:
 	char selectedImageName[256];
 	FILINFO filInfoSelectedImage;
 	char lastOpenPath[256];
+	char mountedImagePath[256];
 
 	const char* starFileName;
 

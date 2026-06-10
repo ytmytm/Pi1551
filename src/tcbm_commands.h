@@ -72,6 +72,11 @@ public:
     static int  debugWriteStep;
     static char debugWriteBuffer[64];
 
+	// Emulation-mode traps (1551 ROM) delegate fast transfers to browser handler
+	bool InterceptEmulationU0Command(const u8* data, size_t length);
+	void HandleEmulationFastTalkHandoff(u8 channel);
+	void RunBrowserModeTransferUntilIdle();
+
 	// Allow traps to request a directory pop without exposing CD()
 	void RequestPopDir();
 
