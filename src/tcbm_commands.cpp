@@ -95,7 +95,15 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
 {
     if (TCBM_Bus::IsReset())
     {
+        do
+        {
+            TCBM_Bus::ReadBrowseMode();
+            TCBM_Bus::WaitMicroSeconds(100);
+        }
+        while (TCBM_Bus::IsReset());
+        TCBM_Bus::WaitMicroSeconds(20);
         ResetStateMachine();
+        PrepareBrowseIdleBus();
         return RESET;
     }
 
@@ -201,6 +209,14 @@ const char* const* TCBM_Commands::GetDebugLines(int& lineCount) const
         linePtrs[i] = debugLines[i];
     lineCount = debugLineCount;
     return linePtrs;
+}
+
+void TCBM_Commands::AbortBlockingTransfer(const char* reason)
+{
+    if (reason && reason[0] != '\0')
+        PushDebugLine("ABORT: %s", reason);
+    ResetStateMachine();
+    PrepareBrowseIdleBus();
 }
 
 void TCBM_Commands::ResetStateMachine()
@@ -330,6 +346,9 @@ bool TCBM_Commands::WaitForDAVState(bool asserted, const char* stage, u32 timeou
     u32 waited = 0;
     while ((TCBM_Bus::IsDAVAsserted() ? true : false) != asserted)
     {
+        if (TCBM_Bus::IsReset())
+            return false;
+
         if (waited >= timeoutUs)
         {
             NoteTimeout(stage);
@@ -376,8 +395,11 @@ bool TCBM_Commands::ReadTCBMCommandByteBlocking(u8& value)
     if (!WaitForDAVState(true, "DAV=1 (command)"))
         return false;
 
-    while (true)
+    for (unsigned attempt = 0; attempt < MAX_COMMAND_STABLE_ATTEMPTS; ++attempt)
     {
+        if (TCBM_Bus::IsReset())
+            return false;
+
         TCBM_Bus::ReadBrowseMode();
         u8 first = TCBM_Bus::GetPI_Data();
         TCBM_Bus::ReadBrowseMode();
@@ -396,6 +418,8 @@ bool TCBM_Commands::ReadTCBMCommandByteBlocking(u8& value)
         if (!WaitForDAVState(true, "DAV=1 (stable command)"))
             return false;
     }
+
+    return false;
 }
 
 bool TCBM_Commands::ReadTCBMDataByteBlocking(u8& value, u8 status)
@@ -557,9 +581,11 @@ void TCBM_Commands::HandleTalkSecondary(u8 secondaryByte)
 void TCBM_Commands::EnterOpenState(u8 channel)
 {
     Channel& ch = channels[channel];
+    ch.Close();
     ch.cursor = 0;
     ch.bytesSent = 0;
     std::memset(ch.buffer, 0, sizeof(ch.buffer));
+    std::memset(ch.command, 0, sizeof(ch.command));
     tcbmState = TCBM_STATE_OPEN;
     activeChannel = channel;
     PushDebugLine("OPEN channel %u", channel);
@@ -636,8 +662,9 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		}
 	}
 
-	if (!ch.open)
-		OpenFile();
+	if (ch.open)
+		ch.Close();
+	OpenFile();
 
 	if (!ch.open)
 	{
@@ -659,11 +686,12 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		}
 		else
 		{
-			tcbmState = TCBM_STATE_LOAD;
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
 			if (lastOpenPath[0] != '\0')
 				PushDebugLine("LOAD fail: %s", lastOpenPath);
 			else
-				PushDebugLine("LOAD error ch %u cmd:%s", channel, reinterpret_cast<const char*>(ch.command));
+				PushDebugLine("LOAD fail ch %u cmd:%s", channel, reinterpret_cast<const char*>(ch.command));
 		}
 		return false;
 	}
@@ -674,12 +702,9 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	if (!fastMode)
 	{
 		u32 size = 0;
-		u32 current = f_tell(&ch.file);
 		if (f_lseek(&ch.file, f_size(&ch.file)) == FR_OK)
-		{
 			size = static_cast<u32>(f_tell(&ch.file));
-			f_lseek(&ch.file, current);
-		}
+		f_lseek(&ch.file, 0);
 		ch.fileSize = size;
 	}
 	if (fastMode)
@@ -978,37 +1003,51 @@ void TCBM_Commands::ApplyPendingFastFilename(u8 channel)
 
 void TCBM_Commands::ServiceOpenState()
 {
-    u8 command;
-    if (!ReadTCBMCommandByteBlocking(command))
-        return;
-
-    switch (command)
+    while (tcbmState == TCBM_STATE_OPEN)
     {
-        case TCBM_CODE_RECV:
+        if (TCBM_Bus::IsReset())
         {
-            u8 byte;
-            if (ReadTCBMDataByteBlocking(byte))
-                AppendCommandByte(channels[activeChannel], byte);
-            break;
+            ResetStateMachine();
+            PrepareBrowseIdleBus();
+            return;
         }
 
-        case TCBM_CODE_COMMAND:
+        u8 command = ReadTCBMCommandByte();
+        if (command == 0)
         {
-            u8 data;
-            if (!ReadTCBMDataByteBlocking(data))
+            if (!ReadTCBMCommandByteBlocking(command))
                 return;
-
-            if (data == CMD_UNLISTEN)
-            {
-                FinaliseOpenState(activeChannel);
-                tcbmState = TCBM_STATE_IDLE;
-                deviceRole = DEVICE_ROLE_PASSIVE;
-            }
-            break;
         }
 
-        default:
-            break;
+        switch (command)
+        {
+            case TCBM_CODE_RECV:
+            {
+                u8 byte;
+                if (ReadTCBMDataByteBlocking(byte))
+                    AppendCommandByte(channels[activeChannel], byte);
+                break;
+            }
+
+            case TCBM_CODE_COMMAND:
+            {
+                u8 data;
+                if (!ReadTCBMDataByteBlocking(data))
+                    return;
+
+                if (data == CMD_UNLISTEN)
+                {
+                    FinaliseOpenState(activeChannel);
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+                break;
+            }
+
+            default:
+                return;
+        }
     }
 }
 
@@ -1016,69 +1055,88 @@ void TCBM_Commands::ServiceLoadState()
 {
     Channel& ch = channels[secondaryAddress];
 
-    u8 command;
-    if (!ReadTCBMCommandByteBlocking(command))
-        return;
-
-    switch (command)
+    while (tcbmState == TCBM_STATE_LOAD)
     {
-        case TCBM_CODE_SEND:
+        if (TCBM_Bus::IsReset())
         {
-            if (!ch.open)
-            {
-				WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
-                tcbmState = TCBM_STATE_IDLE;
-                deviceRole = DEVICE_ROLE_PASSIVE;
-                return;
-            }
-
-            u8 byte = 0;
-            u32 bytesRead = 0;
-		FRESULT res = f_read(&ch.file, &byte, 1, &bytesRead);
-		if (res != FR_OK)
-		{
-			WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
-			Error(ERROR_74_DRlVE_NOT_READY);
-			ch.Close();
-			tcbmState = TCBM_STATE_IDLE;
-			deviceRole = DEVICE_ROLE_PASSIVE;
-			return;
-		}
-
-            if (bytesRead == 0)
-            {
-                WriteSerialPortByte(0x0D, true);
-                tcbmState = TCBM_STATE_IDLE;
-                deviceRole = DEVICE_ROLE_PASSIVE;
-                return;
-            }
-
-            bool eoi = (f_tell(&ch.file) >= ch.fileSize);
-            WriteSerialPortByte(byte, eoi);
-            if (eoi)
-            {
-                tcbmState = TCBM_STATE_IDLE;
-                deviceRole = DEVICE_ROLE_PASSIVE;
-            }
-            break;
+            ResetStateMachine();
+            PrepareBrowseIdleBus();
+            return;
         }
 
-        case TCBM_CODE_COMMAND:
+        u8 command = ReadTCBMCommandByte();
+        if (command == 0)
         {
-            u8 data;
-            if (!ReadTCBMDataByteBlocking(data))
+            if (!ReadTCBMCommandByteBlocking(command))
                 return;
-
-            if (data == CMD_UNTALK)
-            {
-                tcbmState = TCBM_STATE_IDLE;
-                deviceRole = DEVICE_ROLE_PASSIVE;
-            }
-            break;
         }
 
-        default:
-            break;
+        switch (command)
+        {
+            case TCBM_CODE_SEND:
+            {
+                if (!ch.open)
+                {
+                    WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+
+                u8 byte = 0;
+                u32 bytesRead = 0;
+                FRESULT res = f_read(&ch.file, &byte, 1, &bytesRead);
+                if (res != FR_OK)
+                {
+                    WriteSerialPortByteWithStatus(0x0D, TCBM_STATUS_SEND);
+                    Error(ERROR_74_DRlVE_NOT_READY);
+                    ch.Close();
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+
+                if (bytesRead == 0)
+                {
+                    WriteSerialPortByte(0x0D, true);
+                    ch.Close();
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+
+                bool eoi = (f_tell(&ch.file) >= ch.fileSize);
+                WriteSerialPortByte(byte, eoi);
+                if (eoi)
+                {
+                    ch.Close();
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+                break;
+            }
+
+            case TCBM_CODE_COMMAND:
+            {
+                u8 data;
+                if (!ReadTCBMDataByteBlocking(data))
+                    return;
+
+                if (data == CMD_UNTALK)
+                {
+                    if (ch.open)
+                        ch.Close();
+                    tcbmState = TCBM_STATE_IDLE;
+                    deviceRole = DEVICE_ROLE_PASSIVE;
+                    return;
+                }
+                break;
+            }
+
+            default:
+                return;
+        }
     }
 }
 
@@ -1088,7 +1146,10 @@ void TCBM_Commands::ServiceSaveState()
 
     u8 command;
     if (!ReadTCBMCommandByteBlocking(command))
+    {
+        AbortBlockingTransfer("SAVE command");
         return;
+    }
 
     if (command == TCBM_CODE_RECV)
     {
@@ -1096,7 +1157,10 @@ void TCBM_Commands::ServiceSaveState()
 		{
 			u8 discard;
 			if (!ReadTCBMDataByteBlocking(discard, TCBM_STATUS_RECV))
+			{
+				AbortBlockingTransfer("SAVE rejected");
 				return;
+			}
 			PushDebugLine("SAVE rejected byte");
 			tcbmState = TCBM_STATE_IDLE;
 			deviceRole = DEVICE_ROLE_PASSIVE;
@@ -1105,7 +1169,10 @@ void TCBM_Commands::ServiceSaveState()
 
         u8 byte;
         if (!ReadTCBMDataByteBlocking(byte))
+        {
+            AbortBlockingTransfer("SAVE data");
             return;
+        }
 
         if (ch.cursor < sizeof(ch.buffer))
             ch.buffer[ch.cursor++] = byte;
@@ -1121,7 +1188,10 @@ void TCBM_Commands::ServiceSaveState()
     {
         u8 data;
         if (!ReadTCBMDataByteBlocking(data))
+        {
+            AbortBlockingTransfer("SAVE UNLISTEN");
             return;
+        }
 
         if (data == CMD_UNLISTEN)
         {
@@ -1144,7 +1214,10 @@ void TCBM_Commands::ServiceDirectoryState()
 
     u8 command;
     if (!ReadTCBMCommandByteBlocking(command))
+    {
+        AbortBlockingTransfer("DIR command");
         return;
+    }
 
     if (command == TCBM_CODE_SEND)
     {
@@ -1169,7 +1242,10 @@ void TCBM_Commands::ServiceDirectoryState()
     {
         u8 data;
         if (!ReadTCBMDataByteBlocking(data))
+        {
+            AbortBlockingTransfer("DIR UNTALK");
             return;
+        }
 
         if (data == CMD_UNTALK)
         {
@@ -1296,6 +1372,12 @@ void TCBM_Commands::ServiceFastLoadState()
 
 	while (true)
 	{
+		if (TCBM_Bus::IsReset())
+		{
+			AbortBlockingTransfer("FAST load reset");
+			return;
+		}
+
 		if (fastCtx.status != TCBM_STATUS_OK)
 		{
 			if (FinaliseFastHandshake())
@@ -1354,6 +1436,12 @@ void TCBM_Commands::ServiceFastDirectoryState()
 
 	while (true)
 	{
+		if (TCBM_Bus::IsReset())
+		{
+			AbortBlockingTransfer("FAST load reset");
+			return;
+		}
+
 		if (fastCtx.status != TCBM_STATUS_OK)
 		{
 			if (FinaliseFastHandshake())

@@ -60,6 +60,7 @@ public:
 
     // Diagnostic accessors
     TCBMState GetState() const { return tcbmState; }
+    bool IsTransferActive() const { return tcbmState != TCBM_STATE_IDLE; }
     const char* GetStateName() const;
 
     // Debug overlay (rendered on HDMI screen)
@@ -119,6 +120,7 @@ protected:
 
     // Debug helpers
 	void ResetStateMachine();
+	void AbortBlockingTransfer(const char* reason);
 	void ClearDebugOverlay();
 	void PushDebugLine(const char* fmt, ...);
 	void SetDebugLine(int index, const char* fmt, ...);
@@ -137,6 +139,7 @@ protected:
 
 	static constexpr u32 COMMAND_TIMEOUT_US = 5000000u; // 5 seconds
 	static constexpr u32 POLL_DELAY_US      = 1;         // 1 µs granularity
+	static constexpr unsigned MAX_COMMAND_STABLE_ATTEMPTS = 100000u;
 	static constexpr size_t FAST_FILENAME_MAX = 64;
 
     // Debug storage
