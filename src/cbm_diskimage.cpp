@@ -502,6 +502,54 @@ void cbm_image_set_channel_position(u8 channel, u32 position)
 	s_mount.channelFile[channel].position = position;
 }
 
+const char* cbm_image_get_mounted_path()
+{
+	return s_mount.active ? s_mount.path : nullptr;
+}
+
+int cbm_image_collect_dir_entries(CbmImageDirListEntry* entries, int maxEntries)
+{
+	if (!entries || maxEntries <= 0 || !s_mount.active)
+		return 0;
+
+	CbmImageFile* dirFile = cbm_di_open(&s_mount.fs, "$", CBM_T_PRG);
+	if (!dirFile)
+		return 0;
+
+	u8 skip[254];
+	cbm_di_read(dirFile, skip, sizeof(skip));
+
+	int count = 0;
+	u8 serial = 0;
+	for (;;)
+	{
+		u8 chunk = 32;
+		serial++;
+		if (serial == 8)
+		{
+			chunk = 30;
+			serial = 0;
+		}
+
+		u8 entry[32];
+		int got = cbm_di_read(dirFile, entry, chunk);
+		if (got < 30)
+			break;
+		if (entry[0] == 0)
+			continue;
+		if (count >= maxEntries)
+			break;
+
+		cbm_di_name_from_rawname(entries[count].name, entry + 3);
+		entries[count].size = static_cast<u32>((entry[29] << 8) | entry[28]);
+		entries[count].type = entry[0] & 7;
+		count++;
+	}
+
+	cbm_di_close(dirFile);
+	return count;
+}
+
 CbmFsImage* cbm_di_load_image(FIL* file)
 {
 	if (!file)

@@ -211,6 +211,7 @@ public:
 private:
 	void DisplayPNG(FILINFO& filIcon, int x, int y);
 	void RefreshFolderEntries();
+	void RefreshCbmImageFolderEntries();
 
 	void UpdateInputFolders();
 	//void UpdateInputDiskCaddy();

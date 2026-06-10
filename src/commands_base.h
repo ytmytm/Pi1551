@@ -102,6 +102,8 @@ public:
 	bool MountDiskImageFromCd(const char* path, const FILINFO& filInfo);
 	bool ActivateCbmImageMode(const char* path);
 	void DeactivateCbmImageMode();
+	bool ExitQuasiMountIfActive();
+	const char* GetMountedDiskImagePath() const { return mountedImagePath; }
 	bool IsCbmImageModeActive() const;
 	bool EnsureCbmImageModeFromMounted();
 	bool ReadCbmImageChannelByte(u8 channel, u8& data);
@@ -167,10 +169,10 @@ protected:
 	virtual void SaveFile();
 
 	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType);
+	void AddCbmRawDirectoryEntry(Channel& channel, const u8* rawEntry);
 	virtual void LoadDirectory();
 	void LoadCbmImageDirectory();
 	void AppendDirectoryStream(Channel& channel, const u8* data, size_t length);
-	void AppendCbmImageDirLine(Channel& channel, const u8* rawEntry);
 	void OpenFile();
 	void OpenCbmImageFile(u8 secondary);
 	void CloseCbmImageChannel(u8 secondary);

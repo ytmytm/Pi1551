@@ -105,6 +105,7 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
         TCBM_Bus::WaitMicroSeconds(20);
         ResetStateMachine();
         PrepareBrowseIdleBus();
+        ExitQuasiMountIfActive();
         return RESET;
     }
 
@@ -631,6 +632,9 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 
 	if (fastMode)
 	{
+		if (mountedImagePath[0] != '\0')
+			EnsureCbmImageModeFromMounted();
+
 		if (fastRequest.type == FAST_REQ_FILENAME)
 		{
 			ApplyPendingFastFilename(channel);
@@ -702,8 +706,13 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	directoryActive = false;
 	if (ch.open)
 	{
-		ch.fileSize = static_cast<u32>(f_size(&ch.file));
-		f_lseek(&ch.file, 0);
+		if (IsCbmImageModeActive())
+			ch.fileSize = GetCbmImageChannelFileSize(channel);
+		else
+		{
+			ch.fileSize = static_cast<u32>(f_size(&ch.file));
+			f_lseek(&ch.file, 0);
+		}
 	}
 	if (fastMode)
 	{

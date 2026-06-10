@@ -2803,6 +2803,8 @@ void emulator()
 					case TCBM_Commands::RESET:
 						if (options.GetOnResetChangeToStartingFolder())
 							fileBrowser->DisplayRoot();
+						else
+							fileBrowser->FolderChanged();
 						TCBM_Bus::Reset();
 						// Reset tape player on C16 reset command
 						if (g_tapePlayer)
@@ -2844,6 +2846,8 @@ void emulator()
 									m_TCBM_Commands.SetMountedDiskImagePath(filInfoSelected->fname);
 									if (!m_TCBM_Commands.ActivateCbmImageMode(filInfoSelected->fname))
 										DEBUG_LOG("Quasi mount failed %s\r\n", filInfoSelected->fname);
+									else
+										fileBrowser->FolderChanged();
 								}
 								else
 								{

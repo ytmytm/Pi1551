@@ -89,6 +89,15 @@ u32 cbm_image_channel_file_size(u8 channel);
 u32 cbm_image_channel_position(u8 channel);
 void cbm_image_set_channel_position(u8 channel, u32 position);
 
+typedef struct CbmImageDirListEntry {
+	char name[17];
+	u32 size;
+	u8 type;
+} CbmImageDirListEntry;
+
+int cbm_image_collect_dir_entries(CbmImageDirListEntry* entries, int maxEntries);
+const char* cbm_image_get_mounted_path();
+
 CbmFsImage* cbm_di_load_image(FIL* file);
 void cbm_di_unload_image(CbmFsImage* di);
 

@@ -91,6 +91,7 @@ void UpdateTapeStatusOnLCD(ScreenBase* screen, bool inEmulation, const char* tra
 
 #if defined(PI1551SUPPORT)
 #include "tcbm_commands.h"
+#include "cbm_diskimage.h"
 extern TCBM_Commands m_TCBM_Commands;
 TCBM_Commands m_IEC_Commands = m_TCBM_Commands;
 #else
@@ -725,8 +726,46 @@ void FileBrowser::RefreshDevicesEntries(std::vector<FileBrowser::BrowsableList::
 	}
 }
 
+void FileBrowser::RefreshCbmImageFolderEntries()
+{
+	static const int kMaxEntries = 256;
+	CbmImageDirListEntry cbmEntries[kMaxEntries];
+	const int count = cbm_image_collect_dir_entries(cbmEntries, kMaxEntries);
+
+	folder.Clear();
+
+	FileBrowser::BrowsableList::Entry entry;
+	strcpy(entry.filImage.fname, "..");
+	entry.filImage.fattrib = AM_DIR;
+	entry.filIcon.fname[0] = 0;
+	folder.entries.push_back(entry);
+
+	for (int i = 0; i < count; ++i)
+	{
+		entry.filImage.fattrib = 0;
+		entry.filIcon.fname[0] = 0;
+		strncpy(entry.filImage.fname, cbmEntries[i].name, sizeof(entry.filImage.fname) - 1);
+		entry.filImage.fname[sizeof(entry.filImage.fname) - 1] = '\0';
+		entry.filImage.fsize = cbmEntries[i].size;
+		folder.entries.push_back(entry);
+	}
+
+	std::sort(folder.entries.begin(), folder.entries.end(), greater());
+	folder.currentIndex = 0;
+	folder.SetCurrent();
+	caddySelections.Clear();
+}
+
 void FileBrowser::RefreshFolderEntries()
 {
+#if defined(PI1551SUPPORT)
+	if (m_IEC_Commands.IsCbmImageModeActive())
+	{
+		RefreshCbmImageFolderEntries();
+		return;
+	}
+#endif
+
 	DIR dir;
 	FileBrowser::BrowsableList::Entry entry;
 	FRESULT res;
@@ -1026,6 +1065,15 @@ int FileBrowser::IsAtRootOfDevice()
 
 void FileBrowser::PopFolder()
 {
+#if defined(PI1551SUPPORT)
+	if (m_IEC_Commands.ExitQuasiMountIfActive())
+	{
+		RefreshFolderEntries();
+		RefeshDisplay();
+		return;
+	}
+#endif
+
 	char buffer[1024];
 	if (f_getcwd(buffer, 1024) == FR_OK)
 	{
@@ -1278,6 +1326,17 @@ void FileBrowser::UpdateInputFolders()
 						g_tapePlayer->LoadTap(&current->filImage);
 						dirty = true;
 					}
+				}
+				else
+#endif
+#if defined(PI1551SUPPORT)
+				if (Commands_Base::IsCdMountableImage(current->filImage.fname)
+					&& Commands_Base::PathUsesQuasiMountOnly(current->filImage.fname))
+				{
+					m_IEC_Commands.SetMountedDiskImagePath(current->filImage.fname);
+					if (m_IEC_Commands.ActivateCbmImageMode(current->filImage.fname))
+						RefreshFolderEntries();
+					dirty = true;
 				}
 				else
 #endif
