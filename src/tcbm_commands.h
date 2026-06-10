@@ -76,6 +76,7 @@ public:
 	bool InterceptEmulationU0Command(const u8* data, size_t length);
 	void HandleEmulationFastTalkHandoff(u8 channel);
 	void RunBrowserModeTransferUntilIdle();
+	void RestoreAfterEmulationFastHandoff();
 
 	// Allow traps to request a directory pop without exposing CD()
 	void RequestPopDir();
@@ -135,10 +136,12 @@ protected:
 	bool HandleU0Command(Channel& channel);
 	bool ExtractU0Filename(const u8* data, size_t length);
 	void ApplyPendingFastFilename(u8 channel);
+	void PrepareFastLoadError(u8 channel);
 	bool InitialiseFastHandshake(const char* stage);
 	bool FinaliseFastHandshake();
 	bool FastSendByte(u8 data);
 	bool FastSendBlockByte(u8 data);
+	bool FastReceiveBlockByte(u8& data);
 	bool LoadFastByte(u8& data, bool& eoi);
 	bool LoadFastDirectoryByte(u8& data, bool& eoi);
 
@@ -192,6 +195,8 @@ protected:
 		u8 blockCount;
 		char filename[FAST_FILENAME_MAX];
 	} fastRequest;
+
+	u32 blockIoBytesRemaining;
 };
 #endif
 

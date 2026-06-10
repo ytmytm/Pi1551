@@ -18,6 +18,7 @@
 
 #include "tcbm_commands.h"
 
+#include "cbm_diskimage.h"
 #include "tcbm_bus.h"
 #include "m6523.h"
 #include "DiskImage.h"
@@ -247,6 +248,8 @@ void TCBM_Commands::ResetStateMachine()
 	fastRequest.sector = 0;
 	fastRequest.blockCount = 0;
 	fastRequest.filename[0] = '\0';
+	blockIoBytesRemaining = 0;
+	cbm_image_block_io_end();
 	ClearDebugOverlay();
 	SetDebugLine(0, "TCBM idle (%s)", RoleToString(deviceRole));
 }
@@ -511,7 +514,10 @@ void TCBM_Commands::HandleListenSecondary(u8 secondaryByte)
             break;
 
         case SEC_CLOSE:
-            CloseFile(channel);
+            if (channel == 15 && tcbmState == TCBM_STATE_OPEN && channels[15].cursor > 0)
+                FinaliseOpenState(15);
+            else
+                CloseFile(channel);
             tcbmState = TCBM_STATE_IDLE;
             deviceRole = DEVICE_ROLE_PASSIVE;
             break;
@@ -530,10 +536,6 @@ void TCBM_Commands::HandleListenSecondary(u8 secondaryByte)
             {
 				PrepareLoadChannel(channel, false);
             }
-            break;
-
-        case SEC_FAST:
-			PrepareLoadChannel(channel, true);
             break;
 
         default:
@@ -561,13 +563,24 @@ void TCBM_Commands::HandleTalkSecondary(u8 secondaryByte)
 			else
 			{
 				Channel& ch = channels[channel];
-				if (ch.command[0] == '$')
+				if (fastMode && fastRequest.type != FAST_REQ_NONE)
+				{
+					PrepareLoadChannel(channel, true);
+				}
+				else if (ch.command[0] == '$' || (channel == 0 && ch.command[0] == '\0' && !ch.open))
 				{
 					PrepareDirectoryResponse(channel, fastMode);
 				}
-				else
+				else if (ch.command[0] != '\0' || ch.open)
 				{
 					PrepareLoadChannel(channel, fastMode);
+				}
+				else
+				{
+					PushDebugLine("TALK ch %u with no open file", channel);
+					Error(ERROR_62_FILE_NOT_FOUND);
+					tcbmState = TCBM_STATE_IDLE;
+					deviceRole = DEVICE_ROLE_PASSIVE;
 				}
 			}
 			break;
@@ -606,6 +619,8 @@ void TCBM_Commands::FinaliseOpenState(u8 channel)
 	{
 		ch.cursor = 0;
 		ch.bytesSent = 0;
+		if (fastRequest.type != FAST_REQ_NONE)
+			channels[0].command[0] = '\0';
 		return;
 	}
 
@@ -630,29 +645,90 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	secondaryAddress = channel;
 	Channel& ch = channels[channel];
 
+	if (fastMode && fastRequest.type != FAST_REQ_FILENAME
+		&& (cbm_image_is_mounted() || mountedImagePath[0] != '\0'))
+	{
+		EnsureCbmImageModeFromMounted();
+	}
+
 	if (fastMode)
 	{
-		if (mountedImagePath[0] != '\0')
-			EnsureCbmImageModeFromMounted();
-
 		if (fastRequest.type == FAST_REQ_FILENAME)
 		{
 			ApplyPendingFastFilename(channel);
+
+			if (cbm_image_is_mounted())
+			{
+				if (ch.open)
+					ch.Close();
+				CloseCbmImageChannel(channel);
+				OpenCbmImageFile(channel);
+
+				if (!ch.open)
+				{
+					PrepareFastLoadError(channel);
+					return true;
+				}
+
+				fastRequest.type = FAST_REQ_NONE;
+				ch.bytesSent = 0;
+				statusActive = false;
+				directoryActive = false;
+				fastCtx.initialised = false;
+				fastCtx.ackLevel = 1;
+				fastCtx.expectedDav = 0;
+				fastCtx.status = TCBM_STATUS_OK;
+				tcbmState = TCBM_STATE_FASTLOAD;
+				PushDebugLine("FAST LOAD image %s", reinterpret_cast<const char*>(ch.command));
+				return true;
+			}
 		}
 		else if (fastRequest.type == FAST_REQ_TRACK_SECTOR)
 		{
-			PushDebugLine("FAST LOAD TS unsupported");
-			Error(ERROR_74_DRlVE_NOT_READY);
-			PrepareStatusResponse(true);
+			if (!cbm_image_is_mounted() && !EnsureCbmImageModeFromMounted())
+			{
+				PushDebugLine("FAST LOAD TS no image");
+				Error(ERROR_74_DRlVE_NOT_READY);
+				PrepareFastLoadError(channel);
+				return true;
+			}
+
+			if (ch.open)
+				ch.Close();
+			CloseCbmImageChannel(channel);
+
+			u32 fileSize = 0;
+			if (!cbm_image_open_ts(channel, fastRequest.track, fastRequest.sector, fileSize))
+			{
+				Error(ERROR_62_FILE_NOT_FOUND);
+				PrepareFastLoadError(channel);
+				return true;
+			}
+
+			u8 track = fastRequest.track;
+			u8 sector = fastRequest.sector;
 			fastRequest.type = FAST_REQ_NONE;
-			return false;
+
+			ch.open = true;
+			ch.cursor = 0;
+			ch.bytesSent = 0;
+			ch.fileSize = fileSize;
+			statusActive = false;
+			directoryActive = false;
+			fastCtx.initialised = false;
+			fastCtx.ackLevel = 1;
+			fastCtx.expectedDav = 0;
+			fastCtx.status = TCBM_STATUS_OK;
+			tcbmState = TCBM_STATE_FASTLOAD;
+			PushDebugLine("FAST LOAD TS %u/%u", track, sector);
+			return true;
 		}
 		else if (fastRequest.type == FAST_REQ_BLOCK_READ)
 		{
 			if (!PrepareFastBlockRead())
 			{
-				PrepareStatusResponse(true);
-				return false;
+				PrepareFastLoadError(channel);
+				return true;
 			}
 			return true;
 		}
@@ -660,8 +736,8 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		{
 			if (!PrepareFastBlockWrite())
 			{
-				PrepareStatusResponse(true);
-				return false;
+				PrepareFastLoadError(channel);
+				return true;
 			}
 			return true;
 		}
@@ -681,13 +757,9 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		directoryActive = false;
 		if (fastMode)
 		{
-			fastCtx.initialised = false;
-			fastCtx.ackLevel = 1;
-			fastCtx.expectedDav = 0;
-			fastCtx.status = TCBM_STATUS_SEND;
-			tcbmState = TCBM_STATE_FASTLOAD;
-			fastRequest.type = FAST_REQ_NONE;
+			PrepareFastLoadError(channel);
 			PushDebugLine("FAST LOAD error channel %u", channel);
+			return true;
 		}
 		else
 		{
@@ -918,6 +990,12 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 				fastRequest.type = FAST_REQ_NONE;
 				return true;
 			}
+			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
+			{
+				Error(ERROR_30_SYNTAX_ERROR);
+				fastRequest.type = FAST_REQ_NONE;
+				return true;
+			}
 			fastRequest.type = FAST_REQ_TRACK_SECTOR;
 			fastRequest.track = data[3];
 			fastRequest.sector = data[4];
@@ -929,6 +1007,12 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 		case 0x00:
 		{
 			if (length < 6)
+			{
+				Error(ERROR_30_SYNTAX_ERROR);
+				fastRequest.type = FAST_REQ_NONE;
+				return true;
+			}
+			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
 			{
 				Error(ERROR_30_SYNTAX_ERROR);
 				fastRequest.type = FAST_REQ_NONE;
@@ -946,6 +1030,12 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 		case 0x02:
 		{
 			if (length < 6)
+			{
+				Error(ERROR_30_SYNTAX_ERROR);
+				fastRequest.type = FAST_REQ_NONE;
+				return true;
+			}
+			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
 			{
 				Error(ERROR_30_SYNTAX_ERROR);
 				fastRequest.type = FAST_REQ_NONE;
@@ -1006,6 +1096,23 @@ void TCBM_Commands::ApplyPendingFastFilename(u8 channel)
 
 	std::snprintf(reinterpret_cast<char*>(ch.command), sizeof(ch.command), "0:%s", fastRequest.filename);
 	ch.open = false;
+}
+
+void TCBM_Commands::PrepareFastLoadError(u8 channel)
+{
+	Channel& ch = channels[channel];
+	ch.open = false;
+	ch.cursor = 0;
+	ch.bytesSent = 0;
+	ch.fileSize = 0;
+	statusActive = false;
+	directoryActive = false;
+	fastCtx.initialised = false;
+	fastCtx.ackLevel = 1;
+	fastCtx.expectedDav = 0;
+	fastCtx.status = TCBM_STATUS_SEND;
+	tcbmState = TCBM_STATE_FASTLOAD;
+	fastRequest.type = FAST_REQ_NONE;
 }
 
 void TCBM_Commands::ServiceOpenState()
@@ -1135,7 +1242,8 @@ void TCBM_Commands::ServiceLoadState()
                 {
                     u32 size = GetCbmImageChannelFileSize(secondaryAddress);
                     u32 pos = GetCbmImageChannelPosition(secondaryAddress);
-                    eoi = (size > 0 && pos >= size);
+                    if (size != 0xFFFFFFFF)
+                        eoi = (size > 0 && pos >= size);
                 }
                 else
                 {
@@ -1335,6 +1443,28 @@ bool TCBM_Commands::FastSendBlockByte(u8 data)
 	return FastSendByte(data);
 }
 
+bool TCBM_Commands::FastReceiveBlockByte(u8& data)
+{
+	fastCtx.ackLevel ^= 1;
+	if (fastCtx.ackLevel)
+		TCBM_Bus::AssertACK();
+	else
+		TCBM_Bus::ReleaseACK();
+
+	fastCtx.expectedDav ^= 1;
+	if (!WaitForDAVState(fastCtx.expectedDav != 0, "FAST block write DAV", COMMAND_TIMEOUT_US))
+		return false;
+
+	TCBM_Bus::ReadBrowseMode();
+	data = TCBM_Bus::GetPI_Data();
+	TCBM_Bus::SetStatus(fastCtx.status);
+	if (fastCtx.ackLevel)
+		TCBM_Bus::AssertACK();
+	else
+		TCBM_Bus::ReleaseACK();
+	return true;
+}
+
 bool TCBM_Commands::FinaliseFastHandshake()
 {
 	if (!fastCtx.initialised)
@@ -1372,7 +1502,8 @@ bool TCBM_Commands::LoadFastByte(u8& data, bool& eoi)
 		}
 		u32 size = GetCbmImageChannelFileSize(secondaryAddress);
 		u32 pos = GetCbmImageChannelPosition(secondaryAddress);
-		eoi = (size > 0 && pos >= size);
+		if (size != 0xFFFFFFFF)
+			eoi = (size > 0 && pos >= size);
 		fastCtx.status = eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK;
 		return true;
 	}
@@ -1540,34 +1671,201 @@ void TCBM_Commands::ServiceFastDirectoryState()
 
 void TCBM_Commands::ServiceFastBlockReadState()
 {
-	PushDebugLine("FAST block read not implemented");
-	fastRequest.type = FAST_REQ_NONE;
-	tcbmState = TCBM_STATE_IDLE;
-	deviceRole = DEVICE_ROLE_PASSIVE;
+	if (!InitialiseFastHandshake("FAST block read init"))
+	{
+		fastCtx.status = TCBM_STATUS_SEND;
+		Error(ERROR_74_DRlVE_NOT_READY);
+		cbm_image_block_io_end();
+		FinaliseFastHandshake();
+		tcbmState = TCBM_STATE_IDLE;
+		deviceRole = DEVICE_ROLE_PASSIVE;
+		return;
+	}
+
+	while (true)
+	{
+		if (TCBM_Bus::IsReset())
+		{
+			cbm_image_block_io_end();
+			AbortBlockingTransfer("FAST block read reset");
+			return;
+		}
+
+		if (fastCtx.status != TCBM_STATUS_OK)
+		{
+			cbm_image_block_io_end();
+			if (FinaliseFastHandshake())
+			{
+				tcbmState = TCBM_STATE_IDLE;
+				deviceRole = DEVICE_ROLE_PASSIVE;
+			}
+			else
+			{
+				NoteTimeout("FAST block read finalise");
+				tcbmState = TCBM_STATE_IDLE;
+				deviceRole = DEVICE_ROLE_PASSIVE;
+			}
+			return;
+		}
+
+		u8 data = 0;
+		if (!cbm_image_block_io_read_byte(data))
+		{
+			fastCtx.status = TCBM_STATUS_SEND;
+			Error(ERROR_74_DRlVE_NOT_READY);
+			continue;
+		}
+
+		if (blockIoBytesRemaining > 0)
+			--blockIoBytesRemaining;
+		if (blockIoBytesRemaining == 0)
+			fastCtx.status = TCBM_STATUS_EOI;
+
+		if (!FastSendBlockByte(data))
+		{
+			NoteTimeout("FAST block read byte");
+			fastCtx.status = TCBM_STATUS_SEND;
+			Error(ERROR_74_DRlVE_NOT_READY);
+			cbm_image_block_io_end();
+			FinaliseFastHandshake();
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+			return;
+		}
+
+		if (fastCtx.status == TCBM_STATUS_EOI)
+			continue;
+	}
 }
 
 void TCBM_Commands::ServiceFastBlockWriteState()
 {
-	PushDebugLine("FAST block write not implemented");
-	fastRequest.type = FAST_REQ_NONE;
-	tcbmState = TCBM_STATE_IDLE;
-	deviceRole = DEVICE_ROLE_PASSIVE;
+	if (!fastCtx.initialised)
+	{
+		fastCtx.ackLevel = 1;
+		fastCtx.expectedDav = 1;
+		fastCtx.status = TCBM_STATUS_OK;
+		TCBM_Bus::SetDataInput();
+		TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+		TCBM_Bus::AssertACK();
+		fastCtx.initialised = true;
+	}
+
+	while (true)
+	{
+		if (TCBM_Bus::IsReset())
+		{
+			cbm_image_block_io_end();
+			AbortBlockingTransfer("FAST block write reset");
+			return;
+		}
+
+		if (fastCtx.status != TCBM_STATUS_OK)
+		{
+			cbm_image_block_io_end();
+			if (FinaliseFastHandshake())
+			{
+				tcbmState = TCBM_STATE_IDLE;
+				deviceRole = DEVICE_ROLE_PASSIVE;
+			}
+			else
+			{
+				NoteTimeout("FAST block write finalise");
+				tcbmState = TCBM_STATE_IDLE;
+				deviceRole = DEVICE_ROLE_PASSIVE;
+			}
+			return;
+		}
+
+		u8 data = 0;
+		if (!FastReceiveBlockByte(data))
+		{
+			NoteTimeout("FAST block write byte");
+			fastCtx.status = TCBM_STATUS_SEND;
+			Error(ERROR_74_DRlVE_NOT_READY);
+			cbm_image_block_io_end();
+			FinaliseFastHandshake();
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+			return;
+		}
+
+		if (!cbm_image_block_io_write_byte(data))
+		{
+			fastCtx.status = TCBM_STATUS_SEND;
+			Error(ERROR_74_DRlVE_NOT_READY);
+			continue;
+		}
+
+		if (blockIoBytesRemaining > 0)
+			--blockIoBytesRemaining;
+		if (blockIoBytesRemaining == 0)
+			fastCtx.status = TCBM_STATUS_EOI;
+	}
 }
 
 bool TCBM_Commands::PrepareFastBlockRead()
 {
-	Error(ERROR_74_DRlVE_NOT_READY);
-	fastCtx.status = TCBM_STATUS_SEND;
+	if (!cbm_image_is_mounted() && !EnsureCbmImageModeFromMounted())
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		fastRequest.type = FAST_REQ_NONE;
+		return false;
+	}
+
+	u32 bytes = 0;
+	if (!cbm_image_block_io_begin(fastRequest.track, fastRequest.sector, fastRequest.blockCount, bytes, false))
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		fastRequest.type = FAST_REQ_NONE;
+		return false;
+	}
+
+	u8 track = fastRequest.track;
+	u8 sector = fastRequest.sector;
+	u8 count = fastRequest.blockCount;
+	blockIoBytesRemaining = bytes;
 	fastRequest.type = FAST_REQ_NONE;
-	return false;
+
+	fastCtx.initialised = false;
+	fastCtx.ackLevel = 1;
+	fastCtx.expectedDav = 0;
+	fastCtx.status = TCBM_STATUS_OK;
+	tcbmState = TCBM_STATE_FAST_BLOCKREAD;
+	PushDebugLine("FAST BLOCK READ %u/%u x%u (%u bytes)", track, sector, count, bytes);
+	return true;
 }
 
 bool TCBM_Commands::PrepareFastBlockWrite()
 {
-	Error(ERROR_74_DRlVE_NOT_READY);
-	fastCtx.status = TCBM_STATUS_SEND;
+	if (!cbm_image_is_mounted() && !EnsureCbmImageModeFromMounted())
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		fastRequest.type = FAST_REQ_NONE;
+		return false;
+	}
+
+	u32 bytes = 0;
+	if (!cbm_image_block_io_begin(fastRequest.track, fastRequest.sector, fastRequest.blockCount, bytes, true))
+	{
+		Error(ERROR_74_DRlVE_NOT_READY);
+		fastRequest.type = FAST_REQ_NONE;
+		return false;
+	}
+
+	u8 track = fastRequest.track;
+	u8 sector = fastRequest.sector;
+	u8 count = fastRequest.blockCount;
+	blockIoBytesRemaining = bytes;
 	fastRequest.type = FAST_REQ_NONE;
-	return false;
+
+	fastCtx.initialised = false;
+	fastCtx.ackLevel = 1;
+	fastCtx.expectedDav = 1;
+	fastCtx.status = TCBM_STATUS_OK;
+	tcbmState = TCBM_STATE_FAST_BLOCKWRITE;
+	PushDebugLine("FAST BLOCK WRITE %u/%u x%u (%u bytes)", track, sector, count, bytes);
+	return true;
 }
 
 bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
@@ -1654,7 +1952,12 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 	size_t copyLen = std::min(length, sizeof(ch.buffer));
 	std::memcpy(ch.buffer, data, copyLen);
 	ch.cursor = static_cast<u32>(copyLen);
-	return HandleU0Command(ch);
+	if (HandleU0Command(ch))
+	{
+		if (fastRequest.type != FAST_REQ_NONE)
+			channels[0].command[0] = '\0';
+	}
+	return true;
 }
 
 void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
@@ -1670,7 +1973,11 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 	else
 	{
 		Channel& ch = channels[channel];
-		if (ch.command[0] == '$' || (fastRequest.type == FAST_REQ_NONE && channel == 0))
+		if (fastMode && fastRequest.type != FAST_REQ_NONE)
+		{
+			PrepareLoadChannel(channel, true);
+		}
+		else if (ch.command[0] == '$' || (channel == 0 && ch.command[0] == '\0'))
 		{
 			if (ch.command[0] != '$')
 			{
@@ -1684,6 +1991,12 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 			PrepareLoadChannel(channel, fastMode);
 		}
 	}
+}
+
+void TCBM_Commands::RestoreAfterEmulationFastHandoff()
+{
+	if (mountedImagePath[0] != '\0' && PathUsesSectorEmulation(mountedImagePath))
+		DeactivateCbmImageMode();
 }
 
 void TCBM_Commands::RunBrowserModeTransferUntilIdle()
@@ -1701,6 +2014,8 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 		}
 		SimulateIECUpdate();
 	}
+
+	RestoreAfterEmulationFastHandoff();
 
 	TCBM_Bus::TPI = savedTpi;
 	if (savedTpi)

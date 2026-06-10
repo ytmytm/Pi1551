@@ -1334,7 +1334,7 @@ void FileBrowser::UpdateInputFolders()
 					&& Commands_Base::PathUsesQuasiMountOnly(current->filImage.fname))
 				{
 					m_IEC_Commands.SetMountedDiskImagePath(current->filImage.fname);
-					if (m_IEC_Commands.ActivateCbmImageMode(current->filImage.fname))
+					if (m_IEC_Commands.ActivateCbmImageMode(m_IEC_Commands.GetMountedDiskImagePath()))
 						RefreshFolderEntries();
 					dirty = true;
 				}

@@ -2844,7 +2844,7 @@ void emulator()
 								if (Commands_Base::PathUsesQuasiMountOnly(filInfoSelected->fname))
 								{
 									m_TCBM_Commands.SetMountedDiskImagePath(filInfoSelected->fname);
-									if (!m_TCBM_Commands.ActivateCbmImageMode(filInfoSelected->fname))
+									if (!m_TCBM_Commands.ActivateCbmImageMode(m_TCBM_Commands.GetMountedDiskImagePath()))
 										DEBUG_LOG("Quasi mount failed %s\r\n", filInfoSelected->fname);
 									else
 										fileBrowser->FolderChanged();

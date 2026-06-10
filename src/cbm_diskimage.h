@@ -84,6 +84,7 @@ void cbm_image_set_dir_entry_serial(u8 value);
 void cbm_image_close_channel(u8 channel);
 void cbm_image_close_all_channels();
 bool cbm_image_open_file(u8 channel, const char* filename, u32& fileSizeOut);
+bool cbm_image_open_ts(u8 channel, u8 track, u8 sector, u32& fileSizeOut);
 bool cbm_image_read_channel_byte(u8 channel, u8& data);
 u32 cbm_image_channel_file_size(u8 channel);
 u32 cbm_image_channel_position(u8 channel);
@@ -114,5 +115,11 @@ int cbm_di_track_blocks_free(CbmFsImage* di, int track);
 
 int cbm_di_rawname_from_name(u8* rawname, const char* name);
 int cbm_di_name_from_rawname(char* name, const u8* rawname);
+
+u32 cbm_image_ts_byte_offset(u8 track, u8 sector);
+bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut, bool write);
+bool cbm_image_block_io_read_byte(u8& data);
+bool cbm_image_block_io_write_byte(u8 data);
+void cbm_image_block_io_end();
 
 #endif

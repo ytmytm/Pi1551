@@ -169,7 +169,7 @@ protected:
 	virtual void SaveFile();
 
 	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType);
-	void AddCbmRawDirectoryEntry(Channel& channel, const u8* rawEntry);
+	void AppendCbmImageDirLine(Channel& channel, const u8* rawEntry);
 	virtual void LoadDirectory();
 	void LoadCbmImageDirectory();
 	void AppendDirectoryStream(Channel& channel, const u8* data, size_t length);

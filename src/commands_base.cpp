@@ -201,8 +201,28 @@ void Commands_Base::SetMountedDiskImagePath(const char* path)
 		mountedImagePath[0] = '\0';
 		return;
 	}
-	strncpy(mountedImagePath, path, sizeof(mountedImagePath) - 1);
-	mountedImagePath[sizeof(mountedImagePath) - 1] = '\0';
+
+	if (path[0] == '/' || (path[0] >= '0' && path[0] <= '9' && path[1] == ':'))
+	{
+		strncpy(mountedImagePath, path, sizeof(mountedImagePath) - 1);
+		mountedImagePath[sizeof(mountedImagePath) - 1] = '\0';
+		return;
+	}
+
+	char cwd[256];
+	if (f_getcwd(cwd, sizeof(cwd)) == FR_OK)
+	{
+		size_t cwdLen = strlen(cwd);
+		if (cwdLen > 0 && cwd[cwdLen - 1] == '/')
+			snprintf(mountedImagePath, sizeof(mountedImagePath), "%s%s", cwd, path);
+		else
+			snprintf(mountedImagePath, sizeof(mountedImagePath), "%s/%s", cwd, path);
+	}
+	else
+	{
+		strncpy(mountedImagePath, path, sizeof(mountedImagePath) - 1);
+		mountedImagePath[sizeof(mountedImagePath) - 1] = '\0';
+	}
 }
 
 bool Commands_Base::PathUsesQuasiMountOnly(const char* path)
@@ -232,7 +252,7 @@ bool Commands_Base::MountDiskImageFromCd(const char* path, const FILINFO& filInf
 	if (PathUsesQuasiMountOnly(path))
 	{
 		SetMountedDiskImagePath(path);
-		if (!ActivateCbmImageMode(path))
+		if (!ActivateCbmImageMode(mountedImagePath))
 		{
 			Error(ERROR_62_FILE_NOT_FOUND);
 			return false;
@@ -333,52 +353,42 @@ void Commands_Base::AppendDirectoryStream(Channel& channel, const u8* data, size
 	}
 }
 
-void Commands_Base::AddCbmRawDirectoryEntry(Channel& channel, const u8* rawEntry)
+void Commands_Base::AppendCbmImageDirLine(Channel& channel, const u8* rawEntry)
 {
-	u16 sizeBytes = static_cast<u16>(rawEntry[28] | (rawEntry[29] << 8));
-	u16 blocks = sizeBytes / 256 + 1;
-	u8 cbmType = rawEntry[0] & 7;
-	int fileType = 2;
-	switch (cbmType)
-	{
-		case CBM_T_DEL: fileType = 0; break;
-		case CBM_T_SEQ: fileType = 1; break;
-		case CBM_T_PRG: fileType = 2; break;
-		case CBM_T_USR: fileType = 3; break;
-		case CBM_T_REL: fileType = 4; break;
-		case CBM_T_CBM: fileType = 5; break;
-		default: fileType = 2; break;
-	}
+	u16 size = static_cast<u16>(rawEntry[28] | (rawEntry[29] << 8));
+	u8 type = rawEntry[0] & 7;
+	bool unclosed = !(rawEntry[0] & 0x80);
+	bool locked = rawEntry[0] & 0x40;
+	static const char* const ftype[] = { "DEL", "SEQ", "PRG", "USR", "REL", "CBM", "DIR", "???" };
 
-	u8* data = channel.buffer + channel.cursor;
-	memset(data, ' ', DIRECTORY_ENTRY_SIZE);
-	data[DIRECTORY_ENTRY_SIZE - 1] = 0;
-
-	int index = 0;
-	data[index++] = 0x01;
-	data[index++] = 0x01;
-	data[index++] = blocks & 0xff;
-	data[index++] = blocks >> 8;
-	if (blocks < 1000)
-		index++;
-	if (blocks < 100)
-		index++;
-	if (blocks < 10)
-		index++;
-
-	data[index++] = '"';
-	int i = 0;
-	for (; i < 16 && rawEntry[3 + i] != 0xa0; ++i)
-		data[index + i] = rawEntry[3 + i];
-	data[index + i] = '"';
-	index++;
-	index += CBM_NAME_LENGTH;
-	index++;
-
-	for (i = 0; i < 3; ++i)
-		data[index++] = filetypes[fileType * 3 + i];
-
-	channel.cursor += DIRECTORY_ENTRY_SIZE;
+	u8 line[64];
+	size_t i = 0;
+	line[i++] = 1;
+	line[i++] = 1;
+	line[i++] = size & 0xff;
+	line[i++] = size >> 8;
+	if (size < 10)
+		line[i++] = ' ';
+	if (size < 100)
+		line[i++] = ' ';
+	if (size < 1000)
+		line[i++] = ' ';
+	if (size < 10000)
+		line[i++] = ' ';
+	line[i++] = '"';
+	int c = 0;
+	for (; c < 16 && rawEntry[3 + c] != 0xa0; ++c)
+		line[i++] = rawEntry[3 + c];
+	line[i++] = '"';
+	for (; c < 16; ++c)
+		line[i++] = ' ';
+	line[i++] = unclosed ? static_cast<u8>('*') : static_cast<u8>(' ');
+	memcpy(line + i, ftype[type & 7], 3);
+	i += 3;
+	line[i++] = locked ? static_cast<u8>('<') : static_cast<u8>(' ');
+	line[i++] = ' ';
+	line[i++] = 0;
+	AppendDirectoryStream(channel, line, i);
 }
 
 void Commands_Base::LoadCbmImageDirectory()
@@ -445,9 +455,7 @@ void Commands_Base::LoadCbmImageDirectory()
 				break;
 			if (entry[0] == 0)
 				continue;
-			if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
-				SendBuffer(channel, false);
-			AddCbmRawDirectoryEntry(channel, entry);
+			AppendCbmImageDirLine(channel, entry);
 		}
 		cbm_di_close(dirFile);
 	}
@@ -830,6 +838,15 @@ void Commands_Base::AddDirectoryEntry(Channel& channel, const char* name, u16 bl
 	channel.cursor += dirEntryLength;
 }
 
+static int BrowserDirectoryEntryType(const FILINFO* filInfo)
+{
+	if (filInfo->fattrib & AM_DIR)
+		return 6;
+	if (Commands_Base::IsCdMountableImage(filInfo->fname))
+		return 6;
+	return 2;
+}
+
 struct greater
 {
 	bool operator()(const FileBrowser::BrowsableList::Entry& lhs, const FileBrowser::BrowsableList::Entry& rhs) const
@@ -898,8 +915,10 @@ void Commands_Base::LoadDirectory()
 		if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
 			SendBuffer(channel, false);
 
-		if (filInfo->fattrib & AM_DIR) AddDirectoryEntry(channel, fileName, 0, 6);
-		else AddDirectoryEntry(channel, fileName, filInfo->fsize / 256 + 1, 2);
+		if (BrowserDirectoryEntryType(filInfo) == 6)
+			AddDirectoryEntry(channel, fileName, 0, 6);
+		else
+			AddDirectoryEntry(channel, fileName, static_cast<u16>(1 + filInfo->fsize / 254), 2);
 	}
 
 	SendBuffer(channel, false);

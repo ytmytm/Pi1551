@@ -141,16 +141,31 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + restore multiple ROM option (it was ROM1/ROM2 etc.) on longpress
 + SW4 in emulation mapped to exit emulation
 + prepare full bootable sd card for download
+- shift+run/stop doesn't work properly
+    - hangs if used directly
+    - hangs if only ?DS$ was done after reset
+    - hangs if there was LOAD"$",8
+    - but works if directory was listed with DIR
+    - suggests that this is some kind of state problem
+
 - update readme and descriptions, original readme didn't have full information (it was on the website)
 - remove dead code and 1541/1581 stuff
 - support U0 commands from tcbm2sd (fastload protocol, device number change)
-- in browser mode support d71/81/80/82 disk images via the same library as tcbm2sd but r+w (writing in 81/82 based on VICE docs of disk images, note that the library also had bugs, so verify everything)
+    - fastloader from browser works
+    - fastdir works from browser and images (incl. d64)
+    - fastloader from images doesn't work (incl. d64,d81)
+    - block read doesn't work (block-rw prg with d64 mounted)
+    - trap enter/exit in wrong place? should be caught and exited
+      in the same way as we handle 'CD' command
+    - Write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
+    - D80/D82 write per VICE disk image reference — read-only for now.
+    - werify read/write/allocate/bam against vice doc
+
 
 # Tests
 
 - test if h/w reset doesn't end emulation, should just reset drive
-- test if `CD:<diskimage>` works now
-    - yes, but can't exit the image / end emulation with `SW1`, immediately goes back into image
+- (done) test if `CD:<diskimage>` works now
 - (done) test if `DLOAD"*` works right after reset
 - (done) test if `StarFileName` works from any subfolder
 - (done) test if /RESET_3_3V needs a pullup to 3.3V - YES
@@ -172,14 +187,10 @@ pi1551.Update - ~350-400ns when drive busy and spinning
     - runs much hotter than this legacy code
 - remove irrelevant options, this is pure 1551, no IEC, no VIA, no 1581 - OR keep it but update Makefile/Makefile.rules
     - old code was kept for reference
-- rebrand to Pi1551
-- credit myself where appropriate
-- provide fully prepared sd card boot partition for download
 - add traps in ROM code to handle U0 commands to support tcbm2sd fastload protocol (all the commands)
 + correctly setup fastboot (reset starts at $e9b5, ends after 1012787 when PC reaches mainloop at eabd)
 + trap/patch ROM to ignore motor spin up delay
-+ backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches?
-    - probably no one cares to do it on real hardware (I would, but without real circuit it's just emulating fantasy stuff)
++ backport 32K ROM support + 8K RAM + backport RAMBOard][ DOS patches
 + TAP format support (done) (how? IRQ on MOTOR, timed IRQ to pump data)
     - runtime option `tapeMotorAlwaysOn` (default 1) replaces compile-time `TAPE_MOTOR_SUPPORT`; 1 = ignore MOTOR GPIO and keep motor active, 0 = poll MOTOR GPIO; SENSE stays asserted while a TAP is loaded and not at end, motor still gates playback
 

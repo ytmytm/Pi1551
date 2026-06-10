@@ -2,6 +2,8 @@
 
 #include "cbm_diskimage.h"
 
+#include "Petscii.h"
+
 #include <cstring>
 #include <strings.h>
 
@@ -20,6 +22,11 @@ static struct CbmImageSession {
 	u8 dirEntrySerial;
 } s_mount = {};
 
+static struct {
+	bool active;
+	bool writeMode;
+} s_blockIo = {};
+
 static int set_status(CbmFsImage* di, int status, int track, int sector)
 {
 	di->status = static_cast<char>(status);
@@ -33,7 +40,7 @@ int cbm_di_rawname_from_name(u8* rawname, const char* name)
 	std::memset(rawname, 0xa0, 16);
 	int i = 0;
 	for (; i < 16 && name[i]; ++i)
-		rawname[i] = static_cast<u8>(name[i]);
+		rawname[i] = ascii2petscii(static_cast<u8>(name[i]));
 	return i;
 }
 
@@ -41,7 +48,7 @@ int cbm_di_name_from_rawname(char* name, const u8* rawname)
 {
 	int i = 0;
 	for (; i < 16 && rawname[i] != 0xa0; ++i)
-		name[i] = static_cast<char>(rawname[i]);
+		name[i] = static_cast<char>(petscii2ascii(rawname[i]));
 	name[i] = '\0';
 	return i;
 }
@@ -472,6 +479,29 @@ bool cbm_image_open_file(u8 channel, const char* filename, u32& fileSizeOut)
 	return true;
 }
 
+bool cbm_image_open_ts(u8 channel, u8 track, u8 sector, u32& fileSizeOut)
+{
+	if (channel >= 16 || !s_mount.active)
+		return false;
+
+	cbm_image_close_channel(channel);
+
+	CbmImageFile opened = {};
+	CbmImageFile* img = cbm_di_open_ts(&s_mount.fs, track, sector);
+	if (!img)
+	{
+		fileSizeOut = 0;
+		return false;
+	}
+
+	opened = *img;
+	s_mount.channelFile[channel] = opened;
+	s_mount.channelOpen[channel] = true;
+	fileSizeOut = 0xFFFFFFFF;
+	s_mount.channelFileSize[channel] = fileSizeOut;
+	return true;
+}
+
 bool cbm_image_read_channel_byte(u8 channel, u8& data)
 {
 	if (channel >= 16 || !s_mount.channelOpen[channel])
@@ -747,4 +777,86 @@ int cbm_di_read(CbmImageFile* imgfile, u8* buffer, int len)
 		}
 	}
 	return counter;
+}
+
+u32 cbm_image_ts_byte_offset(u8 track, u8 sector)
+{
+	if (!s_mount.active)
+		return 0;
+
+	CbmTrackSector ts;
+	ts.track = track;
+	ts.sector = sector;
+	return get_block_num(s_mount.fs.type, ts) * 256;
+}
+
+bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut, bool write)
+{
+	bytesOut = 0;
+	if (!s_mount.active || !s_mount.filOpen || blockCount == 0)
+		return false;
+
+	bytesOut = static_cast<u32>(blockCount) << 8;
+
+	if (write)
+	{
+		f_close(&s_mount.fil);
+		if (f_open(&s_mount.fil, s_mount.path, FA_READ | FA_WRITE) != FR_OK)
+		{
+			s_mount.filOpen = false;
+			return false;
+		}
+		s_mount.fs.file = &s_mount.fil;
+	}
+
+	if (f_lseek(&s_mount.fil, cbm_image_ts_byte_offset(track, sector)) != FR_OK)
+		return false;
+
+	s_blockIo.active = true;
+	s_blockIo.writeMode = write;
+	return true;
+}
+
+bool cbm_image_block_io_read_byte(u8& data)
+{
+	if (!s_blockIo.active || s_blockIo.writeMode || !s_mount.filOpen)
+		return false;
+
+	UINT br = 0;
+	if (f_read(&s_mount.fil, &data, 1, &br) != FR_OK || br != 1)
+		return false;
+	return true;
+}
+
+bool cbm_image_block_io_write_byte(u8 data)
+{
+	if (!s_blockIo.active || !s_blockIo.writeMode || !s_mount.filOpen)
+		return false;
+
+	UINT bw = 0;
+	if (f_write(&s_mount.fil, &data, 1, &bw) != FR_OK || bw != 1)
+		return false;
+	return true;
+}
+
+void cbm_image_block_io_end()
+{
+	if (s_blockIo.writeMode && s_mount.filOpen)
+	{
+		f_sync(&s_mount.fil);
+		f_close(&s_mount.fil);
+		if (f_open(&s_mount.fil, s_mount.path, FA_READ) == FR_OK)
+		{
+			s_mount.fs.file = &s_mount.fil;
+			s_mount.filOpen = true;
+		}
+		else
+		{
+			s_mount.filOpen = false;
+			s_mount.active = false;
+		}
+	}
+
+	s_blockIo.active = false;
+	s_blockIo.writeMode = false;
 }
