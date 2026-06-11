@@ -621,7 +621,7 @@ void TCBM_Commands::FinaliseOpenState(u8 channel)
 	{
 		ch.cursor = 0;
 		ch.bytesSent = 0;
-		if (fastRequest.type != FAST_REQ_NONE)
+		if (!PreparePendingFastBlockTransfer() && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
 		return;
 	}
@@ -1881,6 +1881,15 @@ bool TCBM_Commands::PrepareFastBlockWrite()
 	tcbmState = TCBM_STATE_FAST_BLOCKWRITE;
 	PushDebugLine("FAST BLOCK WRITE %u/%u x%u (%u bytes)", track, sector, count, bytes);
 	return true;
+}
+
+bool TCBM_Commands::PreparePendingFastBlockTransfer()
+{
+	if (fastRequest.type == FAST_REQ_BLOCK_READ)
+		return PrepareFastBlockRead();
+	if (fastRequest.type == FAST_REQ_BLOCK_WRITE)
+		return PrepareFastBlockWrite();
+	return false;
 }
 
 bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
