@@ -103,7 +103,7 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 			msg = "WRITE ERROR";
 		break;
 		case ERROR_73_DOSVERSION:
-			snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s V%02d.%02d (TCBM2SD COMPAT),%02d,%02d\r", errorCode,
+			snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s V%02d.%02d (TCBM3SD COMPAT),%02d,%02d\r", errorCode,
 						PI_DRIVE_NAME, versionMajor, versionMinor, track, sector);
 			return;
 		break;

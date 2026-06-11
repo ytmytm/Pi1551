@@ -141,22 +141,31 @@ pi1551.Update - ~350-400ns when drive busy and spinning
 + restore multiple ROM option (it was ROM1/ROM2 etc.) on longpress
 + SW4 in emulation mapped to exit emulation
 + prepare full bootable sd card for download
-- shift+run/stop doesn't work properly
+- shift+run/stop as DLOAD"* shortcut doesn't work properly
     - hangs if used directly
     - hangs if only ?DS$ was done after reset
     - hangs if there was LOAD"$",8
     - but works if directory was listed with DIR
     - suggests that this is some kind of state problem
+    - HDMI says WRITE_BYTE[4] and timeout waiting for DAV=1
 
 - update readme and descriptions, original readme didn't have full information (it was on the website)
 - remove dead code and 1541/1581 stuff
+- disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
+    - files can be loaded from d81 (alpharay,princeofpersia) for tcbm-patched games
+    - d64 works normally (without fastdir it's possible to exit them)
+    - maybe this needs a clean room implementation based on https://www.pagetable.com/?p=1324
+      and Arduino (only at future stage add support for multiple channels for BASIC operations)
+      to decouple it from legacy IEC code
 - support U0 commands from tcbm2sd (fastload protocol, device number change)
     - fastloader from browser works
     - fastdir works from browser and images (incl. d64)
-    - fastloader from images doesn't work (incl. d64,d81)
-    - block read doesn't work (block-rw prg with d64 mounted)
-    - trap enter/exit in wrong place? should be caught and exited
-      in the same way as we handle 'CD' command
+    - fastloader from d64 fails immediately, doesn't load anything HDMI says timeout waiting for fastload to complete; pi1551 is stuck with disk image data for FASTDIR
+    - could it be b/c it can't find the file by its name (confusion of ascii-petscii encoding)
+    - fastloader with U0 $1f doesn't work - prince of persia tcbmfast shows that handler is
+      stuck with loading directory(?) as if filename was not recognized or some old data stuck
+    - block read doesn't work (block-rw prg with d64 mounted) either
+    - 1551 DOS CPU trap enter/exit in wrong place? should be caught and exited in the same way as we handle 'CD' command
     - Write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
     - D80/D82 write per VICE disk image reference — read-only for now.
     - werify read/write/allocate/bam against vice doc
