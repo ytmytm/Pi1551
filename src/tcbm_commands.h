@@ -174,6 +174,8 @@ protected:
 	struct FastHandshakeContext
 	{
 		bool initialised;
+		bool hasPeekByte;
+		u8   peekByte;
 		u8   ackLevel;
 		u8   expectedDav;
 		u8   status;

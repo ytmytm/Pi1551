@@ -240,6 +240,7 @@ void TCBM_Commands::ResetStateMachine()
     lastTimeoutMessage[0] = '\0';
     debugHistoryCount = 0;
 	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_OK;
@@ -682,6 +683,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 				statusActive = false;
 				directoryActive = false;
 				fastCtx.initialised = false;
+				fastCtx.hasPeekByte = false;
 				fastCtx.ackLevel = 1;
 				fastCtx.expectedDav = 0;
 				fastCtx.status = TCBM_STATUS_OK;
@@ -724,8 +726,9 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 			ch.fileSize = fileSize;
 			statusActive = false;
 			directoryActive = false;
-			fastCtx.initialised = false;
-			fastCtx.ackLevel = 1;
+	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
+	fastCtx.ackLevel = 1;
 			fastCtx.expectedDav = 0;
 			fastCtx.status = TCBM_STATUS_OK;
 			tcbmState = TCBM_STATE_FASTLOAD;
@@ -798,6 +801,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
+		fastCtx.hasPeekByte = false;
 		fastCtx.ackLevel = 1;
 		fastCtx.expectedDav = 0;
 		fastCtx.status = TCBM_STATUS_OK;
@@ -884,6 +888,7 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
+		fastCtx.hasPeekByte = false;
 		fastCtx.ackLevel = 1;
 		fastCtx.expectedDav = 0;
 		fastCtx.status = TCBM_STATUS_OK;
@@ -912,6 +917,7 @@ void TCBM_Commands::PrepareStatusResponse(bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
+		fastCtx.hasPeekByte = false;
 		fastCtx.ackLevel = 1;
 		fastCtx.expectedDav = 0;
 		fastCtx.status = TCBM_STATUS_OK;
@@ -1121,6 +1127,7 @@ void TCBM_Commands::PrepareFastLoadError(u8 channel)
 	statusActive = false;
 	directoryActive = false;
 	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_SEND;
@@ -1482,6 +1489,7 @@ bool TCBM_Commands::FinaliseFastHandshake()
 	bool ok = WaitForDAVState(true, "FAST final DAV=1", COMMAND_TIMEOUT_US);
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
 	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
 	fastCtx.status = TCBM_STATUS_OK;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
@@ -1499,34 +1507,59 @@ bool TCBM_Commands::LoadFastByte(u8& data, bool& eoi)
 		return false;
 	}
 
+	if (!fastCtx.hasPeekByte)
+	{
+		u8 next = 0;
+		if (IsCbmImageModeActive())
+		{
+			if (!ReadCbmImageChannelByte(secondaryAddress, next))
+			{
+				fastCtx.status = TCBM_STATUS_SEND;
+				return false;
+			}
+		}
+		else
+		{
+			u32 bytesRead = 0;
+			FRESULT res = f_read(&ch.file, &next, 1, &bytesRead);
+			if (res != FR_OK || bytesRead == 0)
+			{
+				fastCtx.status = TCBM_STATUS_SEND;
+				return false;
+			}
+		}
+		fastCtx.peekByte = next;
+		fastCtx.hasPeekByte = true;
+	}
+
+	data = fastCtx.peekByte;
+	fastCtx.hasPeekByte = false;
+
+	u8 ahead = 0;
 	if (IsCbmImageModeActive())
 	{
-		if (!ReadCbmImageChannelByte(secondaryAddress, data))
+		if (!ReadCbmImageChannelByte(secondaryAddress, ahead))
 		{
 			fastCtx.status = TCBM_STATUS_EOI;
-			return false;
+			eoi = true;
+			return true;
 		}
-		eoi = IsCbmImageChannelAtEof(secondaryAddress);
-		fastCtx.status = eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK;
-		return true;
 	}
-
-	u32 bytesRead = 0;
-	FRESULT res = f_read(&ch.file, &data, 1, &bytesRead);
-	if (res != FR_OK)
+	else
 	{
-		fastCtx.status = TCBM_STATUS_SEND;
-		return false;
+		u32 bytesRead = 0;
+		FRESULT res = f_read(&ch.file, &ahead, 1, &bytesRead);
+		if (res != FR_OK || bytesRead == 0)
+		{
+			fastCtx.status = TCBM_STATUS_EOI;
+			eoi = true;
+			return true;
+		}
 	}
 
-	if (bytesRead == 0)
-	{
-		fastCtx.status = TCBM_STATUS_EOI;
-		return false;
-	}
-
-	eoi = (f_tell(&ch.file) >= ch.fileSize);
-	fastCtx.status = eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK;
+	fastCtx.peekByte = ahead;
+	fastCtx.hasPeekByte = true;
+	fastCtx.status = TCBM_STATUS_OK;
 	return true;
 }
 
@@ -1831,6 +1864,7 @@ bool TCBM_Commands::PrepareFastBlockRead()
 	fastRequest.type = FAST_REQ_NONE;
 
 	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_OK;
@@ -1863,6 +1897,7 @@ bool TCBM_Commands::PrepareFastBlockWrite()
 	fastRequest.type = FAST_REQ_NONE;
 
 	fastCtx.initialised = false;
+	fastCtx.hasPeekByte = false;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 1;
 	fastCtx.status = TCBM_STATUS_OK;
