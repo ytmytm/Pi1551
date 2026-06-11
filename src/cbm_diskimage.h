@@ -67,6 +67,7 @@ typedef struct CbmImageFile {
 	u8* buffer;
 	int bufptr;
 	int buflen;
+	u16 blocks;
 } CbmImageFile;
 
 CbmImageType CbmImagePathGetType(const char* path);

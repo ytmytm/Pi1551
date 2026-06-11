@@ -472,7 +472,7 @@ bool cbm_image_open_file(u8 channel, const char* filename, u32& fileSizeOut)
 	s_mount.channelFile[channel] = opened;
 	s_mount.channelOpen[channel] = true;
 	if (opened.rawdirentry)
-		fileSizeOut = static_cast<u32>((opened.rawdirentry->sizehi << 8) | opened.rawdirentry->sizelo);
+		fileSizeOut = opened.blocks;
 	else
 		fileSizeOut = 0;
 	s_mount.channelFileSize[channel] = fileSizeOut;
@@ -658,6 +658,7 @@ CbmImageFile* cbm_di_open(CbmFsImage* di, const char* rawname, CbmFileType type)
 
 	CbmImageFile* imgfile = &s_imgfile;
 	CbmRawDirEntry* rde = nullptr;
+	u16 blocks = 0;
 	u8* p;
 
 	if (strcmp("$", rawname) == 0)
@@ -689,6 +690,7 @@ CbmImageFile* cbm_di_open(CbmFsImage* di, const char* rawname, CbmFileType type)
 			set_status(di, 62, 0, 0);
 			return nullptr;
 		}
+		blocks = static_cast<u16>((rde->sizehi << 8) | rde->sizelo);
 		imgfile->ts = rde->startts;
 		if (imgfile->ts.track > cbm_di_tracks(di->type))
 			return nullptr;
@@ -704,6 +706,7 @@ CbmImageFile* cbm_di_open(CbmFsImage* di, const char* rawname, CbmFileType type)
 
 	imgfile->diskimage = di;
 	imgfile->rawdirentry = rde;
+	imgfile->blocks = blocks;
 	imgfile->position = 0;
 	imgfile->bufptr = 0;
 	set_status(di, 0, 0, 0);
@@ -731,6 +734,7 @@ CbmImageFile* cbm_di_open_ts(CbmFsImage* di, u8 track, u8 sector)
 
 	imgfile->diskimage = di;
 	imgfile->rawdirentry = nullptr;
+	imgfile->blocks = 0;
 	imgfile->position = 0;
 	imgfile->bufptr = 0;
 	set_status(di, 0, 0, 0);
