@@ -1135,6 +1135,20 @@ void TCBM_Commands::PrepareFastLoadError(u8 channel)
 	fastRequest.type = FAST_REQ_NONE;
 }
 
+void TCBM_Commands::FinaliseFastTransferState()
+{
+	Channel& ch = channels[secondaryAddress];
+	if (directoryActive && secondaryAddress != 15)
+	{
+		ch.cursor = 0;
+		ch.bytesSent = 0;
+		ch.command[0] = '\0';
+	}
+	directoryActive = false;
+	statusActive = false;
+	fastCtx.hasPeekByte = false;
+}
+
 void TCBM_Commands::ServiceOpenState()
 {
     while (tcbmState == TCBM_STATE_OPEN)
@@ -1604,12 +1618,14 @@ void TCBM_Commands::ServiceFastLoadState()
 		{
 			if (FinaliseFastHandshake())
 			{
+				FinaliseFastTransferState();
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
 			else
 			{
 				NoteTimeout("FAST load finalise");
+				FinaliseFastTransferState();
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
@@ -1631,6 +1647,7 @@ void TCBM_Commands::ServiceFastLoadState()
 			fastCtx.status = TCBM_STATUS_SEND;
 			Error(ERROR_74_DRlVE_NOT_READY);
 			FinaliseFastHandshake();
+			FinaliseFastTransferState();
 			tcbmState = TCBM_STATE_IDLE;
 			deviceRole = DEVICE_ROLE_PASSIVE;
 			return;
@@ -1651,6 +1668,7 @@ void TCBM_Commands::ServiceFastDirectoryState()
 		fastCtx.status = TCBM_STATUS_SEND;
 		Error(ERROR_74_DRlVE_NOT_READY);
 		FinaliseFastHandshake();
+		FinaliseFastTransferState();
 		tcbmState = TCBM_STATE_IDLE;
 		deviceRole = DEVICE_ROLE_PASSIVE;
 		return;
@@ -1668,12 +1686,14 @@ void TCBM_Commands::ServiceFastDirectoryState()
 		{
 			if (FinaliseFastHandshake())
 			{
+				FinaliseFastTransferState();
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
 			else
 			{
 				NoteTimeout("FAST dir finalise");
+				FinaliseFastTransferState();
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
@@ -1695,6 +1715,7 @@ void TCBM_Commands::ServiceFastDirectoryState()
 			fastCtx.status = TCBM_STATUS_SEND;
 			Error(ERROR_74_DRlVE_NOT_READY);
 			FinaliseFastHandshake();
+			FinaliseFastTransferState();
 			tcbmState = TCBM_STATE_IDLE;
 			deviceRole = DEVICE_ROLE_PASSIVE;
 			return;
@@ -2070,6 +2091,7 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	}
 
 	RestoreAfterEmulationFastHandoff();
+	FinaliseFastTransferState();
 	PushDebugLine("FAST handoff done state:%s mounted:%u",
 		GetStateName(), static_cast<unsigned>(cbm_image_is_mounted()));
 
