@@ -1607,11 +1607,14 @@ void TCBM_Commands::ServiceFastLoadState()
 
 void TCBM_Commands::ServiceFastDirectoryState()
 {
+	Channel& ch = channels[secondaryAddress];
 	if (!InitialiseFastHandshake("FAST dir init"))
 	{
 		fastCtx.status = TCBM_STATUS_SEND;
 		Error(ERROR_74_DRlVE_NOT_READY);
 		FinaliseFastHandshake();
+		directoryActive = false;
+		statusActive = false;
 		tcbmState = TCBM_STATE_IDLE;
 		deviceRole = DEVICE_ROLE_PASSIVE;
 		return;
@@ -1629,12 +1632,22 @@ void TCBM_Commands::ServiceFastDirectoryState()
 		{
 			if (FinaliseFastHandshake())
 			{
+				if (directoryActive && secondaryAddress != 15)
+				{
+					ch.cursor = 0;
+					ch.bytesSent = 0;
+					ch.command[0] = '\0';
+				}
+				directoryActive = false;
+				statusActive = false;
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
 			else
 			{
 				NoteTimeout("FAST dir finalise");
+				directoryActive = false;
+				statusActive = false;
 				tcbmState = TCBM_STATE_IDLE;
 				deviceRole = DEVICE_ROLE_PASSIVE;
 			}
@@ -1656,6 +1669,8 @@ void TCBM_Commands::ServiceFastDirectoryState()
 			fastCtx.status = TCBM_STATUS_SEND;
 			Error(ERROR_74_DRlVE_NOT_READY);
 			FinaliseFastHandshake();
+			directoryActive = false;
+			statusActive = false;
 			tcbmState = TCBM_STATE_IDLE;
 			deviceRole = DEVICE_ROLE_PASSIVE;
 			return;
