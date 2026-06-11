@@ -22,7 +22,10 @@
 #include "commands_base.h"
 #include "tcbm_bus.h"
 
-// TCBM Bus Command Codes (controller -> device), see pagetable article and tcbm2sd reference.
+// TCBM layer 2: https://www.pagetable.com/?p=1324 (Kernal handshake)
+// Reference impl: docs/tcbm2sd/tcbm2sd.ino (incl. send_data_stream fast mode)
+// Bus idle between bytes: DAV=1, ACK=1 (pagetable step 0).
+// TCBM Bus Command Codes (controller -> device)
 #define TCBM_CODE_COMMAND 0x81
 #define TCBM_CODE_SECOND  0x82
 #define TCBM_CODE_RECV    0x83

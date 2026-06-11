@@ -30,6 +30,11 @@
 #include <cstring>
 #include <algorithm>
 
+// TCBM layer-2 handshake (Kernal / standard mode):
+//   https://www.pagetable.com/?p=1324
+//   docs/tcbm2sd/tcbm2sd.ino — tcbm_read_cmd_block, tcbm_read_data,
+//                                tcbm_write_data, send_data_stream (fast)
+
 namespace
 {
     constexpr u8 CMD_LISTEN   = 0x20;
@@ -416,6 +421,8 @@ u8 TCBM_Commands::ReadTCBMCommandByte()
     return second;
 }
 
+// tcbm_read_cmd_block() — pagetable send/receive step 1: wait DAV=1, stable
+// TCBM code on DIO; pagetable step 2: release ACK (accept code).
 bool TCBM_Commands::ReadTCBMCommandByteBlocking(u8& value)
 {
     if (!WaitForDAVState(true, "DAV=1 (command)"))
@@ -448,6 +455,9 @@ bool TCBM_Commands::ReadTCBMCommandByteBlocking(u8& value)
     return false;
 }
 
+// tcbm_read_data() — controller sends a byte to the device (pagetable
+// "Sending Bytes" steps 4-9): wait DAV=0, read DIO, set ST, ACK=1,
+// wait DAV=1, clear ST; leaves bus at step-0 idle (DAV=1, ACK=1).
 bool TCBM_Commands::ReadTCBMDataByteBlocking(u8& value, u8 status)
 {
     if (!WaitForDAVState(false, "DAV=0 (data ready)"))
@@ -967,6 +977,7 @@ void TCBM_Commands::PrepareStatusResponse(bool fastMode)
 	}
 }
 
+// tcbm_reset_bus() — pagetable step 0 / between-byte idle.
 void TCBM_Commands::PrepareBrowseIdleBus()
 
 {
@@ -1512,6 +1523,9 @@ void TCBM_Commands::ServiceDirectoryState()
     }
 }
 
+// send_data_stream(fast_mode=true) entry in tcbm2sd.ino: start from Kernal
+// idle (DAV=1, ACK=1), wait DAV=0, then toggle ACK/DAV per byte (ytm fast
+// extension — not in pagetable Kernal article).
 bool TCBM_Commands::InitialiseFastHandshake(const char* stage)
 {
 	if (fastCtx.initialised)
@@ -1573,6 +1587,7 @@ bool TCBM_Commands::FastReceiveBlockByte(u8& data)
 	return true;
 }
 
+// send_data_stream error/EOI exit: input mode, ACK=1, wait DAV=1 (Kernal idle).
 bool TCBM_Commands::FinaliseFastHandshake()
 {
 	if (!fastCtx.initialised)
@@ -2004,17 +2019,18 @@ bool TCBM_Commands::ShouldHandoffEmulationFastTalk() const
 
 void TCBM_Commands::CompleteEmulationSecondaryCommandAck()
 {
-	// Finish ROM B_C135..RTS for the secondary byte caught at PC=$C0E4.
+	// ROM at $C0E4 has already read the TALK secondary from DIO; finish the
+	// tail of tcbm_read_data() so the bus returns to pagetable step 0.
 	TCBM_Bus::SetDataInput();
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
 	TCBM_Bus::AssertACK();
-	if (!WaitForDAVState(true, "emu sec ack"))
+	if (!WaitForDAVState(true, "emu sec DAV=1"))
 	{
 		PushDebugLine("emu sec ack timeout");
 		return;
 	}
-	TCBM_Bus::ReleaseACK();
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+	TCBM_Bus::AssertACK();
 	TCBM_Bus::ReadBrowseMode();
 }
 
@@ -2023,6 +2039,9 @@ bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
     return WriteSerialPortByteWithStatus(data, eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK);
 }
 
+// tcbm_write_data() — device sends a byte to the controller after TCBM_CODE_RECV
+// (pagetable "Receiving Bytes" steps 4-14): wait DAV=0, drive DIO+ST, ACK=1,
+// wait DAV=1, release DIO+ST, ACK=0, wait DAV=0, ACK=1, wait DAV=1 (idle).
 bool TCBM_Commands::WriteSerialPortByteWithStatus(u8 data, u8 status)
 {
     if (captureOutput)
@@ -2035,7 +2054,7 @@ bool TCBM_Commands::WriteSerialPortByteWithStatus(u8 data, u8 status)
     debugWriteStep = 1;
     std::snprintf(debugWriteBuffer, sizeof(debugWriteBuffer), "$%02X st=$%02X", data, status);
 
-    if (!WaitForDAVState(false, "DAV=0 (host ready)"))
+    if (!WaitForDAVState(false, "DAV=0 (recv step 4)"))
         return true;
 
     TCBM_Bus::SetData(data);
@@ -2045,7 +2064,7 @@ bool TCBM_Commands::WriteSerialPortByteWithStatus(u8 data, u8 status)
     debugWriteStep = 2;
     std::snprintf(debugWriteBuffer, sizeof(debugWriteBuffer), "DATA=$%02X ACK=1", data);
 
-    if (!WaitForDAVState(true, "DAV=1 (host received)"))
+    if (!WaitForDAVState(true, "DAV=1 (recv step 8)"))
         return true;
 
     TCBM_Bus::SetDataInput();
@@ -2053,13 +2072,13 @@ bool TCBM_Commands::WriteSerialPortByteWithStatus(u8 data, u8 status)
     TCBM_Bus::ReleaseACK();
 
     debugWriteStep = 3;
-    std::snprintf(debugWriteBuffer, sizeof(debugWriteBuffer), "ACK=0 return");
+    std::snprintf(debugWriteBuffer, sizeof(debugWriteBuffer), "ACK=0 (recv step 11)");
 
-    if (!WaitForDAVState(false, "DAV=0 (host next)"))
+    if (!WaitForDAVState(false, "DAV=0 (recv step 12)"))
         return true;
 
     TCBM_Bus::AssertACK();
-    if (!WaitForDAVState(true, "DAV=1 (final)"))
+    if (!WaitForDAVState(true, "DAV=1 (recv step 14)"))
         return true;
 
     debugWriteStep = 4;
@@ -2165,8 +2184,8 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 
 void TCBM_Commands::RestoreAfterEmulationFastHandoff()
 {
-	if (mountedImagePath[0] != '\0' && PathUsesSectorEmulation(mountedImagePath))
-		DeactivateCbmImageMode();
+	// Keep cbm_image mounted during sector emulation so back-to-back fastdir/U0
+	// handoffs do not depend on remount timing (BeginEmulating deactivates on entry).
 }
 
 void TCBM_Commands::RunBrowserModeTransferUntilIdle()
@@ -2195,4 +2214,5 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	if (savedTpi)
 		TCBM_Bus::port = savedTpi->GetPortA();
 	TCBM_Bus::RefreshOuts1551();
+	PrepareBrowseIdleBus();
 }

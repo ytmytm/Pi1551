@@ -285,7 +285,10 @@ bool Commands_Base::ExitQuasiMountIfActive()
 {
 	if (!cbm_image_is_mounted())
 		return false;
+	const bool quasiMount = PathUsesQuasiMountOnly(mountedImagePath);
 	DeactivateCbmImageMode();
+	if (quasiMount)
+		mountedImagePath[0] = '\0';
 	return true;
 }
 

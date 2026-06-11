@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <strings.h>
+#include <cctype>
 
 static CbmFsImage s_di;
 static CbmImageFile s_imgfile;
@@ -622,8 +623,19 @@ static int match_pattern(const u8* rawpattern, const u8* rawname)
 			return 1;
 		if (rawname[i] == 0xa0)
 			return rawpattern[i] == 0xa0 ? 1 : 0;
-		if (rawpattern[i] != '?' && rawpattern[i] != rawname[i])
-			return 0;
+		if (rawpattern[i] == '?')
+			continue;
+		u8 patternChar = rawpattern[i];
+		u8 nameChar = rawname[i];
+		if (patternChar == nameChar)
+			continue;
+		char patternAscii = static_cast<char>(petscii2ascii(patternChar));
+		char nameAscii = static_cast<char>(petscii2ascii(nameChar));
+		if (patternAscii >= 'A' && patternAscii <= 'Z'
+			&& nameAscii >= 'A' && nameAscii <= 'Z'
+			&& toupper(static_cast<unsigned char>(patternAscii)) == toupper(static_cast<unsigned char>(nameAscii)))
+			continue;
+		return 0;
 	}
 	return 1;
 }
