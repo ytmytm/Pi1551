@@ -1956,6 +1956,12 @@ bool TCBM_Commands::PreparePendingFastBlockTransfer()
 	return false;
 }
 
+bool TCBM_Commands::IsPendingFastBlockTransfer() const
+{
+	return tcbmState == TCBM_STATE_FAST_BLOCKREAD
+		|| tcbmState == TCBM_STATE_FAST_BLOCKWRITE;
+}
+
 bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
 {
     return WriteSerialPortByteWithStatus(data, eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK);

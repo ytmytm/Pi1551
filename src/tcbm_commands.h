@@ -76,6 +76,7 @@ public:
 	bool InterceptEmulationU0Command(const u8* data, size_t length);
 	void HandleEmulationFastTalkHandoff(u8 channel);
 	bool PreparePendingFastBlockTransfer();
+	bool IsPendingFastBlockTransfer() const;
 	void RunBrowserModeTransferUntilIdle();
 	void RestoreAfterEmulationFastHandoff();
 
