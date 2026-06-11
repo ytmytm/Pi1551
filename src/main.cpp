@@ -2144,6 +2144,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 
 				if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
 				{
+					write6502_1551(0xa4, 0);
 					pi1551.m6502.SetPC(0xC283);
 				}
 			}
