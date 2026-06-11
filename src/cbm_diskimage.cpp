@@ -471,10 +471,9 @@ bool cbm_image_open_file(u8 channel, const char* filename, u32& fileSizeOut)
 	opened = *img;
 	s_mount.channelFile[channel] = opened;
 	s_mount.channelOpen[channel] = true;
-	if (opened.rawdirentry)
-		fileSizeOut = opened.blocks;
-	else
-		fileSizeOut = 0;
+	// Byte length is unknown until EOF (dir entry size is block count, not bytes).
+	(void)opened;
+	fileSizeOut = 0xFFFFFFFF;
 	s_mount.channelFileSize[channel] = fileSizeOut;
 	return true;
 }

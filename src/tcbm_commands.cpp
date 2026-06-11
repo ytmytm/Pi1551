@@ -1252,16 +1252,9 @@ void TCBM_Commands::ServiceLoadState()
 
                 bool eoi = false;
                 if (IsCbmImageModeActive())
-                {
-                    u32 size = GetCbmImageChannelFileSize(secondaryAddress);
-                    u32 pos = GetCbmImageChannelPosition(secondaryAddress);
-                    if (size != 0xFFFFFFFF)
-                        eoi = (size > 0 && pos >= size);
-                }
+                    eoi = IsCbmImageChannelAtEof(secondaryAddress);
                 else
-                {
                     eoi = (f_tell(&ch.file) >= ch.fileSize);
-                }
                 WriteSerialPortByte(byte, eoi);
                 if (eoi)
                 {
