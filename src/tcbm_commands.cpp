@@ -656,6 +656,11 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		if (fastRequest.type == FAST_REQ_FILENAME)
 		{
 			ApplyPendingFastFilename(channel);
+			PushDebugLine("FAST pending name ch:%u image:%u mounted:%u cmd:%s",
+				channel,
+				static_cast<unsigned>(mountedImagePath[0] != '\0'),
+				static_cast<unsigned>(cbm_image_is_mounted()),
+				reinterpret_cast<const char*>(ch.command));
 
 			if (cbm_image_is_mounted())
 			{
@@ -666,6 +671,8 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 
 				if (!ch.open)
 				{
+					PushDebugLine("FAST image open FAIL ch:%u cmd:%s",
+						channel, reinterpret_cast<const char*>(ch.command));
 					PrepareFastLoadError(channel);
 					return true;
 				}
@@ -679,9 +686,11 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 				fastCtx.expectedDav = 0;
 				fastCtx.status = TCBM_STATUS_OK;
 				tcbmState = TCBM_STATE_FASTLOAD;
-				PushDebugLine("FAST LOAD image %s", reinterpret_cast<const char*>(ch.command));
+				PushDebugLine("FAST LOAD image OK ch:%u size:%u cmd:%s",
+					channel, ch.fileSize, reinterpret_cast<const char*>(ch.command));
 				return true;
 			}
+			PushDebugLine("FAST pending name no image");
 		}
 		else if (fastRequest.type == FAST_REQ_TRACK_SECTOR)
 		{
@@ -972,7 +981,8 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 			{
 				fastRequest.type = FAST_REQ_FILENAME;
 				Error(ERROR_00_OK);
-				PushDebugLine("U0 fastload filename %s", fastRequest.filename);
+				PushDebugLine("U0 $1f filename len:%u [%s]",
+					static_cast<unsigned>(length - 3), fastRequest.filename);
 			}
 			else
 			{
@@ -1000,7 +1010,10 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 			fastRequest.track = data[3];
 			fastRequest.sector = data[4];
 			Error(ERROR_00_OK);
-			PushDebugLine("U0 fastload T/S %u/%u", fastRequest.track, fastRequest.sector);
+			PushDebugLine("U0 $3f T/S %u/%u image:%u mounted:%u",
+				fastRequest.track, fastRequest.sector,
+				static_cast<unsigned>(mountedImagePath[0] != '\0'),
+				static_cast<unsigned>(cbm_image_is_mounted()));
 			return true;
 		}
 
@@ -1968,9 +1981,15 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 
 void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 {
-	EnsureCbmImageModeFromMounted();
+	bool imageReady = EnsureCbmImageModeFromMounted();
 	secondaryAddress = channel;
 	const bool fastMode = true;
+	PushDebugLine("EMU FAST TALK ch:%u req:%u cmd:%s image:%u mounted:%u",
+		channel,
+		static_cast<unsigned>(fastRequest.type),
+		reinterpret_cast<const char*>(channels[channel].command),
+		static_cast<unsigned>(imageReady),
+		static_cast<unsigned>(cbm_image_is_mounted()));
 
 	if (channel == 15)
 	{
@@ -2010,6 +2029,7 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	m6523* savedTpi = TCBM_Bus::TPI;
 	TCBM_Bus::TPI = 0;
 	PrepareBrowseIdleBus();
+	PushDebugLine("FAST handoff run state:%s", GetStateName());
 
 	while (IsTransferActive())
 	{
@@ -2022,6 +2042,8 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	}
 
 	RestoreAfterEmulationFastHandoff();
+	PushDebugLine("FAST handoff done state:%s mounted:%u",
+		GetStateName(), static_cast<unsigned>(cbm_image_is_mounted()));
 
 	TCBM_Bus::TPI = savedTpi;
 	if (savedTpi)
