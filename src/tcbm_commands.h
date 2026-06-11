@@ -139,6 +139,7 @@ protected:
 	bool ExtractU0Filename(const u8* data, size_t length);
 	void ApplyPendingFastFilename(u8 channel);
 	void PrepareFastLoadError(u8 channel);
+	void ReleaseTransferChannel(u8 channel);
 	void FinaliseFastTransferState();
 	bool InitialiseFastHandshake(const char* stage);
 	bool FinaliseFastHandshake();
