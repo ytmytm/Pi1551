@@ -1162,17 +1162,24 @@ void TCBM_Commands::PrepareFastLoadError(u8 channel)
 	fastRequest.type = FAST_REQ_NONE;
 }
 
-void TCBM_Commands::FinaliseFastTransferState()
+void TCBM_Commands::ReleaseTransferChannel(u8 channel)
 {
-	Channel& ch = channels[secondaryAddress];
-	if (directoryActive && secondaryAddress != 15)
-	{
-		ch.cursor = 0;
-		ch.bytesSent = 0;
-		ch.command[0] = '\0';
-	}
+	Channel& ch = channels[channel];
+	if (IsCbmImageModeActive())
+		CloseCbmImageChannel(channel);
+	ch.Close();
+	ch.command[0] = '\0';
+	ch.cursor = 0;
+	ch.bytesSent = 0;
+	ch.fileSize = 0;
 	directoryActive = false;
 	statusActive = false;
+	fastRequest.type = FAST_REQ_NONE;
+}
+
+void TCBM_Commands::FinaliseFastTransferState()
+{
+	ReleaseTransferChannel(secondaryAddress);
 }
 
 void TCBM_Commands::ServiceOpenState()
@@ -1212,7 +1219,8 @@ void TCBM_Commands::ServiceOpenState()
                 if (data == CMD_UNLISTEN)
                 {
                     FinaliseOpenState(activeChannel);
-                    tcbmState = TCBM_STATE_IDLE;
+                    if (tcbmState == TCBM_STATE_OPEN)
+                        tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
                     return;
                 }
@@ -1305,9 +1313,7 @@ void TCBM_Commands::ServiceLoadState()
                 WriteSerialPortByte(byte, eoi);
                 if (eoi)
                 {
-                    if (IsCbmImageModeActive())
-                        CloseCbmImageChannel(secondaryAddress);
-                    ch.Close();
+                    ReleaseTransferChannel(secondaryAddress);
                     tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
                     return;
@@ -1323,12 +1329,7 @@ void TCBM_Commands::ServiceLoadState()
 
                 if (data == CMD_UNTALK)
                 {
-                    if (ch.open)
-                    {
-                        if (IsCbmImageModeActive())
-                            CloseCbmImageChannel(secondaryAddress);
-                        ch.Close();
-                    }
+                    ReleaseTransferChannel(secondaryAddress);
                     tcbmState = TCBM_STATE_IDLE;
                     deviceRole = DEVICE_ROLE_PASSIVE;
                     return;
@@ -1429,6 +1430,7 @@ void TCBM_Commands::ServiceDirectoryState()
             WriteSerialPortByte(ch.buffer[ch.bytesSent++], eoi);
             if (eoi)
             {
+                ReleaseTransferChannel(secondaryAddress);
                 tcbmState = TCBM_STATE_IDLE;
                 deviceRole = DEVICE_ROLE_PASSIVE;
             }
@@ -1436,6 +1438,7 @@ void TCBM_Commands::ServiceDirectoryState()
         else
         {
             WriteSerialPortByte(0x0D, true);
+            ReleaseTransferChannel(secondaryAddress);
             tcbmState = TCBM_STATE_IDLE;
             deviceRole = DEVICE_ROLE_PASSIVE;
         }
@@ -1451,6 +1454,7 @@ void TCBM_Commands::ServiceDirectoryState()
 
         if (data == CMD_UNTALK)
         {
+            ReleaseTransferChannel(secondaryAddress);
             tcbmState = TCBM_STATE_IDLE;
             deviceRole = DEVICE_ROLE_PASSIVE;
         }
@@ -1595,6 +1599,7 @@ void TCBM_Commands::ServiceFastLoadState()
 		fastCtx.status = TCBM_STATUS_SEND;
 		Error(ERROR_74_DRlVE_NOT_READY);
 		FinaliseFastHandshake();
+		FinaliseFastTransferState();
 		tcbmState = TCBM_STATE_IDLE;
 		deviceRole = DEVICE_ROLE_PASSIVE;
 		return;
