@@ -572,6 +572,8 @@ void TCBM_Commands::HandleTalkSecondary(u8 secondaryByte)
     activeChannel = channel;
 
 	bool fastMode = (secondaryByte & 0xF0) == SEC_FAST;
+	if (fastMode && channel != 15)
+		AbortStaleTransferKeepFastRequest(channel);
 	switch (secondaryByte & 0xF0)
 	{
 		case SEC_FAST:
@@ -642,6 +644,8 @@ void TCBM_Commands::FinaliseOpenState(u8 channel)
 		ch.bytesSent = 0;
 		if (!PreparePendingFastBlockTransfer() && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
+		tcbmState = TCBM_STATE_IDLE;
+		deviceRole = DEVICE_ROLE_PASSIVE;
 		return;
 	}
 
@@ -867,6 +871,8 @@ bool TCBM_Commands::PrepareSaveChannel(u8 channel)
 void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
 {
     Channel& ch = channels[channel];
+	if (fastMode && (cbm_image_is_mounted() || mountedImagePath[0] != '\0'))
+		EnsureCbmImageModeFromMounted();
     ch.cursor = 0;
     ch.bytesSent = 0;
     captureOutput = true;
@@ -1182,6 +1188,29 @@ void TCBM_Commands::ReleaseTransferChannel(u8 channel)
 	directoryActive = false;
 	statusActive = false;
 	fastRequest.type = FAST_REQ_NONE;
+}
+
+void TCBM_Commands::AbortStaleTransferKeepFastRequest(u8 channel)
+{
+	Channel& ch = channels[channel];
+	if (IsCbmImageModeActive())
+		CloseCbmImageChannel(channel);
+	if (ch.open)
+		ch.Close();
+	ch.cursor = 0;
+	ch.bytesSent = 0;
+	ch.fileSize = 0;
+	directoryActive = false;
+	statusActive = false;
+	fastCtx.initialised = false;
+	fastCtx.ackLevel = 1;
+	fastCtx.expectedDav = 0;
+	fastCtx.status = TCBM_STATUS_OK;
+	if (tcbmState != TCBM_STATE_IDLE && tcbmState != TCBM_STATE_OPEN)
+	{
+		tcbmState = TCBM_STATE_IDLE;
+		deviceRole = DEVICE_ROLE_PASSIVE;
+	}
 }
 
 void TCBM_Commands::FinaliseFastTransferState()
@@ -1946,9 +1975,16 @@ bool TCBM_Commands::IsPendingFastBlockTransfer() const
 		|| tcbmState == TCBM_STATE_FAST_BLOCKWRITE;
 }
 
-bool TCBM_Commands::IsPendingEmulationFastFileTransfer() const
+bool TCBM_Commands::ShouldHandoffEmulationFastTalk() const
 {
-	return fastRequest.type != FAST_REQ_NONE && !IsPendingFastBlockTransfer();
+	if (IsPendingFastBlockTransfer())
+		return true;
+	if (fastRequest.type != FAST_REQ_NONE)
+		return true;
+	// fastdir uses OPEN "$" + TALK 0x7x with no U0 / fastRequest
+	if (mountedImagePath[0] != '\0' || cbm_image_is_mounted())
+		return true;
+	return false;
 }
 
 void TCBM_Commands::CompleteEmulationSecondaryCommandAck()
@@ -2046,6 +2082,7 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 		return false;
 
 	EnsureCbmImageModeFromMounted();
+	AbortStaleTransferKeepFastRequest(0);
 
 	Channel& ch = channels[15];
 	ch.cursor = 0;
@@ -2065,6 +2102,8 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 	bool imageReady = EnsureCbmImageModeFromMounted();
 	secondaryAddress = channel;
 	const bool fastMode = true;
+	if (channel != 15)
+		AbortStaleTransferKeepFastRequest(channel);
 	PushDebugLine("EMU FAST TALK ch:%u req:%u cmd:%s image:%u mounted:%u",
 		channel,
 		static_cast<unsigned>(fastRequest.type),

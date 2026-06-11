@@ -2202,7 +2202,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 		u8 talkActive = peek6502_1551(0x5B);
 		u8 secondary = peek6502_1551(0x7D);
 		if (talkActive && (secondary & 0xF0) == 0x70
-			&& m_TCBM_Commands.IsPendingEmulationFastFileTransfer())
+			&& m_TCBM_Commands.ShouldHandoffEmulationFastTalk())
 		{
 			u8 channel = secondary & 0x0F;
 			write6502_1551(0x7C, secondary & 0x0F);

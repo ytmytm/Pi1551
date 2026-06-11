@@ -67,6 +67,7 @@ public:
     static constexpr int DEBUG_LINE_CAPACITY = 24;
     static constexpr int DEBUG_LINE_LENGTH  = 96;
     const char* const* GetDebugLines(int& lineCount) const;
+    void RefreshDebugOverlay();
 
     // Quick handshake state hint for overlay
     static int  debugWriteStep;
@@ -77,6 +78,8 @@ public:
 	void HandleEmulationFastTalkHandoff(u8 channel);
 	bool PreparePendingFastBlockTransfer();
 	bool IsPendingFastBlockTransfer() const;
+	bool ShouldHandoffEmulationFastTalk() const;
+	void CompleteEmulationSecondaryCommandAck();
 	void RunBrowserModeTransferUntilIdle();
 	void RestoreAfterEmulationFastHandoff();
 
@@ -140,6 +143,7 @@ protected:
 	void ApplyPendingFastFilename(u8 channel);
 	void PrepareFastLoadError(u8 channel);
 	void ReleaseTransferChannel(u8 channel);
+	void AbortStaleTransferKeepFastRequest(u8 channel);
 	void FinaliseFastTransferState();
 	bool InitialiseFastHandshake(const char* stage);
 	bool FinaliseFastHandshake();
