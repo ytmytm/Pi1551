@@ -945,9 +945,9 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 	if (data[0] != 'U' || data[1] != '0')
 		return false;
 
-	if (length >= 4 && data[2] == '>' && (data[3] == '8' || data[3] == '9'))
+	if (length >= 4 && data[2] == '>' && (data[3] == 8 || data[3] == 9))
 	{
-		u8 id = static_cast<u8>(data[3] - '0');
+		u8 id = data[3];
 		SetDeviceId(id);
 		Error(ERROR_00_OK);
 		fastRequest.type = FAST_REQ_NONE;
@@ -2022,4 +2022,3 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 		TCBM_Bus::port = savedTpi->GetPortA();
 	TCBM_Bus::RefreshOuts1551();
 }
-
