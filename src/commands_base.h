@@ -109,6 +109,7 @@ public:
 	bool ReadCbmImageChannelByte(u8 channel, u8& data);
 	u32 GetCbmImageChannelFileSize(u8 channel) const;
 	u32 GetCbmImageChannelPosition(u8 channel) const;
+	bool IsCbmImageChannelAtEof(u8 channel) const;
 	void SetCbmImageChannelPosition(u8 channel, u32 position);
 
 	void SetHeaderVersion();
@@ -268,4 +269,3 @@ protected:
 };
 
 #endif // COMMANDS_BASE_H
-

@@ -89,6 +89,7 @@ bool cbm_image_open_ts(u8 channel, u8 track, u8 sector, u32& fileSizeOut);
 bool cbm_image_read_channel_byte(u8 channel, u8& data);
 u32 cbm_image_channel_file_size(u8 channel);
 u32 cbm_image_channel_position(u8 channel);
+bool cbm_image_channel_at_eof(u8 channel);
 void cbm_image_set_channel_position(u8 channel, u32 position);
 
 typedef struct CbmImageDirListEntry {

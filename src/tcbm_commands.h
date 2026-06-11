@@ -178,8 +178,6 @@ protected:
 		u8   ackLevel;
 		u8   expectedDav;
 		u8   status;
-		bool prefetched;
-		u8   prefetchedByte;
 	} fastCtx;
 
 	enum FastRequestType

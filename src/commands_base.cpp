@@ -318,6 +318,11 @@ u32 Commands_Base::GetCbmImageChannelPosition(u8 channel) const
 	return cbm_image_channel_position(channel);
 }
 
+bool Commands_Base::IsCbmImageChannelAtEof(u8 channel) const
+{
+	return cbm_image_channel_at_eof(channel);
+}
+
 void Commands_Base::SetCbmImageChannelPosition(u8 channel, u32 position)
 {
 	cbm_image_set_channel_position(channel, position);
@@ -2057,4 +2062,3 @@ void Commands_Base::Talk()
 		}
 	}
 }
-

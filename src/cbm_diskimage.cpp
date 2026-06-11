@@ -525,6 +525,15 @@ u32 cbm_image_channel_position(u8 channel)
 	return s_mount.channelFile[channel].position;
 }
 
+bool cbm_image_channel_at_eof(u8 channel)
+{
+	if (channel >= 16 || !s_mount.channelOpen[channel])
+		return true;
+
+	CbmImageFile& file = s_mount.channelFile[channel];
+	return file.nextts.track == 0 && file.bufptr >= file.buflen;
+}
+
 void cbm_image_set_channel_position(u8 channel, u32 position)
 {
 	if (channel >= 16)
