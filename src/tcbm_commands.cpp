@@ -553,6 +553,11 @@ void TCBM_Commands::HandleListenSecondary(u8 secondaryByte)
                 std::memcpy(channels[1].command, channels[0].command, sizeof(channels[1].command));
 				PrepareSaveChannel(1);
             }
+            else if (channel == 0)
+            {
+				// CBM LOAD is prepared on TALK+SECOND, not LISTEN+SECOND (tcbm2sd.ino).
+				PushDebugLine("LISTEN ch0 (defer load to TALK)");
+            }
             else
             {
 				PrepareLoadChannel(channel, false);
@@ -681,6 +686,8 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		if (fastRequest.type == FAST_REQ_FILENAME)
 		{
 			ApplyPendingFastFilename(channel);
+			if (!cbm_image_is_mounted())
+				EnsureCbmImageModeFromMounted();
 			PushDebugLine("FAST pending name ch:%u image:%u mounted:%u cmd:%s",
 				channel,
 				static_cast<unsigned>(mountedImagePath[0] != '\0'),
@@ -711,11 +718,14 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 				fastCtx.expectedDav = 0;
 				fastCtx.status = TCBM_STATUS_OK;
 				tcbmState = TCBM_STATE_FASTLOAD;
+				deviceRole = DEVICE_ROLE_TALK;
 				PushDebugLine("FAST LOAD image OK ch:%u size:%u cmd:%s",
 					channel, ch.fileSize, reinterpret_cast<const char*>(ch.command));
 				return true;
 			}
 			PushDebugLine("FAST pending name no image");
+			PrepareFastLoadError(channel);
+			return true;
 		}
 		else if (fastRequest.type == FAST_REQ_TRACK_SECTOR)
 		{
@@ -754,6 +764,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 			fastCtx.expectedDav = 0;
 			fastCtx.status = TCBM_STATUS_OK;
 			tcbmState = TCBM_STATE_FASTLOAD;
+			deviceRole = DEVICE_ROLE_TALK;
 			PushDebugLine("FAST LOAD TS %u/%u", track, sector);
 			return true;
 		}
@@ -828,11 +839,13 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTLOAD;
 		fastRequest.type = FAST_REQ_NONE;
+		deviceRole = DEVICE_ROLE_TALK;
 		PushDebugLine("FAST LOAD channel %u", channel);
 	}
 	else
 	{
 		tcbmState = TCBM_STATE_LOAD;
+		deviceRole = DEVICE_ROLE_TALK;
 		PushDebugLine("LOAD channel %u", channel);
 	}
 	return true;
@@ -915,6 +928,7 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
 		fastCtx.expectedDav = 0;
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTDIR;
+		deviceRole = DEVICE_ROLE_TALK;
 		fastRequest.type = FAST_REQ_NONE;
 		PushDebugLine("FAST DIR prepared channel %u bytes:%u", channel, ch.cursor);
 	}
@@ -1172,6 +1186,7 @@ void TCBM_Commands::PrepareFastLoadError(u8 channel)
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_SEND;
 	tcbmState = TCBM_STATE_FASTLOAD;
+	deviceRole = DEVICE_ROLE_TALK;
 	fastRequest.type = FAST_REQ_NONE;
 }
 
@@ -1989,7 +2004,7 @@ bool TCBM_Commands::ShouldHandoffEmulationFastTalk() const
 
 void TCBM_Commands::CompleteEmulationSecondaryCommandAck()
 {
-	// 1551 ROM B_C135..RTS: ACK the secondary-address byte the trap caught at PC=$C0E4.
+	// Finish ROM B_C135..RTS for the secondary byte caught at PC=$C0E4.
 	TCBM_Bus::SetDataInput();
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
 	TCBM_Bus::AssertACK();
@@ -1998,6 +2013,7 @@ void TCBM_Commands::CompleteEmulationSecondaryCommandAck()
 		PushDebugLine("emu sec ack timeout");
 		return;
 	}
+	TCBM_Bus::ReleaseACK();
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
 	TCBM_Bus::ReadBrowseMode();
 }
@@ -2129,11 +2145,20 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 				ch.command[0] = '$';
 				ch.command[1] = '\0';
 			}
+			PushDebugLine("EMU FAST DIR ch:%u req:%u", channel, static_cast<unsigned>(fastRequest.type));
 			PrepareDirectoryResponse(channel, fastMode);
+		}
+		else if (ch.command[0] != '\0' || ch.open)
+		{
+			PushDebugLine("EMU FAST LOAD ch:%u cmd:%s open:%u",
+				channel, reinterpret_cast<const char*>(ch.command), static_cast<unsigned>(ch.open));
+			PrepareLoadChannel(channel, fastMode);
 		}
 		else
 		{
-			PrepareLoadChannel(channel, fastMode);
+			PushDebugLine("EMU FAST TALK no file ch:%u req:%u", channel, static_cast<unsigned>(fastRequest.type));
+			Error(ERROR_62_FILE_NOT_FOUND);
+			PrepareFastLoadError(channel);
 		}
 	}
 }
