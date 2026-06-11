@@ -243,6 +243,8 @@ void TCBM_Commands::ResetStateMachine()
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_OK;
+	fastCtx.prefetched = false;
+	fastCtx.prefetchedByte = 0;
 	fastRequest.type = FAST_REQ_NONE;
 	fastRequest.track = 0;
 	fastRequest.sector = 0;
@@ -1412,6 +1414,7 @@ bool TCBM_Commands::InitialiseFastHandshake(const char* stage)
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
 	fastCtx.status = TCBM_STATUS_OK;
+	fastCtx.prefetched = false;
 
 	TCBM_Bus::SetDataInput();
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
@@ -1479,6 +1482,7 @@ bool TCBM_Commands::FinaliseFastHandshake()
 	fastCtx.status = TCBM_STATUS_OK;
 	fastCtx.ackLevel = 1;
 	fastCtx.expectedDav = 0;
+	fastCtx.prefetched = false;
 	return ok;
 }
 
@@ -1495,15 +1499,26 @@ bool TCBM_Commands::LoadFastByte(u8& data, bool& eoi)
 
 	if (IsCbmImageModeActive())
 	{
-		if (!ReadCbmImageChannelByte(secondaryAddress, data))
+		if (!fastCtx.prefetched)
 		{
-			fastCtx.status = TCBM_STATUS_EOI;
-			return false;
+			if (!ReadCbmImageChannelByte(secondaryAddress, fastCtx.prefetchedByte))
+			{
+				fastCtx.status = TCBM_STATUS_SEND;
+				return false;
+			}
+			fastCtx.prefetched = true;
 		}
-		u32 size = GetCbmImageChannelFileSize(secondaryAddress);
-		u32 pos = GetCbmImageChannelPosition(secondaryAddress);
-		if (size != 0xFFFFFFFF)
-			eoi = (size > 0 && pos >= size);
+
+		data = fastCtx.prefetchedByte;
+		if (ReadCbmImageChannelByte(secondaryAddress, fastCtx.prefetchedByte))
+		{
+			eoi = false;
+		}
+		else
+		{
+			fastCtx.prefetched = false;
+			eoi = true;
+		}
 		fastCtx.status = eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK;
 		return true;
 	}
