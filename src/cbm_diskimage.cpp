@@ -40,7 +40,20 @@ int cbm_di_rawname_from_name(u8* rawname, const char* name)
 	std::memset(rawname, 0xa0, 16);
 	int i = 0;
 	for (; i < 16 && name[i]; ++i)
-		rawname[i] = ascii2petscii(static_cast<u8>(name[i]));
+	{
+		u8 c = static_cast<u8>(name[i]);
+		if (c == 0x5f)
+			c = 0x7e;
+		else if (c == 0x7e)
+			c = 0x5f;
+		else if (c >= 0x80 + 'a' && c <= 0x80 + 'z')
+			c = static_cast<u8>(c - 0xa0);
+		else if (c >= 0x80 + 'A' && c <= 0x80 + 'Z')
+			c = static_cast<u8>(c - 0x80);
+		else if (c >= 'a' && c <= 'z')
+			c = static_cast<u8>(c - 0x20);
+		rawname[i] = c;
+	}
 	return i;
 }
 
