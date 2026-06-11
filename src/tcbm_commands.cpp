@@ -1076,6 +1076,21 @@ bool TCBM_Commands::HandleU0Command(Channel& channel)
 	}
 }
 
+static u8 TcbmToPetscii(u8 c)
+{
+	if (c == 0x5f)
+		return 0x7e;
+	if (c == 0x7e)
+		return 0x5f;
+	if (c >= 0x80 + 'a' && c <= 0x80 + 'z')
+		c -= 0xa0;
+	if (c >= 0x80 + 'A' && c <= 0x80 + 'Z')
+		c -= 0x80;
+	if (c >= 'a' && c <= 'z')
+		c -= 0x20;
+	return c;
+}
+
 bool TCBM_Commands::ExtractU0Filename(const u8* data, size_t length)
 {
 	fastRequest.filename[0] = '\0';
@@ -1095,7 +1110,7 @@ bool TCBM_Commands::ExtractU0Filename(const u8* data, size_t length)
 		u8 value = data[in];
 		if (value == 0 || value == 0x0D)
 			break;
-		fastRequest.filename[out++] = static_cast<char>(petscii2ascii(value));
+		fastRequest.filename[out++] = static_cast<char>(TcbmToPetscii(value));
 	}
 	fastRequest.filename[out] = '\0';
 	return out > 0;
@@ -1113,7 +1128,12 @@ void TCBM_Commands::ApplyPendingFastFilename(u8 channel)
 	if (fastRequest.filename[0] == '\0')
 		return;
 
-	std::snprintf(reinterpret_cast<char*>(ch.command), sizeof(ch.command), "0:%s", fastRequest.filename);
+	ch.command[0] = '0';
+	ch.command[1] = ':';
+	size_t out = 2;
+	for (size_t i = 0; out + 1 < sizeof(ch.command) && fastRequest.filename[i]; ++i)
+		ch.command[out++] = static_cast<u8>(fastRequest.filename[i]);
+	ch.command[out] = '\0';
 	ch.open = false;
 }
 
