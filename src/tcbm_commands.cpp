@@ -306,36 +306,50 @@ void TCBM_Commands::UpdateDebugOverlay()
     u8   dio    = TCBM_Bus::GetPI_Data();
     SetDebugLine(1, "BUS  DAV:%d ACK:%d ST:$%02X DIO:$%02X", dav ? 1 : 0, ack ? 1 : 0, status & 0x03, dio);
 
+    SetDebugLine(2, "IMG:%u CBM:%u REQ:%u",
+        static_cast<unsigned>(mountedImagePath[0] != '\0'),
+        static_cast<unsigned>(cbm_image_is_mounted()),
+        static_cast<unsigned>(fastRequest.type));
+
     if (debugWriteStep > 0 && debugWriteBuffer[0] != '\0')
-        SetDebugLine(2, "WRITE[%d] %s", debugWriteStep, debugWriteBuffer);
+        SetDebugLine(3, "WRITE[%d] %s", debugWriteStep, debugWriteBuffer);
 
     if (lastTimeoutMessage[0] != '\0')
-        SetDebugLine(3, "%s", lastTimeoutMessage);
+        SetDebugLine(4, "%s", lastTimeoutMessage);
 
     const Channel& channel0 = channels[0];
     if (channel0.command[0] != '\0')
-        SetDebugLine(4, "CH0 CMD: %s", reinterpret_cast<const char*>(channel0.command));
+        SetDebugLine(5, "CH0 CMD: %s", reinterpret_cast<const char*>(channel0.command));
 
     if (channels[15].command[0] != '\0')
-        SetDebugLine(5, "CMD CH15: %s", reinterpret_cast<const char*>(channels[15].command));
+        SetDebugLine(6, "CMD CH15: %s", reinterpret_cast<const char*>(channels[15].command));
 
     if (statusActive)
-        SetDebugLine(6, "STATUS: %s", errorMessage);
+        SetDebugLine(7, "STATUS: %s", errorMessage);
 
     if (directoryActive)
     {
         const Channel& dirChannel = channels[secondaryAddress];
-        SetDebugLine(7, "DIR   size:%u sent:%u", dirChannel.cursor, dirChannel.bytesSent);
+        SetDebugLine(8, "DIR   size:%u sent:%u", dirChannel.cursor, dirChannel.bytesSent);
     }
 
     if (channels[secondaryAddress].open)
     {
         const Channel& ch = channels[secondaryAddress];
-        FSIZE_t pos = f_tell(const_cast<FIL*>(&ch.file));
-        SetDebugLine(8, "FILE  pos:%lu size:%lu", static_cast<unsigned long>(pos), static_cast<unsigned long>(ch.fileSize));
+        if (IsCbmImageModeActive())
+        {
+            SetDebugLine(9, "FILE  pos:%lu cbm",
+                static_cast<unsigned long>(GetCbmImageChannelPosition(secondaryAddress)));
+        }
+        else
+        {
+            FSIZE_t pos = f_tell(const_cast<FIL*>(&ch.file));
+            SetDebugLine(9, "FILE  pos:%lu size:%lu",
+                static_cast<unsigned long>(pos), static_cast<unsigned long>(ch.fileSize));
+        }
     }
     else if (lastOpenPath[0] != '\0')
-        SetDebugLine(8, "OPEN: %s", lastOpenPath);
+        SetDebugLine(9, "OPEN: %s", lastOpenPath);
 
     int lineIndex = debugLineCount;
     for (int i = 0; i < debugHistoryCount && lineIndex < DEBUG_LINE_CAPACITY; ++i, ++lineIndex)
