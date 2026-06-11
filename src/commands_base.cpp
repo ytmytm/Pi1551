@@ -1923,6 +1923,53 @@ void Commands_Base::OpenFile()
 						channel.open = true;
 						f_stat(filename, &channel.filInfo);
 					}
+					else
+					{
+						// Fall back to case-insensitive match in the star file directory.
+						char dirPath[256];
+						char starBase[256];
+						strncpy(dirPath, filename, sizeof(dirPath));
+						dirPath[sizeof(dirPath) - 1] = '\0';
+						char* lastSlash = strrchr(dirPath, '/');
+						if (lastSlash)
+						{
+							strncpy(starBase, lastSlash + 1, sizeof(starBase));
+							starBase[sizeof(starBase) - 1] = '\0';
+							*lastSlash = '\0';
+						}
+						else
+						{
+							strncpy(starBase, filename, sizeof(starBase));
+							starBase[sizeof(starBase) - 1] = '\0';
+							dirPath[0] = '\0';
+						}
+
+						if (dirPath[0] != '\0' && f_opendir(&dir, dirPath) == FR_OK)
+						{
+							while (f_readdir(&dir, &channel.filInfo) == FR_OK && channel.filInfo.fname[0] != 0)
+							{
+								if ((channel.filInfo.fattrib & AM_DIR) != 0)
+									continue;
+								if (strcasecmp(channel.filInfo.fname, starBase) == 0)
+								{
+									char resolvedPath[256];
+									snprintf(resolvedPath, sizeof(resolvedPath), "%s/%s", dirPath, channel.filInfo.fname);
+									res = f_open(&channel.file, resolvedPath, mode);
+									if (res == FR_OK)
+									{
+										found = true;
+										channel.open = true;
+										strncpy(filename, resolvedPath, sizeof(filename) - 1);
+										filename[sizeof(filename) - 1] = '\0';
+										strncpy(lastOpenPath, resolvedPath, sizeof(lastOpenPath) - 1);
+										lastOpenPath[sizeof(lastOpenPath) - 1] = '\0';
+									}
+									break;
+								}
+							}
+							f_closedir(&dir);
+						}
+					}
 				}
 				else if (FindFirst(dir, filename, channel.filInfo))
 				{

@@ -915,6 +915,21 @@ void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = 
 	}
 }
 
+#if defined(PI1551SUPPORT)
+static void PrintTcbmDebugOverlay(int baseY, int textColour, int bgColour)
+{
+	m_TCBM_Commands.RefreshDebugOverlay();
+	int debugLineCount = 0;
+	const char* const* debugLines = m_TCBM_Commands.GetDebugLines(debugLineCount);
+	int lineSpacing = screen.ScaleY(18);
+	for (int i = 0; i < debugLineCount; ++i)
+	{
+		screen.PrintText(false, 0, baseY - i * lineSpacing,
+			const_cast<char*>(debugLines[i]), textColour, bgColour);
+	}
+}
+#endif
+
 // This runs on core0 and frees up core1 to just run the emulator.
 // Care must be taken not to crowd out the shared cache with core1 as this could slow down core1 so that it no longer can perform its duties in the 1us timings it requires.
 void UpdateScreen()
@@ -1497,19 +1512,9 @@ void UpdateScreen()
 			}
 		}
 
-		// TCBM browse mode diagnostics (only shown when DisplayPC is enabled)
-		// Place this BEFORE the emulation check so it always runs in browse mode
-		if (emulating == IEC_COMMANDS && options.DisplayPC())
-		{
-			int debugLineCount = 0;
-			const char* const* debugLines = m_TCBM_Commands.GetDebugLines(debugLineCount);
-			int lineSpacing = screen.ScaleY(18);
-			int baseY = static_cast<int>(y) - lineSpacing;
-			for (int i = 0; i < debugLineCount; ++i)
-			{
-				screen.PrintText(false, 49 * 8, baseY - i * lineSpacing, const_cast<char*>(debugLines[i]), textColour, bgColour);
-			}
-		}
+		// TCBM protocol overlay (always visible; independent of DisplayPC)
+		if (emulating == IEC_COMMANDS)
+			PrintTcbmDebugOverlay(static_cast<int>(y) - screen.ScaleY(18), textColour, bgColour);
 #endif
 
 		if (emulating != IEC_COMMANDS)
@@ -1580,19 +1585,13 @@ void UpdateScreen()
 						pinDAV ? 1 : 0, pinACK ? 1 : 0, pinST0, pinST1, pinDIO);
 					screen.PrintText(false, 49*8, y-36, tempBuffer, textColour, bgColour);
 				}
-				else if (emulating == IEC_COMMANDS)
-				{
-				int debugLineCount = 0;
-				const char* const* debugLines = m_TCBM_Commands.GetDebugLines(debugLineCount);
-				int lineSpacing = screen.ScaleY(18);
-				int baseY = static_cast<int>(y) - lineSpacing;
-				for (int i = 0; i < debugLineCount; ++i)
-				{
-					screen.PrintText(false, 49 * 8, baseY - i * lineSpacing, const_cast<char*>(debugLines[i]), textColour, bgColour);
-				}
-				}
 #endif
 			}
+
+#if defined(PI1551SUPPORT)
+			if (emulating == EMULATING_1551)
+				PrintTcbmDebugOverlay(static_cast<int>(y) - screen.ScaleY(72), textColour, bgColour);
+#endif
 
 			if (caddyIndexChangedTimer == 0)
 			{
@@ -2202,11 +2201,16 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 	{
 		u8 talkActive = peek6502_1551(0x5B);
 		u8 secondary = peek6502_1551(0x7D);
-		if (talkActive && (secondary & 0xF0) == 0x70)
+		if (talkActive && (secondary & 0xF0) == 0x70
+			&& m_TCBM_Commands.IsPendingEmulationFastFileTransfer())
 		{
 			u8 channel = secondary & 0x0F;
+			write6502_1551(0x7C, secondary & 0x0F);
+			m_TCBM_Commands.CompleteEmulationSecondaryCommandAck();
 			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
+			write6502_1551(0x5B, 0);
+			write6502_1551(0x5C, 0);
 			pi1551.m6502.SetPC(0xEABD);
 		}
 	}

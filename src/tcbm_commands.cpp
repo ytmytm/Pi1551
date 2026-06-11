@@ -214,6 +214,11 @@ const char* const* TCBM_Commands::GetDebugLines(int& lineCount) const
     return linePtrs;
 }
 
+void TCBM_Commands::RefreshDebugOverlay()
+{
+    UpdateDebugOverlay();
+}
+
 void TCBM_Commands::AbortBlockingTransfer(const char* reason)
 {
     if (reason && reason[0] != '\0')
@@ -250,6 +255,8 @@ void TCBM_Commands::ResetStateMachine()
 	fastRequest.filename[0] = '\0';
 	blockIoBytesRemaining = 0;
 	cbm_image_block_io_end();
+	for (int i = 0; i < 16; ++i)
+		channels[i].command[0] = '\0';
 	ClearDebugOverlay();
 	SetDebugLine(0, "TCBM idle (%s)", RoleToString(deviceRole));
 }
@@ -786,14 +793,14 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 		}
 		else
 		{
-			tcbmState = TCBM_STATE_IDLE;
-			deviceRole = DEVICE_ROLE_PASSIVE;
+			tcbmState = TCBM_STATE_LOAD;
+			deviceRole = DEVICE_ROLE_TALK;
 			if (lastOpenPath[0] != '\0')
 				PushDebugLine("LOAD fail: %s", lastOpenPath);
 			else
 				PushDebugLine("LOAD fail ch %u cmd:%s", channel, reinterpret_cast<const char*>(ch.command));
 		}
-		return false;
+		return true;
 	}
 
 	ch.bytesSent = 0;
@@ -1939,6 +1946,26 @@ bool TCBM_Commands::IsPendingFastBlockTransfer() const
 		|| tcbmState == TCBM_STATE_FAST_BLOCKWRITE;
 }
 
+bool TCBM_Commands::IsPendingEmulationFastFileTransfer() const
+{
+	return fastRequest.type != FAST_REQ_NONE && !IsPendingFastBlockTransfer();
+}
+
+void TCBM_Commands::CompleteEmulationSecondaryCommandAck()
+{
+	// 1551 ROM B_C135..RTS: ACK the secondary-address byte the trap caught at PC=$C0E4.
+	TCBM_Bus::SetDataInput();
+	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+	TCBM_Bus::AssertACK();
+	if (!WaitForDAVState(true, "emu sec ack"))
+	{
+		PushDebugLine("emu sec ack timeout");
+		return;
+	}
+	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
+	TCBM_Bus::ReadBrowseMode();
+}
+
 bool TCBM_Commands::WriteSerialPortByte(u8 data, bool eoi)
 {
     return WriteSerialPortByteWithStatus(data, eoi ? TCBM_STATUS_EOI : TCBM_STATUS_OK);
@@ -2017,6 +2044,8 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 {
 	if (length < 2 || data[0] != 'U' || data[1] != '0')
 		return false;
+
+	EnsureCbmImageModeFromMounted();
 
 	Channel& ch = channels[15];
 	ch.cursor = 0;
