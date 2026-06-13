@@ -8,6 +8,7 @@
     - must do DIR after each C16 reset, otherwise DLOAD won't work (OPEN15,8,15:CLOSE15 is not enough)
     - there is clearly some wrong state after reset issue
     - that's exactly the problem described below as shift+run/stop
+    - but DLOAD"* works, it's shift+run/stop which doesn't
 + (done) must support SD2IEC option to list disk images as DIR
     - docs: https://c64os.com/post/sd2iecdocumentation
     - this is enabled unconditionally, not an option
