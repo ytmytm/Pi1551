@@ -57,23 +57,30 @@
 
 - remove dead code and 1541/1581 stuff
 - remove debug HDMI output
+- check if device change with U0> works
+- check if sd2iec commands listed in local documentation still work
+
+- fastdir/fastload (secondary $70)/U0 commands work for browser and d71/81/80/82 images
+    - trouble is with D64 and fast protocol
+        - prince of persia loaded as a whole
+        - turbo outrun load fails somewhere in the middle of the load
+            - after next reset fastdir is stuck with mounted d64 data, while OLED shows browser files
+    - G64 listing via FASTDIR doesn't work
 
 - disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
-    - files can be loaded from d81 (alpharay,princeofpersia) for tcbm-patched games
     - d64 works normally (without fastdir it's possible to exit them)
     - maybe this needs a clean room implementation based on https://www.pagetable.com/?p=1324
       and Arduino (only at future stage add support for multiple channels for BASIC operations)
       to decouple it from legacy IEC code
+
 - support U0 commands from tcbm2sd (fastload protocol, device number change)
-    - fastloader from browser works
     - fastdir works from browser and images (incl. d64)
     - fastloader from d64 fails immediately, doesn't load anything HDMI says timeout waiting for fastload to complete; pi1551 is stuck with disk image data for FASTDIR
     - could it be b/c it can't find the file by its name (confusion of ascii-petscii encoding)
-    - fastloader with U0 $1f doesn't work - prince of persia tcbmfast shows that handler is
-      stuck with loading directory(?) as if filename was not recognized or some old data stuck
-    - block read doesn't work (block-rw prg with d64 mounted) either
+    - block read doesn't work (block-rw prg with d64 mounted)
     - 1551 DOS CPU trap enter/exit in wrong place? should be caught and exited in the same way as we handle 'CD' command
-    - Write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
+
+- write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
     - D80/D82 write per VICE disk image reference — read-only for now.
     - werify read/write/allocate/bam against vice doc
 

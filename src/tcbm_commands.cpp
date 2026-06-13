@@ -657,10 +657,18 @@ void TCBM_Commands::FinaliseOpenState(u8 channel)
 	{
 		ch.cursor = 0;
 		ch.bytesSent = 0;
-		if (!PreparePendingFastBlockTransfer() && fastRequest.type != FAST_REQ_NONE)
+		bool startedFastTransfer = false;
+		if (fastRequest.type == FAST_REQ_FILENAME || fastRequest.type == FAST_REQ_TRACK_SECTOR)
+			startedFastTransfer = PrepareLoadChannel(0, true);
+		else
+			startedFastTransfer = PreparePendingFastBlockTransfer();
+		if (!startedFastTransfer && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
-		tcbmState = TCBM_STATE_IDLE;
-		deviceRole = DEVICE_ROLE_PASSIVE;
+		if (!startedFastTransfer)
+		{
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+		}
 		return;
 	}
 
