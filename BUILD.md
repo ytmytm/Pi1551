@@ -25,7 +25,9 @@ On Debian or Ubuntu:
 
 ```sh
 sudo apt-get update
-sudo apt-get install make gcc-arm-none-eabi binutils-arm-none-eabi
+sudo apt-get install make gcc-arm-none-eabi binutils-arm-none-eabi \
+  libnewlib-arm-none-eabi libstdc++-arm-none-eabi-dev \
+  libstdc++-arm-none-eabi-newlib
 ```
 
 On macOS with Homebrew, install the cross compiler. Apple Command Line Tools
