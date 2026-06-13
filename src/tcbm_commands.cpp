@@ -1384,20 +1384,10 @@ void TCBM_Commands::ServiceLoadState()
             }
 
             case TCBM_CODE_COMMAND:
-            {
-                u8 data;
-                if (!ReadTCBMDataByteBlocking(data))
+            case TCBM_CODE_SECOND:
+                if (HandleTransferBusCommand(command))
                     return;
-
-                if (data == CMD_UNTALK)
-                {
-                    ReleaseTransferChannel(secondaryAddress);
-                    tcbmState = TCBM_STATE_IDLE;
-                    deviceRole = DEVICE_ROLE_PASSIVE;
-                    return;
-                }
                 break;
-            }
 
             default:
                 return;
@@ -1507,20 +1497,83 @@ void TCBM_Commands::ServiceDirectoryState()
     }
     else if (command == TCBM_CODE_COMMAND)
     {
-        u8 data;
-        if (!ReadTCBMDataByteBlocking(data))
+        HandleTransferBusCommand(command);
+    }
+    else if (command == TCBM_CODE_SECOND)
+    {
+        HandleTransferBusCommand(command);
+    }
+}
+
+bool TCBM_Commands::HandleTransferBusCommand(u8 command)
+{
+    if (command == TCBM_CODE_SECOND)
+    {
+        u8 discard;
+        if (!ReadTCBMDataByteBlocking(discard))
+            return true;
+
+        ReleaseTransferChannel(secondaryAddress);
+        tcbmState = TCBM_STATE_IDLE;
+        deviceRole = DEVICE_ROLE_PASSIVE;
+        PushDebugLine("Transfer aborted on stray SECOND $%02X", discard);
+        return true;
+    }
+
+    if (command != TCBM_CODE_COMMAND)
+        return false;
+
+    u8 data;
+    if (!ReadTCBMDataByteBlocking(data))
+        return true;
+
+    if (data == CMD_UNTALK || data == CMD_UNLISTEN)
+    {
+        ReleaseTransferChannel(secondaryAddress);
+        tcbmState = TCBM_STATE_IDLE;
+        deviceRole = DEVICE_ROLE_PASSIVE;
+        return true;
+    }
+
+    if (data == CMD_LISTEN || data == CMD_TALK)
+    {
+        ReleaseTransferChannel(secondaryAddress);
+        deviceRole = (data == CMD_LISTEN) ? DEVICE_ROLE_LISTEN : DEVICE_ROLE_TALK;
+
+        u8 nextCommand;
+        if (!ReadTCBMCommandByteBlocking(nextCommand))
         {
-            AbortBlockingTransfer("DIR UNTALK");
-            return;
+            AbortBlockingTransfer(data == CMD_LISTEN ? "LISTEN handoff" : "TALK handoff");
+            return true;
         }
 
-        if (data == CMD_UNTALK)
+        if (nextCommand != TCBM_CODE_SECOND)
         {
-            ReleaseTransferChannel(secondaryAddress);
+            u8 discard;
+            ReadTCBMDataByteBlocking(discard);
             tcbmState = TCBM_STATE_IDLE;
             deviceRole = DEVICE_ROLE_PASSIVE;
+            PushDebugLine("Transfer handoff expected SECOND got $%02X", nextCommand);
+            return true;
         }
+
+        u8 secondary;
+        if (!ReadTCBMDataByteBlocking(secondary))
+        {
+            AbortBlockingTransfer(data == CMD_LISTEN ? "LISTEN secondary" : "TALK secondary");
+            return true;
+        }
+
+        if (data == CMD_LISTEN)
+            HandleListenSecondary(secondary);
+        else
+            HandleTalkSecondary(secondary);
+        PushDebugLine("Transfer handoff %s sec $%02X", data == CMD_LISTEN ? "LISTEN" : "TALK", secondary);
+        return true;
     }
+
+    PushDebugLine("Transfer command $%02X ignored", data);
+    return false;
 }
 
 // send_data_stream(fast_mode=true) entry in tcbm2sd.ino: start from Kernal

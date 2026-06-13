@@ -127,6 +127,7 @@ protected:
 	void ServiceLoadState();
 	void ServiceSaveState();
 	void ServiceDirectoryState();
+	bool HandleTransferBusCommand(u8 command);
 	void ServiceFastLoadState();
 	void ServiceFastDirectoryState();
 	void ServiceFastBlockReadState();

@@ -4,11 +4,6 @@
 
 # Browser mode
 
-- browser mode is sometimes faulty
-    - must do DIR after each C16 reset, otherwise DLOAD won't work (OPEN15,8,15:CLOSE15 is not enough)
-    - there is clearly some wrong state after reset issue
-    - that's exactly the problem described below as shift+run/stop
-    - but DLOAD"* works, it's shift+run/stop which doesn't
 + (done) must support SD2IEC option to list disk images as DIR
     - docs: https://c64os.com/post/sd2iecdocumentation
     - this is enabled unconditionally, not an option
@@ -61,14 +56,7 @@
 + update readme and descriptions, original readme didn't have full information (it was on the website)
 
 - remove dead code and 1541/1581 stuff
-
-- shift+run/stop as DLOAD"* shortcut doesn't work properly
-    - hangs if used directly
-    - hangs if only ?DS$ was done after reset
-    - hangs if there was LOAD"$",8
-    - but works if directory was listed with DIR
-    - suggests that this is some kind of state problem
-    - HDMI says WRITE_BYTE[4] and timeout waiting for DAV=1
+- remove debug HDMI output
 
 - disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
     - files can be loaded from d81 (alpharay,princeofpersia) for tcbm-patched games
