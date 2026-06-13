@@ -1,0 +1,66 @@
+name: Build Pi1551
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  RASPPI: "3"
+
+jobs:
+  build:
+    name: Build Raspberry Pi 3 firmware
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make \
+            gcc-arm-none-eabi \
+            binutils-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            zip
+
+      - name: Show toolchain versions
+        run: |
+          arm-none-eabi-gcc --version
+          make --version
+
+      - name: Build kernel.img
+        run: |
+          make RASPPI="$RASPPI"
+          test -f kernel.img
+
+      - name: Package artifacts
+        run: |
+          mkdir -p dist/kernel dist/sdcard-root
+
+          cp kernel.img dist/kernel/kernel.img
+          (cd dist/kernel && zip -9 ../pi1551-kernel-rpi3.zip kernel.img)
+
+          cp -a sdcard/. dist/sdcard-root/
+          cp kernel.img dist/sdcard-root/kernel.img
+          (cd dist/sdcard-root && zip -9 -r ../pi1551-sdcard-root.zip .)
+
+          test -f dist/pi1551-kernel-rpi3.zip
+          test -f dist/pi1551-sdcard-root.zip
+
+      - name: Upload kernel.img package
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi1551-kernel-rpi3
+          path: dist/pi1551-kernel-rpi3.zip
+          if-no-files-found: error
+
+      - name: Upload SD card root package
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi1551-sdcard-root
+          path: dist/pi1551-sdcard-root.zip
+          if-no-files-found: error
