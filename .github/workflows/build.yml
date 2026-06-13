@@ -31,6 +31,8 @@ jobs:
 
       - name: Show toolchain versions
         run: |
+          git rev-parse HEAD
+          sed -n '1,8p' src/performance.c
           arm-none-eabi-gcc --version
           make --version
 
