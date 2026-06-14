@@ -81,7 +81,7 @@ static const u8 filetypes[] = {
 
 void Commands_Base::SetHeaderVersion()
 {
-	// Build "PI1551 V01.24" (or similar) padded to 16 characters between the quotes
+	// Build "PI1551 V01.25" (or similar) padded to 16 characters between the quotes
 	char nameField[17];
 	snprintf(nameField, sizeof(nameField), "%s V%02u.%02u", PI_DRIVE_NAME, versionMajor, versionMinor);
 

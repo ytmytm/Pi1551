@@ -54,16 +54,19 @@
 + SW4 in emulation mapped to exit emulation
 + prepare full bootable sd card for download
 + update readme and descriptions, original readme didn't have full information (it was on the website)
++ test if kernel compiled on github works
++ test if sdcard zipped on github is complete
 
 - remove dead code and 1541/1581 stuff
 - remove debug HDMI output
 - check if device change with U0> works
 - check if sd2iec commands listed in local documentation still work
-- test if kernel compiled on github works
-- test if sdcard zipped on github is complete
 
-
-- disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
+- U0 disabled by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
+  so that it's not recognized by BOOT.T2SD directory browser
+  this doesn't prevent fastloaders from working from D81 images (Alpharay, Price of Persia)
+  from games patched for TCBM2SD
+  The reason is that D64 support is faulty and it can't be disabled in the BOOT.T2SD selectively
     - fastdir/fastload (secondary $70)/U0 commands work for browser and d71/81/80/82 images
     - fastdir/fastload works in browser mode, also d71/81/80/82 images
         - but fails on 220 block file on d81 image, works on 147 one from d82
