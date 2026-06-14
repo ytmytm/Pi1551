@@ -633,6 +633,7 @@ CbmFsImage* cbm_di_load_image(FIL* file)
 		return nullptr;
 
 	CbmFsImage* di = &s_di;
+	std::memset(di, 0, sizeof(*di));
 	di->file = file;
 	if (!detect_image_type(file, di))
 	{

@@ -2330,7 +2330,13 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	while (exitReason == EXIT_UNKNOWN)
 	{
 		TCBM_Bus::PollGPIOInputs1551();
-		if (m_TCBM_Commands.IsTransferActive() && !TCBM_Bus::GetPI_DAV())
+		TCBM_Commands::TCBMState tcbmState = m_TCBM_Commands.GetState();
+		bool browserFastTransfer =
+			tcbmState == TCBM_Commands::TCBM_STATE_FASTLOAD ||
+			tcbmState == TCBM_Commands::TCBM_STATE_FASTDIR ||
+			tcbmState == TCBM_Commands::TCBM_STATE_FAST_BLOCKREAD ||
+			tcbmState == TCBM_Commands::TCBM_STATE_FAST_BLOCKWRITE;
+		if (browserFastTransfer && !TCBM_Bus::GetPI_DAV())
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
 
 		slowUiTick = (--uiPollCountdown <= 0);
