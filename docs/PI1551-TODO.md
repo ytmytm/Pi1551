@@ -62,23 +62,19 @@
 - test if kernel compiled on github works
 - test if sdcard zipped on github is complete
 
-- fastdir/fastload (secondary $70)/U0 commands work for browser and d71/81/80/82 images
+
+- disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
+    - fastdir/fastload (secondary $70)/U0 commands work for browser and d71/81/80/82 images
+    - fastdir/fastload works in browser mode, also d71/81/80/82 images
+        - but fails on 220 block file on d81 image, works on 147 one from d82
+    - fastdir works on d64/g64
     - trouble is with D64 and fast protocol
         - turbo outrun load fails somewhere in the middle of the load
             (worked at 7e6ceff8a805f244edb535bbf4a5a2ffd3c18b35 broken later)
-
-- disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
-    - d64 works normally (without fastdir it's possible to exit them)
     - maybe this needs a clean room implementation based on https://www.pagetable.com/?p=1324
       and Arduino (only at future stage add support for multiple channels for BASIC operations)
       to decouple it from legacy IEC code
-
-- support U0 commands from tcbm2sd (fastload protocol, device number change)
-    - fastdir works from browser and images (incl. d64)
-    - fastloader from d64 fails immediately, doesn't load anything HDMI says timeout waiting for fastload to complete; pi1551 is stuck with disk image data for FASTDIR
-    - could it be b/c it can't find the file by its name (confusion of ascii-petscii encoding)
     - block read doesn't work (block-rw prg with d64 mounted)
-    - 1551 DOS CPU trap enter/exit in wrong place? should be caught and exited in the same way as we handle 'CD' command
 
 - write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
     - D80/D82 write per VICE disk image reference — read-only for now.
