@@ -59,13 +59,13 @@
 - remove debug HDMI output
 - check if device change with U0> works
 - check if sd2iec commands listed in local documentation still work
+- test if kernel compiled on github works
+- test if sdcard zipped on github is complete
 
 - fastdir/fastload (secondary $70)/U0 commands work for browser and d71/81/80/82 images
     - trouble is with D64 and fast protocol
-        - prince of persia loaded as a whole
         - turbo outrun load fails somewhere in the middle of the load
-            - after next reset fastdir is stuck with mounted d64 data, while OLED shows browser files
-    - G64 listing via FASTDIR doesn't work
+            (worked at 7e6ceff8a805f244edb535bbf4a5a2ffd3c18b35 broken later)
 
 - disabled U0 by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
     - d64 works normally (without fastdir it's possible to exit them)

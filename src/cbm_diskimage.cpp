@@ -164,6 +164,12 @@ static u32 get_block_num(CbmImageType type, CbmTrackSector ts)
 
 static u8* get_ts_addr(CbmFsImage* di, CbmTrackSector ts)
 {
+	if (di->sectorReader)
+	{
+		if (!di->sectorReader(di->sectorReaderContext, ts.track, ts.sector, di->image))
+			std::memset(di->image, 0, sizeof(di->image));
+		return di->image;
+	}
 	if (!di->file)
 		return di->image;
 	f_lseek(di->file, get_block_num(di->type, ts) * 256);
@@ -429,6 +435,38 @@ bool cbm_image_mount(const char* path)
 	return true;
 }
 
+bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader, void* context)
+{
+	if (!reader || !context)
+		return false;
+
+	if (s_mount.active && path && path[0] != '\0' && strcasecmp(path, s_mount.path) == 0)
+		return true;
+
+	cbm_image_unmount();
+
+	std::memset(&s_mount.fs, 0, sizeof(s_mount.fs));
+	s_mount.fs.type = CBM_IMG_D64;
+	s_mount.fs.bam.track = 18;
+	s_mount.fs.bam.sector = 0;
+	s_mount.fs.dir.track = 18;
+	s_mount.fs.dir.sector = 0;
+	s_mount.fs.file = nullptr;
+	s_mount.fs.sectorReader = reader;
+	s_mount.fs.sectorReaderContext = context;
+	s_mount.fs.blocksfree = blocks_free(&s_mount.fs);
+	set_status(&s_mount.fs, 254, 0, 0);
+
+	s_mount.filOpen = false;
+	s_mount.active = true;
+	if (path)
+	{
+		strncpy(s_mount.path, path, sizeof(s_mount.path) - 1);
+		s_mount.path[sizeof(s_mount.path) - 1] = '\0';
+	}
+	return true;
+}
+
 bool cbm_image_is_mounted()
 {
 	return s_mount.active;
@@ -612,6 +650,8 @@ void cbm_di_unload_image(CbmFsImage* di)
 	if (!di)
 		return;
 	di->file = nullptr;
+	di->sectorReader = nullptr;
+	di->sectorReaderContext = nullptr;
 	di->status = 0;
 }
 

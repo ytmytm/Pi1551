@@ -64,6 +64,7 @@ public:
 
 	void Insert(DiskImage* diskImage);
 	inline const DiskImage* GetDiskImage() const { return diskImage; }
+	inline DiskImage* GetDiskImage() { return diskImage; }
 	void Eject();
 	void Reset();
 	inline unsigned Track() const { return headTrackPos; }

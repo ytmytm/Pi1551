@@ -657,11 +657,7 @@ void TCBM_Commands::FinaliseOpenState(u8 channel)
 	{
 		ch.cursor = 0;
 		ch.bytesSent = 0;
-		bool startedFastTransfer = false;
-		if (fastRequest.type == FAST_REQ_FILENAME || fastRequest.type == FAST_REQ_TRACK_SECTOR)
-			startedFastTransfer = PrepareLoadChannel(0, true);
-		else
-			startedFastTransfer = PreparePendingFastBlockTransfer();
+		bool startedFastTransfer = PreparePendingFastTransfer(0);
 		if (!startedFastTransfer && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
 		if (!startedFastTransfer)
@@ -2060,6 +2056,13 @@ bool TCBM_Commands::PreparePendingFastBlockTransfer()
 	return false;
 }
 
+bool TCBM_Commands::PreparePendingFastTransfer(u8 channel)
+{
+	if (fastRequest.type == FAST_REQ_FILENAME || fastRequest.type == FAST_REQ_TRACK_SECTOR)
+		return PrepareLoadChannel(channel, true);
+	return PreparePendingFastBlockTransfer();
+}
+
 bool TCBM_Commands::IsPendingFastBlockTransfer() const
 {
 	return tcbmState == TCBM_STATE_FAST_BLOCKREAD
@@ -2172,6 +2175,26 @@ void TCBM_Commands::RequestPopDir()
     filInfoSelectedImage.fname[0] = 0;
 }
 
+void TCBM_Commands::MirrorEmulationOpenCommand(u8 channel, const u8* data, size_t length)
+{
+	if (channel >= 15)
+		return;
+
+	Channel& ch = channels[channel];
+	AbortStaleTransferKeepFastRequest(channel);
+
+	while (length > 0 && data[length - 1] == 0x0D)
+		--length;
+
+	size_t copyLen = std::min(length, sizeof(ch.command) - 1);
+	std::memcpy(ch.command, data, copyLen);
+	ch.command[copyLen] = '\0';
+	ch.cursor = 0;
+	ch.bytesSent = 0;
+	PushDebugLine("EMU OPEN mirror ch:%u cmd:%s",
+		channel, reinterpret_cast<const char*>(ch.command));
+}
+
 bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 {
 	if (length < 2 || data[0] != 'U' || data[1] != '0')
@@ -2187,7 +2210,7 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 	ch.cursor = static_cast<u32>(copyLen);
 	if (HandleU0Command(ch))
 	{
-		if (fastRequest.type != FAST_REQ_NONE)
+		if (!PreparePendingFastTransfer(0) && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
 	}
 	return true;
@@ -2245,8 +2268,8 @@ void TCBM_Commands::HandleEmulationFastTalkHandoff(u8 channel)
 
 void TCBM_Commands::RestoreAfterEmulationFastHandoff()
 {
-	// Keep cbm_image mounted during sector emulation so back-to-back fastdir/U0
-	// handoffs do not depend on remount timing (BeginEmulating deactivates on entry).
+	if (mountedImagePath[0] != '\0' && PathUsesSectorEmulation(mountedImagePath))
+		DeactivateCbmImageMode();
 }
 
 void TCBM_Commands::RunBrowserModeTransferUntilIdle()
@@ -2267,7 +2290,6 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	}
 
 	RestoreAfterEmulationFastHandoff();
-	FinaliseFastTransferState();
 	PushDebugLine("FAST handoff done state:%s mounted:%u",
 		GetStateName(), static_cast<unsigned>(cbm_image_is_mounted()));
 

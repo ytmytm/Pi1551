@@ -77,8 +77,10 @@ public:
     static char debugWriteBuffer[64];
 
 	// Emulation-mode traps (1551 ROM) delegate fast transfers to browser handler
+	void MirrorEmulationOpenCommand(u8 channel, const u8* data, size_t length);
 	bool InterceptEmulationU0Command(const u8* data, size_t length);
 	void HandleEmulationFastTalkHandoff(u8 channel);
+	bool PreparePendingFastTransfer(u8 channel = 0);
 	bool PreparePendingFastBlockTransfer();
 	bool IsPendingFastBlockTransfer() const;
 	bool ShouldHandoffEmulationFastTalk() const;

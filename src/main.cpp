@@ -41,6 +41,7 @@ extern "C"
 #if defined(PI1551SUPPORT)
 #include "tcbm_commands.h"
 #include "Pi1551.h"
+#include "cbm_diskimage.h"
 #else
 #include "iec_commands.h"
 #include "Pi1541.h"
@@ -2108,6 +2109,23 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 #endif
 
 #if defined(PI1551SUPPORT)
+static bool Pi1551DecodedSectorReader(void* context, u8 track, u8 sector, u8* buffer)
+{
+	DiskImage* image = static_cast<DiskImage*>(context);
+	return image && image->GetDecodedSector(track, sector, buffer);
+}
+
+static void Pi1551MountDecodedG64ForBrowserHandoff()
+{
+	const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
+	if (!path || DiskImage::GetDiskImageTypeViaExtention(path) != DiskImage::G64)
+		return;
+
+	DiskImage* image = pi1551.drive.GetDiskImage();
+	if (image)
+		cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image);
+}
+
 static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 {
 	// Motor spin-up delay skip trap: if PC is at 0xFA33 and accumulator is 0xA7, change it to 0x01
@@ -2127,6 +2145,19 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 	if (pc == 0xc230)
 	{
 		u8 bufferLen = peek6502_1551(0xa4);
+		u8 secondary = peek6502_1551(0x7d);
+		if ((secondary & 0x80) && (secondary & 0x0f) != 15 && bufferLen > 0)
+		{
+			u8 commandBuf[64];
+			u8 copyLen = bufferLen;
+			if (copyLen > sizeof(commandBuf))
+				copyLen = sizeof(commandBuf);
+			for (u8 i = 0; i < copyLen; ++i)
+				commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
+
+			m_TCBM_Commands.MirrorEmulationOpenCommand(secondary & 0x0f, commandBuf, copyLen);
+		}
+
 		if (bufferLen >= 2)
 		{
 			u8 byte0 = peek6502_1551(0x0200);
@@ -2141,9 +2172,9 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 				for (u8 i = 0; i < copyLen; ++i)
 					commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
 
+				Pi1551MountDecodedG64ForBrowserHandoff();
 				if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
 				{
-					m_TCBM_Commands.PreparePendingFastBlockTransfer();
 					write6502_1551(0xa4, 0);
 					pi1551.m6502.SetPC(0xC283);
 				}
@@ -2207,6 +2238,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 			u8 channel = secondary & 0x0F;
 			write6502_1551(0x7C, secondary & 0x0F);
 			m_TCBM_Commands.CompleteEmulationSecondaryCommandAck();
+			Pi1551MountDecodedG64ForBrowserHandoff();
 			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
 			write6502_1551(0x5B, 0);
@@ -2298,7 +2330,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	while (exitReason == EXIT_UNKNOWN)
 	{
 		TCBM_Bus::PollGPIOInputs1551();
-		if (m_TCBM_Commands.IsPendingFastBlockTransfer() && !TCBM_Bus::GetPI_DAV())
+		if (m_TCBM_Commands.IsTransferActive() && !TCBM_Bus::GetPI_DAV())
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
 
 		slowUiTick = (--uiPollCountdown <= 0);
@@ -2933,6 +2965,8 @@ void emulator()
 			if (diskCaddy.Empty())
 				TCBM_Bus::WaitMicroSeconds(2 * 1000000);
 
+			m_TCBM_Commands.DeactivateCbmImageMode();
+			m_TCBM_Commands.SetMountedDiskImagePath(0);
 			TCBM_Bus::WaitUntilReset();
 			m_TCBM_Commands.ClearPendingImageSelection();
 			emulating = IEC_COMMANDS;
