@@ -11,6 +11,7 @@
 ROM1 = dos1551.bin
 ROM2 = dos1551-ram.bin
 ROM3 = super_dos_1551.rom
+ROM4 = super_dos_ram.bin
 // Legacy single-ROM option (use ROM1 instead):
 //ROM1551 = dos1551.bin
 
