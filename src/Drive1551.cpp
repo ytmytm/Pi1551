@@ -493,6 +493,8 @@ bool Drive::Update(unsigned encoderTicks)
         bool writing = !(m_pTPI->GetPortC()->GetOutput() & 0x10);
 		if (writing && diskImage->GetReadOnly())
 			writing = false;
+		if (writing && diskImage->PrepareTrackForWrite(headTrackPos, CLOCK_SEL_AB, headBitOffset))
+			UpdateHeadSectorPosition();
 
 		// UE6 provides the CPU's clock by dividing the 16Mhz clock by 16.
 		// UE7 (a 74ls193 4bit counter) counts up on the falling edge of the 16Mhz clock. UE7 drives the Encoder/Decoder clock.

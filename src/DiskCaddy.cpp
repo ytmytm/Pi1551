@@ -48,6 +48,7 @@ bool DiskCaddy::Empty()
 	int y;
 	int index;
 	bool anyDirty = false;
+	bool anySaved = false;
 
 #if not defined(EXPERIMENTALZERO)
 	if (screen)
@@ -59,13 +60,19 @@ bool DiskCaddy::Empty()
 		if (disks[index]->IsDirty())
 		{
 			anyDirty = true;
+			bool cannotSaveAsD64 = disks[index]->HasD64IncompatibleFormat();
+			if (!cannotSaveAsD64)
+				anySaved = true;
 #if not defined(EXPERIMENTALZERO)
 			if (screen)
 			{
 				x = screen->ScaleX(screenPosXCaddySelections);
 				y = screen->ScaleY(screenPosYCaddySelections);
 
-				snprintf(buffer, 256, "Saving %s", disks[index]->GetName());
+				if (cannotSaveAsD64)
+					snprintf(buffer, 256, "Can't save as D64");
+				else
+					snprintf(buffer, 256, "Saving %s", disks[index]->GetName());
 				screen->PrintText(false, x, y, buffer, RGBA(0xff, 0xff, 0xff, 0xff), red);
 			}
 #endif
@@ -76,10 +83,13 @@ bool DiskCaddy::Empty()
 				x = 0;
 				y = 0;
 
-				snprintf(buffer, 256, "Saving");
+				snprintf(buffer, 256, cannotSaveAsD64 ? "Can't save" : "Saving");
 				screenLCD->PrintText(false, x, y, buffer, RGBA(0xff, 0xff, 0xff, 0xff), BkColour);
 				y += screenLCD->GetFontHeight();
-				snprintf(buffer, 256, "%s                ", disks[index]->GetName());
+				if (cannotSaveAsD64)
+					snprintf(buffer, 256, "as D64                ");
+				else
+					snprintf(buffer, 256, "%s                ", disks[index]->GetName());
 				screenLCD->PrintText(false, x, y, buffer, RGBA(0xff, 0xff, 0xff, 0xff), red);
 				screenLCD->SwapBuffers();
 			}
@@ -88,7 +98,7 @@ bool DiskCaddy::Empty()
 		delete disks[index];
 	}
 
-	if (anyDirty)
+	if (anySaved)
 	{
 #if not defined(EXPERIMENTALZERO)
 		if (screen)

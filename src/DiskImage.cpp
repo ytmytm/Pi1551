@@ -143,6 +143,7 @@ int gap_match_length = 7;	// Used by gcr.cpp
 DiskImage::DiskImage()
 	: readOnly(false)
 	, dirty(false)
+	, d64IncompatibleFormat(false)
 	, attachedImageSize(0)
 	, fileInfo(&fileInfoStorage)
 {
@@ -198,9 +199,68 @@ void DiskImage::Close()
 	}
 	memset(trackLengths, 0, sizeof(trackLengths));
 	memset(trackUsed, 0, sizeof(trackUsed));
+	d64IncompatibleFormat = false;
 	diskType = NONE;
 	fileInfo = 0;
 	hash = 0;
+}
+
+bool DiskImage::PrepareTrackForWrite(u32 track, u32 density, u32& bitOffset)
+{
+	if (track >= HALF_TRACK_COUNT || readOnly)
+		return false;
+
+	density &= 3;
+	const unsigned stockDensity = GetSpeedZoneIndexD64(track >> 1);
+
+	if (diskType == D64)
+	{
+		if (density != stockDensity)
+		{
+			d64IncompatibleFormat = true;
+			dirty = true;
+		}
+		return false;
+	}
+
+	if (diskType != G64)
+		return false;
+
+	const unsigned oldBits = BitsInTrack(track);
+	const unsigned oldLength = trackLengths[track];
+	const unsigned newLength = trackSize[density];
+
+	if (trackDensity[track] == density && trackUsed[track] && oldLength != 0)
+		return false;
+
+	if (oldBits != 0)
+		bitOffset = (u32)(((u64)bitOffset * (newLength << 3)) / oldBits);
+	else
+		bitOffset = 0;
+
+	if (oldLength < newLength)
+	{
+#if defined(EXPERIMENTALZERO)
+		memset(&tracks[(track << 13) + oldLength], 0x55, newLength - oldLength);
+#else
+		memset(tracks[track] + oldLength, 0x55, newLength - oldLength);
+#endif
+	}
+	else if (!trackUsed[track])
+	{
+#if defined(EXPERIMENTALZERO)
+		memset(&tracks[track << 13], 0x55, newLength);
+#else
+		memset(tracks[track], 0x55, newLength);
+#endif
+	}
+
+	trackDensity[track] = (unsigned char)density;
+	trackLengths[track] = newLength;
+	trackUsed[track] = true;
+	trackDirty[track] = true;
+	dirty = true;
+	return true;
 }
 
 void DiskImage::DumpTrack(unsigned track)
@@ -317,6 +377,12 @@ bool DiskImage::WriteD64(char* name)
 	if (readOnly)
 		return true;
 
+	if (d64IncompatibleFormat)
+	{
+		DEBUG_LOG("Disk image cannot be saved as D64.\r\n");
+		return false;
+	}
+
 	if (!GetID(34, id))
 	{
 		DEBUG_LOG("Cannot find directory sector.\r\n");
@@ -385,7 +451,10 @@ void DiskImage::CloseD64()
 {
 	if (dirty)
 	{
-		WriteD64();
+		if (!d64IncompatibleFormat)
+			WriteD64();
+		else
+			DEBUG_LOG("Disk image cannot be saved as D64.\r\n");
 		dirty = false;
 	}
 	attachedImageSize = 0;
@@ -876,10 +945,20 @@ bool DiskImage::OpenG64(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 		//DEBUG_LOG("numTracks = %d\r\n", numTracks);
 
 		unsigned char* data = diskImage + 12;
-		unsigned char* speedZoneData = diskImage + 0x15c;
+		unsigned char* speedZoneData = diskImage + 12 + (numTracks * 4);
 		unsigned short trackLength = 0;
 
 		unsigned track;
+
+		for (track = 0; track < HALF_TRACK_COUNT; ++track)
+		{
+			trackDensity[track] = (unsigned char)GetSpeedZoneIndexD64(track >> 1);
+			trackLengths[track] = capacity_max[trackDensity[track]];
+			trackUsed[track] = false;
+		}
+
+		if (numTracks > HALF_TRACK_COUNT)
+			numTracks = HALF_TRACK_COUNT;
 
 		for (track = 0; track < numTracks; ++track)
 		{
@@ -888,7 +967,8 @@ bool DiskImage::OpenG64(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 			//DEBUG_LOG("Track = %d Offset = %x\r\n", track, offset);
 
-			trackDensity[track] = *(unsigned*)(speedZoneData + track * 4);
+			unsigned speedZone = *(unsigned*)(speedZoneData + track * 4);
+			trackDensity[track] = (unsigned char)((speedZone < 4) ? speedZone : GetSpeedZoneIndexD64(track >> 1));
 
 			if (offset == 0)
 			{

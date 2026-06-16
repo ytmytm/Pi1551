@@ -184,6 +184,8 @@ public:
 	unsigned LastTrackUsed();
 
 	bool IsDirty() const { return dirty; }
+	bool HasD64IncompatibleFormat() const { return d64IncompatibleFormat; }
+	bool PrepareTrackForWrite(u32 track, u32 density, u32& bitOffset);
 
 	static unsigned char readBuffer[READBUFFER_SIZE];
 
@@ -255,6 +257,7 @@ private:
 	
 	bool readOnly;
 	bool dirty;
+	bool d64IncompatibleFormat;
 	unsigned attachedImageSize;
 	DiskType diskType;
 	void CopyFileInfo(const FILINFO* src);

@@ -14,7 +14,10 @@ player through the tape port only, without the TCBM ribbon cable.
 
 ## Main Features
 
-- Cycle-exact Commodore 1551 emulation for D64 disk images.
+- Cycle-exact Commodore 1551 emulation for D64 and G64 disk images.
+- G64-only preservation of SuperDOS 1551 non-standard formatting, including
+  per-track density changes that current YaPe/VICE releases do not handle
+  correctly when formatting disks.
 - File-level SD card access over TCBM, similar in spirit to SD2IEC/tcbm2sd
   browser mode (including direct `LOAD` of `.prg` files without emulation).
 - Optional disk caddy: `.prg` files can be wrapped in a temporary one-file D64
@@ -130,16 +133,17 @@ note says otherwise.
 1. Prepare a FAT32 SD card.
 2. Copy the contents of `sdcard/` to the SD card root.
 3. Copy the built or released `kernel.img` to the SD card root.
-4. Put your D64 files and other media under `/1551`.
+4. Put your D64/G64 files and other media under `/1551`.
 5. Insert the card in the Raspberry Pi attached to a PI1551-hat or PI1551-III.
 6. Connect the interface to the tcbm2sd paddle with the ribbon cable.
 7. Power the Commodore and Raspberry Pi as described by the hardware project.
 
 From the Commodore, the device appears as a TCBM disk device, normally unit 8.
-From the Pi UI, select a D64 to enter 1551 emulation, or browse SD card files
-directly in browser mode. A `.prg` can also be mounted for emulation (Enter in
-the Pi browser builds a one-file virtual D64); use normal `LOAD "name",8` on the
-Plus/4 when you only want to run a program without starting emulation.
+From the Pi UI, select a D64 or G64 to enter 1551 emulation, or browse SD card
+files directly in browser mode. A `.prg` can also be mounted for emulation
+(Enter in the Pi browser builds a one-file virtual D64); use normal
+`LOAD "name",8` on the Plus/4 when you only want to run a program without
+starting emulation.
 
 See [USER-MANUAL.md](USER-MANUAL.md) for directory listing types (`DIR` vs
 `PRG`), caddy behavior, and the full Enter/Insert distinction.
@@ -149,7 +153,8 @@ See [USER-MANUAL.md](USER-MANUAL.md) for directory listing types (`DIR` vs
 Pi1551 has three practical modes:
 
 - Browser mode: file-level SD card access and on-device media selection.
-- 1551 emulation mode: cycle-exact drive emulation for a mounted D64 image.
+- 1551 emulation mode: cycle-exact drive emulation for a mounted D64 or G64
+  image.
 - Tape player: TAP playback can continue while browsing or while a disk image
   is mounted.
 
@@ -158,13 +163,13 @@ keyboard shortcuts, TAP behavior, and every accepted `options.txt` setting.
 
 ## SD2IEC And tcbm2sd Comparison
 
-Pi1551 is closest to Pi1541 in philosophy when a D64 is mounted: it emulates a
-real drive CPU and 1551 DOS behavior, instead of only interpreting filesystem
-commands. That makes it much more compatible with software that expects a real
-1551 drive and its timing.
+Pi1551 is closest to Pi1541 in philosophy when a D64 or G64 is mounted: it
+emulates a real drive CPU and 1551 DOS behavior, instead of only interpreting
+filesystem commands. That makes it much more compatible with software that
+expects a real 1551 drive and its timing.
 
 Compared with SD2IEC-style devices, Pi1551 also has browser-mode file access,
-but that mode is not the whole product. Browser mode is for convenience; D64
+but that mode is not the whole product. Browser mode is for convenience; D64/G64
 emulation is the compatibility path.
 
 tcbm2sd can be confusing in this context because it is both hardware and
