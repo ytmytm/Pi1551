@@ -846,11 +846,23 @@ void Commands_Base::AddDirectoryEntry(Channel& channel, const char* name, u16 bl
 	channel.cursor += dirEntryLength;
 }
 
+static bool IsDirectoryListingDiskImage(const char* fname)
+{
+	const char* ext = strrchr(fname, '.');
+	if (!ext)
+		return false;
+	return strcasecmp(ext, ".d64") == 0
+		|| strcasecmp(ext, ".d71") == 0
+		|| strcasecmp(ext, ".d81") == 0
+		|| strcasecmp(ext, ".d80") == 0
+		|| strcasecmp(ext, ".d82") == 0;
+}
+
 static int BrowserDirectoryEntryType(const FILINFO* filInfo)
 {
 	if (filInfo->fattrib & AM_DIR)
 		return 6;
-	if (Commands_Base::IsCdMountableImage(filInfo->fname))
+	if (IsDirectoryListingDiskImage(filInfo->fname))
 		return 6;
 	return 2;
 }

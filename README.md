@@ -16,7 +16,9 @@ player through the tape port only, without the TCBM ribbon cable.
 
 - Cycle-exact Commodore 1551 emulation for D64 disk images.
 - File-level SD card access over TCBM, similar in spirit to SD2IEC/tcbm2sd
-  browser mode.
+  browser mode (including direct `LOAD` of `.prg` files without emulation).
+- Optional disk caddy: `.prg` files can be wrapped in a temporary one-file D64
+  and mounted for cycle-exact emulation (see user manual).
 - Read-only file-level access to files inside D71, D81, D80, and D82 images.
 - TAP player for C16/C116/Plus/4 TAP files, output through the tape port.
 - Built-in browser UI on HDMI and optional I2C OLED.
@@ -135,7 +137,12 @@ note says otherwise.
 
 From the Commodore, the device appears as a TCBM disk device, normally unit 8.
 From the Pi UI, select a D64 to enter 1551 emulation, or browse SD card files
-directly in browser mode.
+directly in browser mode. A `.prg` can also be mounted for emulation (Enter in
+the Pi browser builds a one-file virtual D64); use normal `LOAD "name",8` on the
+Plus/4 when you only want to run a program without starting emulation.
+
+See [USER-MANUAL.md](USER-MANUAL.md) for directory listing types (`DIR` vs
+`PRG`), caddy behavior, and the full Enter/Insert distinction.
 
 ## Browser Mode, Emulation Mode, And Tape Mode
 

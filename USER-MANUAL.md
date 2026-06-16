@@ -56,6 +56,47 @@ In browser mode, Pi1551 provides file-level access to files and folders on the
 SD card. This is the mode used by file browsers and normal `LOAD` operations
 that do not require full drive emulation.
 
+From the Commodore, `LOAD "filename",8` (or `DLOAD`) on a `.prg` file reads the
+program bytes directly from the SD card. No disk image is created and 1551
+emulation is not started.
+
+Directory listings (`LOAD "$",8`) mark entries as follows:
+
+| Listing type | Meaning |
+| --- | --- |
+| `DIR` | Subfolder, or a mountable disk image (`.d64`, `.d71`, `.d81`, `.d80`, `.d82`, any case) |
+| `PRG` | Program file or other non-directory file on SD (including `.prg`, `.tap`, extensionless files such as `boot.t2sd`, and so on) |
+
+### PRG Files And The Disk Caddy
+
+Pi1551 inherits a Pi1541 feature for **1551 emulation mode**: a standalone `.prg`
+can be turned into a **temporary one-file D64 in RAM** and mounted like a normal
+disk image. The original file on SD is not modified.
+
+This is useful when software must run through real 1551 DOS and drive timing
+instead of browser-mode file transfer. It is **not** used for a normal
+`LOAD "program",8` from the Plus/4.
+
+Ways to mount a `.prg` for emulation:
+
+| Action | Result |
+| --- | --- |
+| **Enter** on a highlighted `.prg` in the Pi browser | Builds the virtual D64, loads the caddy, and enters 1551 emulation immediately. |
+| **Insert** on a highlighted `.prg` | Adds it to the caddy queue only. Press **Space** (or finish the caddy from the UI flow) to mount and start emulation. |
+| Host **CD**/**OPEN** selecting a `.prg` for mount | Same virtual-D64 path as Enter when the firmware treats the file as mountable media. |
+
+Inside emulation, the program appears on a synthetic disk (typically as the
+only file). Use normal 1551 `LOAD`/`RUN` against that emulated disk, not against
+the SD path.
+
+To run a `.prg` without entering emulation, load it from the Commodore in
+browser mode as above, or stay in browser mode on the Pi side and do not press
+Enter on the `.prg`.
+
+The same caddy mechanism also accepts `.d64`, `.g64`, `.t64`, and related
+Pi1541 image types. `.t64` tape images are converted to a synthetic D64 in the
+same spirit as `.prg` files.
+
 ### D64 Images
 
 D64 images can be mounted for 1551 emulation. This is the compatibility mode
@@ -103,7 +144,7 @@ to choose a ROM, then press and release to apply.
 | Move highlight down | Down |
 | Select file, enter folder, or mount image | Enter |
 | Go to parent folder | Back |
-| Add highlighted disk image to the disk caddy | Insert |
+| Add highlighted disk image or `.prg` to the disk caddy (queue only) | Insert |
 | Set device ID 8 | Hold Insert, press Enter |
 | Set device ID 9 | Hold Insert, press Up |
 | Set device ID 10 | Hold Insert, press Down |
