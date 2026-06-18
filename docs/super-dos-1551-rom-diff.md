@@ -108,7 +108,8 @@ This sets the variable constants used by the patched stock code:
 
 - `$02FD`: disk format marker, normally `'A'`, optionally `'S'`
 - `$16`: BAM/disk-name table limit, normally `$90`, optionally `$A8`
-- `$17`: last track + 1, normally `$24` (36), optionally `$2A` (42)
+- `$17`: last track + 1, normally `$24` (36, tracks 1-35), optionally `$2A`
+  (42, tracks 1-41)
 
 There are two intentional entry points:
 
@@ -118,7 +119,7 @@ There are two intentional entry points:
   `ROR $5E` sets bit 7 and selects Super-style `'S'`, `$A8`, `$2A` operation.
 
 This overlapping-instruction trick explains how the same byte sequence selects
-either 35-track stock mode or 42-track Super mode.
+either 35-track stock mode or 41-track Super mode.
 
 ### `$FE0E`: format-command extension parser
 
@@ -175,6 +176,25 @@ an already Super-formatted disk while loading the BAM.
 
 ### Formatter write-loop patch at `$FCAE`
 
+The stock formatter does not merely stream sector records onto the old track
+contents. It first lays down a filler area and then writes each sector with
+explicit sync before both the header and data block:
+
+```text
+pre-track filler:  3 * 256 bytes of $55
+per sector:
+  header sync:     5 bytes of $FF
+  header block:    10 GCR bytes
+  header gap:      9 bytes of $55
+  data sync:       5 bytes of $FF
+  data block:      325 GCR bytes
+  post-data gap:   variable $55 bytes from $4E
+```
+
+The earlier `$FB06` path also writes a much larger `$55`/`$FF` pattern, but that
+is a preconditioning/sync-measurement pass rather than the final sector layout.
+The final layout above is the write loop beginning around `$FC4E`.
+
 Stock writes the post-data gap using `LDY $4E`; Super DOS changes it to:
 
 ```asm
@@ -193,6 +213,12 @@ FCC8  BNE $FCC0
 If `$5E` is negative, the formatter writes only one `$55` gap byte after each
 sector's data block. In normal mode it keeps the stock variable gap length in
 `$4E`.
+
+That one-byte gap is not what the ROM waits on as a sync condition. The sync
+condition is created by the next explicit run of `$FF` bytes: every following
+sector header still starts with five `$FF` sync bytes, and every data block also
+starts with five `$FF` sync bytes. `$55` is only GCR-safe filler/spacing between
+sync-marked objects.
 
 This is the strongest ROM-level match for the G64 formatting suspicion:
 Super-format mode can both ask for 21 sectors on track 18 and compress sector
