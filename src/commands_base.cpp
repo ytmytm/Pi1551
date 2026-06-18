@@ -852,6 +852,7 @@ static bool IsDirectoryListingDiskImage(const char* fname)
 	if (!ext)
 		return false;
 	return strcasecmp(ext, ".d64") == 0
+		|| strcasecmp(ext, ".g64") == 0
 		|| strcasecmp(ext, ".d71") == 0
 		|| strcasecmp(ext, ".d81") == 0
 		|| strcasecmp(ext, ".d80") == 0
