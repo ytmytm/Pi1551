@@ -57,6 +57,8 @@ static void TimerInterruptHandler(void* pParam)
 	++Ticks;
 
 	TimerPollKernelTimers();
+	// Wake the browser poll on core 1; its idle path waits for this 100Hz tick.
+	__asm__ volatile ("sev" ::: "memory");
 }
 
 void TimerSystemInitialize()
@@ -120,4 +122,3 @@ void TimerCancelKernelTimer(unsigned hTimer)
 	//assert(1 <= hTimer && hTimer <= KERNEL_TIMERS);
 	m_KernelTimer[hTimer-1].m_pHandler = 0;
 }
-

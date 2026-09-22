@@ -181,6 +181,7 @@ extern u8 peek6502_1551(u16 address);
 
 static const int PI1551_UI_POLL_CYCLES = 20000; // 50Hz at the 1MHz emulation cadence.
 static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 1;
+static const u32 PI1551_BROWSE_POLL_US = 10000; // 100Hz while waiting for a TCBM command.
 static const u32 PI1551_BROWSE_SCREEN_US = 100000; // 10Hz for browser status text.
 static const u32 PI1551_EMULATION_LCD_US = 100000; // 10Hz; keep core 1 control polling at 50Hz.
 // HYPALOAD7 polls in the 2nd 6502 half; stretch it after all 16 encoder ticks between halves.
@@ -2865,9 +2866,17 @@ void emulator()
 				m_TCBM_Commands.SimulateIECBegin();
 
 				CheckAutoMountImage(exitReason, fileBrowser);
+				u32 nextBrowsePollTime = 0;
 
 				while (emulating == IEC_COMMANDS)
 				{
+					u32 now = read32(ARM_SYSTIMER_CLO);
+					if (!m_TCBM_Commands.IsTransferActive() && (int)(now - nextBrowsePollTime) < 0)
+					{
+						__asm ("WFE");
+						continue;
+					}
+					nextBrowsePollTime = now + PI1551_BROWSE_POLL_US;
 					// Handle tape control keys in browse mode
 					if (inputMappings->TapeReadToggle() && g_tapePlayer)
 					{
@@ -2967,13 +2976,22 @@ void emulator()
 						default:
 							break;
 					}
-					usDelay(1);
+					if (m_TCBM_Commands.IsTransferActive())
+						usDelay(1);
 				}
 			}
 			else
 			{
+				u32 nextBrowsePollTime = 0;
 				while (emulating == IEC_COMMANDS)
 				{
+					u32 now = read32(ARM_SYSTIMER_CLO);
+					if ((int)(now - nextBrowsePollTime) < 0)
+					{
+						__asm ("WFE");
+						continue;
+					}
+					nextBrowsePollTime = now + PI1551_BROWSE_POLL_US;
 					// Handle tape control keys in browse mode
 					if (inputMappings->TapeReadToggle() && g_tapePlayer)
 					{
@@ -2988,7 +3006,6 @@ void emulator()
 						fileBrowser->Update();
 					if (fileBrowser->SelectionsMade())
 						emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
-					usDelay(1);
 				}
 			}
 		}

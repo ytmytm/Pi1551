@@ -143,7 +143,7 @@ void TCBM_Bus::ClearRotarySynthesizedButtons()
 	SetButtonState(InputMappings::INPUT_BUTTON_DOWN, false);
 }
 
-void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
+void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs)
 {
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 	if (TCBM_Bus::rotaryEncoderEnable == true)
@@ -216,8 +216,8 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
 
 		}
 
-		UpdateButton(indexBack, gpioLevel);
-		UpdateButton(indexInsert, gpioLevel);
+		UpdateButton(indexBack, gpioLevel, sampleUs);
+		UpdateButton(indexInsert, gpioLevel, sampleUs);
 	}
 	else // Unmolested original logic
 	{
@@ -225,7 +225,7 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
 		int index;
 		for (index = 0; index < buttonCount; ++index)
 		{
-			UpdateButton(index, gpioLevel);
+			UpdateButton(index, gpioLevel, sampleUs);
 		}
 
 	}
@@ -239,7 +239,19 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel)
 void TCBM_Bus::ReadBrowseMode(void)
 {
 	ReadEmulationMode1551(false);
-	ReadGPIOUserInput();
+	// Button debounce/repeat thresholds are in microseconds. Sample them once
+	// per idle bus poll, even though the protocol parser may read GPIO again.
+	static u32 lastButtonSampleUs = 0;
+	static bool firstButtonSample = true;
+	u32 now = read32(ARM_SYSTIMER_CLO);
+	const u32 inputPollUs = rotaryEncoderEnable ? 10000 : 20000;
+	u32 elapsedUs = firstButtonSample ? inputPollUs : now - lastButtonSampleUs;
+	if (elapsedUs >= inputPollUs)
+	{
+		firstButtonSample = false;
+		lastButtonSampleUs = now;
+		ReadGPIOUserInput(gplev0, elapsedUs > 1000000 ? 1000000 : elapsedUs);
+	}
 }
 
 /// @brief read real I/O pins before emulation step in emulation mode

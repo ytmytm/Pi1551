@@ -274,7 +274,7 @@ public:
 	}
 #endif
 
-	static void UpdateButton(int index, unsigned gplev0)
+	static void UpdateButton(int index, unsigned gplev0, u32 sampleUs = 1)
 	{
 		bool inputcurrent = (gplev0 & ButtonPinFlags[index]) == 0;
 
@@ -283,15 +283,15 @@ public:
 
 		if (inputcurrent)
 		{
-			validInputCount[index]++;
-			if (validInputCount[index] == INPUT_BUTTON_DEBOUNCE_THRESHOLD)
+			validInputCount[index] += sampleUs;
+			if (!InputButton[index] && validInputCount[index] >= INPUT_BUTTON_DEBOUNCE_THRESHOLD)
 			{
 				InputButton[index] = true;
 				inputRepeatThreshold[index] = INPUT_BUTTON_DEBOUNCE_THRESHOLD + INPUT_BUTTON_REPEAT_THRESHOLD;
 				inputRepeat[index]++;
 			}
 
-			if (validInputCount[index] == inputRepeatThreshold[index])
+			if (validInputCount[index] >= inputRepeatThreshold[index])
 			{
 				inputRepeat[index]++;
 				inputRepeatThreshold[index] += INPUT_BUTTON_REPEAT_THRESHOLD / inputRepeat[index];
@@ -350,7 +350,7 @@ public:
 	static void Reset(void);
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
-	static void ReadGPIOUserInput(unsigned gpioLevel);
+	static void ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs = 1);
 	static void PollGPIOUserInput1551(void);
 	/// Sample reset line and GPLEV0 for buttons/rotary (no TPI input merge). Call once per emulation loop before ReadGPIOUserInput when not using ReadEmulationMode1551 every step.
 	static void PollGPIOInputs1551(void);
