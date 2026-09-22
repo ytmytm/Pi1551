@@ -77,6 +77,7 @@ public:
 	void Close();
 
 	bool GetDecodedSector(u32 track, u32 sector, u8* buffer);
+	bool SetDecodedSector(u32 track, u32 sector, const u8* buffer);
 
 	inline unsigned char GetNextByte(u32 track, u32 byte)
 	{

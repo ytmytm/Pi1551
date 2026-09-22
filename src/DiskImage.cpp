@@ -1470,7 +1470,7 @@ bool DiskImage::OpenPRG(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 bool DiskImage::GetDecodedSector(u32 track, u32 sector, u8* buffer)
 {
-	if (track > 0)
+	if (track > 0 && track <= HALF_TRACK_COUNT / 2)
 	{
 		track = (track - 1) * 2;
 		if (trackUsed[track])
@@ -1478,6 +1478,62 @@ bool DiskImage::GetDecodedSector(u32 track, u32 sector, u8* buffer)
 	}
 
 	return false;
+}
+
+bool DiskImage::SetDecodedSector(u32 track, u32 sector, const u8* data)
+{
+	if (!data || readOnly || attachedImageSize == 0
+		|| track == 0 || track > HALF_TRACK_COUNT / 2)
+		return false;
+
+	const u32 halfTrack = (track - 1) * 2;
+	if (!trackUsed[halfTrack])
+		return false;
+
+	int bitIndex = FindSectorHeader(halfTrack, sector, 0);
+	if (bitIndex < 0)
+		return false;
+	bitIndex = FindSync(halfTrack, bitIndex, (SECTOR_LENGTH_WITH_CHECKSUM * 2) * 8);
+	if (bitIndex < 0)
+		return false;
+
+	u8 plain[SECTOR_LENGTH_WITH_CHECKSUM];
+	plain[0] = 0x07;
+	u8 checksum = 0;
+	for (unsigned i = 0; i < SECTOR_LENGTH; ++i)
+	{
+		plain[i + 1] = data[i];
+		checksum ^= data[i];
+	}
+	plain[257] = checksum;
+	plain[258] = 0;
+	plain[259] = 0;
+
+	u8 encoded[(SECTOR_LENGTH_WITH_CHECKSUM / 4) * 5];
+	for (unsigned i = 0; i < SECTOR_LENGTH_WITH_CHECKSUM / 4; ++i)
+		convert_4bytes_to_GCR(plain + i * 4, encoded + i * 5);
+
+	const unsigned trackBits = BitsInTrack(halfTrack);
+	for (unsigned i = 0; i < sizeof(encoded) * 8; ++i)
+	{
+		const bool value = (encoded[i >> 3] & (0x80u >> (i & 7))) != 0;
+		const unsigned position = (static_cast<unsigned>(bitIndex) + i) % trackBits;
+		const unsigned byte = position >> 3;
+		const u8 mask = static_cast<u8>(0x80u >> (position & 7));
+#if defined(EXPERIMENTALZERO)
+		u8& target = tracks[(halfTrack << 13) + byte];
+#else
+		u8& target = tracks[halfTrack][byte];
+#endif
+		if (value)
+			target |= mask;
+		else
+			target &= static_cast<u8>(~mask);
+	}
+
+	trackDirty[halfTrack] = true;
+	dirty = true;
+	return true;
 }
 
 DiskImage::DiskType DiskImage::GetDiskImageTypeViaExtention(const char* diskImageName)

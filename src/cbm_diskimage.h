@@ -34,6 +34,7 @@ typedef struct CbmTrackSector {
 } CbmTrackSector;
 
 typedef bool (*CbmImageSectorReader)(void* context, u8 track, u8 sector, u8* buffer);
+typedef bool (*CbmImageSectorWriter)(void* context, u8 track, u8 sector, const u8* buffer);
 
 typedef struct CbmFsImage {
 	CbmImageType type;
@@ -46,6 +47,7 @@ typedef struct CbmFsImage {
 	CbmTrackSector statusts;
 	FIL* file;
 	CbmImageSectorReader sectorReader;
+	CbmImageSectorWriter sectorWriter;
 	void* sectorReaderContext;
 } CbmFsImage;
 
@@ -79,7 +81,8 @@ bool CbmImagePathSupported(const char* path);
 bool CbmImagePathQuasiMountOnly(const char* path);
 
 bool cbm_image_mount(const char* path);
-bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader, void* context);
+bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader,
+	void* context, CbmImageSectorWriter writer = nullptr);
 void cbm_image_unmount();
 bool cbm_image_is_mounted();
 CbmFsImage* cbm_image_get_fs();

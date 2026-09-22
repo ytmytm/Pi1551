@@ -107,6 +107,9 @@ static u32 ReadStableGplev0ForTCBM(void)
 void TCBM_Bus::PollGPIOInputs1551(void)
 {
 	gplev0 = ReadStableGplev0ForTCBM();
+	// The emulation loop uses PI_DAV to decide whether a pending U0 fast
+	// transfer must take ownership before the 1551 ROM executes again.
+	PI_DAV = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 

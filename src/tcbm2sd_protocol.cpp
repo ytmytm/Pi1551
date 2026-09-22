@@ -122,6 +122,7 @@ bool CanInterceptU0InEmulation(const FastRequest& request)
 		case FAST_REQUEST_FILENAME:
 		case FAST_REQUEST_TRACK_SECTOR:
 		case FAST_REQUEST_BLOCK_READ:
+		case FAST_REQUEST_BLOCK_WRITE:
 			return true;
 		default:
 			return false;

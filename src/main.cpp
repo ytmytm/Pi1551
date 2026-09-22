@@ -2152,6 +2152,12 @@ static bool Pi1551DecodedSectorReader(void* context, u8 track, u8 sector, u8* bu
 	return image && image->GetDecodedSector(track, sector, buffer);
 }
 
+static bool Pi1551DecodedSectorWriter(void* context, u8 track, u8 sector, const u8* buffer)
+{
+	DiskImage* image = static_cast<DiskImage*>(context);
+	return image && image->SetDecodedSector(track, sector, buffer);
+}
+
 static void Pi1551MountDecodedD64ForBrowserHandoff()
 {
 	const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
@@ -2164,7 +2170,8 @@ static void Pi1551MountDecodedD64ForBrowserHandoff()
 
 	DiskImage* image = pi1551.drive.GetDiskImage();
 	if (image)
-		cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image);
+		cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image,
+			Pi1551DecodedSectorWriter);
 }
 
 static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)

@@ -61,14 +61,24 @@ struct SectorReaderState
 {
 	std::vector<std::pair<uint8_t, uint8_t> > reads;
 	bool fileImage;
+	bool hasWrittenSector;
+	u8 writtenTrack;
+	u8 writtenSector;
+	u8 writtenData[256];
 
-	SectorReaderState() : fileImage(false) {}
+	SectorReaderState() : fileImage(false), hasWrittenSector(false),
+		writtenTrack(0), writtenSector(0) {}
 };
 
 static bool ReadSyntheticSector(void* context, u8 track, u8 sector, u8* buffer)
 {
 	SectorReaderState* state = static_cast<SectorReaderState*>(context);
 	state->reads.push_back(std::make_pair(track, sector));
+	if (state->hasWrittenSector && track == state->writtenTrack && sector == state->writtenSector)
+	{
+		std::copy(state->writtenData, state->writtenData + 256, buffer);
+		return true;
+	}
 	if (state->fileImage)
 	{
 		std::fill(buffer, buffer + 256, 0);
@@ -102,6 +112,16 @@ static bool ReadSyntheticSector(void* context, u8 track, u8 sector, u8* buffer)
 	}
 	for (unsigned i = 0; i < 256; ++i)
 		buffer[i] = static_cast<u8>((track * 7 + sector * 13 + i) & 0xff);
+	return true;
+}
+
+static bool WriteSyntheticSector(void* context, u8 track, u8 sector, const u8* buffer)
+{
+	SectorReaderState* state = static_cast<SectorReaderState*>(context);
+	state->hasWrittenSector = true;
+	state->writtenTrack = track;
+	state->writtenSector = sector;
+	std::copy(buffer, buffer + 256, state->writtenData);
 	return true;
 }
 
@@ -262,11 +282,23 @@ int main()
 		{
 			SectorReaderState state;
 			bool ok = cbm_image_mount_d64_sector_reader(
-				"memory.d64", ReadSyntheticSector, &state);
+				"memory.d64", ReadSyntheticSector, &state, WriteSyntheticSector);
 			u32 bytes = 0;
 			ok = ok && cbm_image_block_io_begin(1, 0, 1, bytes, true);
+			for (u32 i = 0; ok && i < bytes; ++i)
+				ok = cbm_image_block_io_write_byte(static_cast<u8>(i * 37 + 11));
+			cbm_image_block_io_end();
+			u32 readBytes = 0;
+			ok = ok && cbm_image_block_io_begin(1, 0, 1, readBytes, false);
+			for (u32 i = 0; ok && i < readBytes; ++i)
+			{
+				u8 value = 0;
+				ok = cbm_image_block_io_read_byte(value)
+					&& value == static_cast<u8>(i * 37 + 11);
+			}
+			cbm_image_block_io_end();
 			cbm_image_unmount();
-			std::cout << "ok=" << (ok ? 1 : 0) << " bytes=" << bytes << '\n';
+			std::cout << "ok=" << (ok ? 1 : 0) << " bytes=" << readBytes << '\n';
 		}
 		else if (command == "callback-file-read")
 		{

@@ -10,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "tests" / ".build"
 CLI = BUILD / "tcbm2sd-native"
+DISKIMAGE_CLI = BUILD / "diskimage-native-probe"
 
 
 def build_cli():
@@ -31,6 +32,25 @@ def build_cli():
             "-Wno-int-to-pointer-cast",
             "-Isrc", "-Iuspi/include", "-c", "src/tcbm_commands.cpp",
             "-o", str(BUILD / "tcbm_commands.o"),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "gcc", "-O2", "-ffunction-sections", "-fdata-sections",
+            "-Isrc", "-Iuspi/include", "-c", "src/lz.c",
+            "-o", str(BUILD / "lz-native.o"),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "g++", "-std=c++11", "-O2", "-ffunction-sections", "-fdata-sections",
+            "-Isrc", "-Iuspi/include", "tests/diskimage_native_probe.cpp",
+            "tests/fatfs_posix.cpp", "src/DiskImage.cpp", "src/gcr.cpp", "src/prot.cpp",
+            str(BUILD / "lz-native.o"), "-Wl,--gc-sections", "-o", str(DISKIMAGE_CLI),
         ],
         cwd=ROOT,
         check=True,
@@ -125,7 +145,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(filename, "intercept=1 type=filename")
         self.assertEqual(track_sector, "intercept=1 type=track-sector")
         self.assertEqual(block_read, "intercept=1 type=block-read")
-        self.assertEqual(block_write, "intercept=0 type=block-write")
+        self.assertEqual(block_write, "intercept=1 type=block-write")
         self.assertEqual(set_device, "intercept=0 type=set-device")
         self.assertEqual(unknown, "intercept=0 type=invalid")
 
@@ -185,10 +205,10 @@ class ProtocolTests(unittest.TestCase):
             "ok=1 bytes=512 reads=17/20,18/0 first=123 last=125",
         )
 
-    def test_callback_mount_refuses_raw_block_write(self):
+    def test_callback_block_write_updates_the_live_image(self):
         self.assertEqual(
             run_cli("callback-block-write"),
-            ["ok=0 bytes=0"],
+            ["ok=1 bytes=256"],
         )
 
     def test_fast_file_load_walks_directory_and_file_through_sector_callback(self):
@@ -196,6 +216,21 @@ class ProtocolTests(unittest.TestCase):
             run_cli("callback-file-read"),
             ["ok=1 data=0108aa55"],
         )
+
+    def test_live_diskimage_decodes_every_sector_and_accepts_coherent_writeback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "live.d64"
+            path.write_bytes(bytes((i * 29 + 7) & 0xff for i in range(174848)))
+            decoded = subprocess.run(
+                [str(DISKIMAGE_CLI), str(path)], cwd=ROOT,
+                text=True, capture_output=True, check=True,
+            )
+            written = subprocess.run(
+                [str(DISKIMAGE_CLI), str(path), "write"], cwd=ROOT,
+                text=True, capture_output=True, check=True,
+            )
+            self.assertEqual(decoded.stdout.strip(), "ok=1 sectors=683 mismatches=0")
+            self.assertEqual(written.stdout.strip(), "write-ok=1")
 
 
 if __name__ == "__main__":
