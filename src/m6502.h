@@ -507,7 +507,7 @@ private:
 
 public:
 	M6502() : status(FLAG_CONSTANT), dataBusReadFn(0), dataBusWriteFn(0) {}
-	M6502(void* data, DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) { SetBusFunctions(dataBusReadFn, dataBusWriteFn); }
+	M6502(void*, DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) { SetBusFunctions(dataBusReadFn, dataBusWriteFn); }
 	void SetBusFunctions(DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) {this->dataBusReadFn = dataBusReadFn; this->dataBusWriteFn = dataBusWriteFn; status = FLAG_CONSTANT; Reset(); }
 	void Reset(void);
 	void Step(void);
@@ -526,6 +526,7 @@ public:
 	void SetA(u8 value) { a = value; }
 	u8 GetX() const { return x;	}
 	u8 GetY() const { return y; }
+	void SetY(u8 value) { y = value; }
 	u8 GetStatus() const { return status; }
 	// Emulate the 6502's SYNC signal and pin
 	bool SYNC(void) const { return addressModeCycleFn == &M6502::InstructionFetch; }

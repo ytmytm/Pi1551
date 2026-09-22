@@ -2288,13 +2288,23 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 		{
 			u8 channel = secondary & 0x0F;
 			write6502_1551(0x7C, secondary & 0x0F);
+			// Reproduce the state written by the skipped tail at $C135. The
+			// browser handler completes the electrical handshake below.
+			write6502_1551(0x97, 0x08);
 			m_TCBM_Commands.CompleteEmulationSecondaryCommandAck();
 			Pi1551MountDecodedD64ForBrowserHandoff();
 			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
-			write6502_1551(0x5B, 0);
-			write6502_1551(0x5C, 0);
-			pi1551.m6502.SetPC(0xEABD);
+
+			// $C0D6 is reached through the indirect dispatch from a JSR $C022.
+			// Resume at the real bus-idle epilogue ($C143..$C14D), which samples
+			// final DAV, normalises port C and executes RTS. Jumping to the main
+			// loop would leak that JSR return address on every transfer.
+			// Keep $5B/$5C intact as well; the client's later UNTALK owns the
+			// transition out of TALK mode. TAY at $C0E4 was the only skipped
+			// instruction whose result survives into the epilogue.
+			pi1551.m6502.SetY(secondary);
+			pi1551.m6502.SetPC(0xC143);
 		}
 	}
 }

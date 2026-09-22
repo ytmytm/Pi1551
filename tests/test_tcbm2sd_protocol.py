@@ -21,6 +21,7 @@ def build_cli():
             "-Wno-type-limits", "-O2", "-ffunction-sections", "-fdata-sections",
             "-Isrc", "-Iuspi/include", "tests/tcbm2sd_native.cpp",
             "tests/fatfs_posix.cpp", "src/tcbm2sd_protocol.cpp", "src/cbm_diskimage.cpp",
+            "src/m6502.cpp",
             "-Wl,--gc-sections", "-o", str(CLI),
         ],
         cwd=ROOT,
@@ -231,6 +232,35 @@ class ProtocolTests(unittest.TestCase):
             )
             self.assertEqual(decoded.stdout.strip(), "ok=1 sectors=683 mismatches=0")
             self.assertEqual(written.stdout.strip(), "write-ok=1")
+
+    def test_all_shipped_1551_roms_share_the_fast_talk_return_epilogue(self):
+        roms = [
+            (ROOT / "sdcard" / "dos1551.bin", 0xC000),
+            (ROOT / "sdcard" / "super_dos_1551.rom", 0xC000),
+            (ROOT / "sdcard" / "dos1551-ram.bin", 0x8000),
+            (ROOT / "sdcard" / "super_dos_ram.bin", 0x8000),
+        ]
+        reference = None
+        for path, load_address in roms:
+            data = path.read_bytes()
+            start = 0xC0D6 - load_address
+            end = 0xC14E - load_address
+            epilogue = data[start:end]
+            self.assertEqual(
+                epilogue[0xC143 - 0xC0D6:0xC14E - 0xC0D6],
+                bytes.fromhex("ad024010fb29fc8d024060"),
+                f"{path.name}: unexpected $C143 fast TALK return epilogue",
+            )
+            if reference is None:
+                reference = epilogue
+            else:
+                self.assertEqual(epilogue, reference, path.name)
+
+    def test_fast_talk_handoff_epilogue_unwinds_the_emulated_jsr(self):
+        self.assertEqual(
+            run_cli("handoff-unwind"),
+            ["ok=1 sp-before=253 sp-after=253 pc=203"],
+        )
 
 
 if __name__ == "__main__":

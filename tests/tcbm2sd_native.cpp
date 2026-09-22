@@ -1,5 +1,6 @@
 #include "tcbm2sd_protocol.h"
 #include "cbm_diskimage.h"
+#include "m6502.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -10,6 +11,29 @@
 #include <vector>
 
 using namespace Tcbm2sdProtocol;
+
+static u8 s_cpuMemory[65536];
+
+static u8 ReadCpuMemory(u16 address)
+{
+	return s_cpuMemory[address];
+}
+
+static void WriteCpuMemory(u16 address, const u8 value)
+{
+	s_cpuMemory[address] = value;
+}
+
+static bool RunCpuToInstruction(M6502& cpu, u16 pc, unsigned maxCycles = 100)
+{
+	for (unsigned cycle = 0; cycle < maxCycles; ++cycle)
+	{
+		if (cpu.SYNC() && cpu.GetPC() == pc)
+			return true;
+		cpu.Step();
+	}
+	return false;
+}
 
 static std::vector<uint8_t> ReadBytes(std::istringstream& input)
 {
@@ -325,6 +349,36 @@ int main()
 			for (const char* p = status; *p; ++p)
 				std::cout << (*p == '\r' ? "\\r" : std::string(1, *p));
 			std::cout << '\n';
+		}
+		else if (command == "handoff-unwind")
+		{
+			std::fill(s_cpuMemory, s_cpuMemory + sizeof(s_cpuMemory), 0);
+			s_cpuMemory[0xFFFC] = 0x00;
+			s_cpuMemory[0xFFFD] = 0x02;
+			s_cpuMemory[0x0200] = 0x20; // JSR $C022, as in the 1551 main loop
+			s_cpuMemory[0x0201] = 0x22;
+			s_cpuMemory[0x0202] = 0xC0;
+			const u8 epilogue[] = { 0xAD, 0x02, 0x40, 0x10, 0xFB,
+				0x29, 0xFC, 0x8D, 0x02, 0x40, 0x60 };
+			std::copy(epilogue, epilogue + sizeof(epilogue), s_cpuMemory + 0xC143);
+			s_cpuMemory[0x4002] = 0x88; // final DAV and ACK are high
+
+			M6502 cpu(nullptr, ReadCpuMemory, WriteCpuMemory);
+			bool ok = RunCpuToInstruction(cpu, 0x0200);
+			u16 pc = 0;
+			u8 spBefore = 0, a = 0, x = 0, y = 0, status = 0;
+			cpu.GetRegs(pc, spBefore, a, x, y, status);
+			ok = ok && RunCpuToInstruction(cpu, 0xC022);
+			cpu.SetY(0x70);
+			cpu.SetPC(0xC143);
+			ok = ok && RunCpuToInstruction(cpu, 0x0203);
+			u8 spAfter = 0;
+			cpu.GetRegs(pc, spAfter, a, x, y, status);
+			ok = ok && spAfter == spBefore && y == 0x70 && s_cpuMemory[0x4002] == 0x88;
+			std::cout << "ok=" << (ok ? 1 : 0)
+				<< " sp-before=" << unsigned(spBefore)
+				<< " sp-after=" << unsigned(spAfter)
+				<< " pc=" << std::hex << pc << std::dec << '\n';
 		}
 		else if (!command.empty())
 			std::cout << "error=unknown-command\n";
