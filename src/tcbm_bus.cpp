@@ -426,6 +426,25 @@ push_led_sound:
 	write32(ARM_GPIO_GPSET0, ledSoundSet);
 }
 
+void TCBM_Bus::InvalidateOutCache1551(void)
+{
+	if (TPI && port)
+	{
+		lastDirA = static_cast<u8>(~port->GetDirection());
+		lastOutA = static_cast<u8>(~port->GetOutput());
+		IOPort* portC = TPI->GetPortC();
+		lastDirC = static_cast<u8>(~portC->GetDirection());
+		lastOutC = static_cast<u8>(~portC->GetOutput());
+	}
+	else
+	{
+		lastDirA = lastDirC = 0xff;
+		lastOutA = lastOutC = 0xff;
+	}
+	lastSet = ~0u;
+	lastClear = ~0u;
+}
+
 // called whenever the emulated 6502 writes to port A ($4000) or DDRA ($4003)
 // pUserData is a pointer given when function is attached
 // status is status & ddr, we should ignore it

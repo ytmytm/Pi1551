@@ -2152,10 +2152,14 @@ static bool Pi1551DecodedSectorReader(void* context, u8 track, u8 sector, u8* bu
 	return image && image->GetDecodedSector(track, sector, buffer);
 }
 
-static void Pi1551MountDecodedG64ForBrowserHandoff()
+static void Pi1551MountDecodedD64ForBrowserHandoff()
 {
 	const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
-	if (!path || DiskImage::GetDiskImageTypeViaExtention(path) != DiskImage::G64)
+	if (!path)
+		return;
+
+	const DiskImage::DiskType type = DiskImage::GetDiskImageTypeViaExtention(path);
+	if (type != DiskImage::D64 && type != DiskImage::G64)
 		return;
 
 	DiskImage* image = pi1551.drive.GetDiskImage();
@@ -2209,11 +2213,14 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 				for (u8 i = 0; i < copyLen; ++i)
 					commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
 
-				Pi1551MountDecodedG64ForBrowserHandoff();
-				if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
+				if (m_TCBM_Commands.CanInterceptEmulationU0Command(commandBuf, copyLen))
 				{
-					write6502_1551(0xa4, 0);
-					pi1551.m6502.SetPC(0xC283);
+					Pi1551MountDecodedD64ForBrowserHandoff();
+					if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
+					{
+						write6502_1551(0xa4, 0);
+						pi1551.m6502.SetPC(0xC283);
+					}
 				}
 			}
 			else if (bufferLen >= 3)
@@ -2275,7 +2282,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 			u8 channel = secondary & 0x0F;
 			write6502_1551(0x7C, secondary & 0x0F);
 			m_TCBM_Commands.CompleteEmulationSecondaryCommandAck();
-			Pi1551MountDecodedG64ForBrowserHandoff();
+			Pi1551MountDecodedD64ForBrowserHandoff();
 			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
 			write6502_1551(0x5B, 0);

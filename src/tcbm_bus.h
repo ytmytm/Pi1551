@@ -378,6 +378,9 @@ public:
 	static void PortA_OnPortOut(void* pUserData, unsigned char status);
 
 	static void RefreshOuts1551(void);
+	// Browser-mode handoffs drive GPIO without updating the emulation cache.
+	// Invalidate it before restoring outputs from the attached TPI.
+	static void InvalidateOutCache1551(void);
 
 	static void WaitMicroSeconds(u32 amount)
 	{

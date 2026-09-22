@@ -1,10 +1,12 @@
 #include "tcbm2sd_protocol.h"
 #include "cbm_diskimage.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Tcbm2sdProtocol;
@@ -53,6 +55,54 @@ static CbmImageType ImageType(const std::string& name)
 	if (name == "d80") return CBM_IMG_D80;
 	if (name == "d82") return CBM_IMG_D82;
 	return static_cast<CbmImageType>(0);
+}
+
+struct SectorReaderState
+{
+	std::vector<std::pair<uint8_t, uint8_t> > reads;
+	bool fileImage;
+
+	SectorReaderState() : fileImage(false) {}
+};
+
+static bool ReadSyntheticSector(void* context, u8 track, u8 sector, u8* buffer)
+{
+	SectorReaderState* state = static_cast<SectorReaderState*>(context);
+	state->reads.push_back(std::make_pair(track, sector));
+	if (state->fileImage)
+	{
+		std::fill(buffer, buffer + 256, 0);
+		if (track == 18 && sector == 0)
+		{
+			buffer[0] = 18;
+			buffer[1] = 1;
+		}
+		else if (track == 18 && sector == 1)
+		{
+			buffer[2] = 0x82;
+			buffer[3] = 1;
+			buffer[4] = 0;
+			std::fill(buffer + 5, buffer + 21, 0xa0);
+			buffer[5] = 0xc7;
+			buffer[6] = 0xc1;
+			buffer[7] = 0xcd;
+			buffer[8] = 0xc5;
+			buffer[30] = 1;
+		}
+		else if (track == 1 && sector == 0)
+		{
+			buffer[0] = 0;
+			buffer[1] = 5;
+			buffer[2] = 0x01;
+			buffer[3] = 0x08;
+			buffer[4] = 0xaa;
+			buffer[5] = 0x55;
+		}
+		return true;
+	}
+	for (unsigned i = 0; i < 256; ++i)
+		buffer[i] = static_cast<u8>((track * 7 + sector * 13 + i) & 0xff);
+	return true;
 }
 
 static void PrintReadTrace(const std::vector<uint8_t>& bytes)
@@ -114,6 +164,15 @@ int main()
 				<< " device=" << unsigned(request.device)
 				<< " filename=" << request.filename << '\n';
 		}
+		else if (command == "emulation-u0")
+		{
+			unsigned inImage = 0;
+			input >> inImage;
+			const std::vector<uint8_t> bytes = ReadBytes(input);
+			const FastRequest request = ParseU0(bytes.empty() ? 0 : &bytes[0], bytes.size(), inImage != 0);
+			std::cout << "intercept=" << (CanInterceptU0InEmulation(request) ? 1 : 0)
+				<< " type=" << RequestName(request.type) << '\n';
+		}
 		else if (command == "geometry")
 		{
 			std::string name;
@@ -166,6 +225,66 @@ int main()
 			cbm_image_block_io_end();
 			cbm_image_unmount();
 			std::cout << "ok=" << (ok ? 1 : 0) << " bytes=" << readBytes << '\n';
+		}
+		else if (command == "callback-block-read")
+		{
+			unsigned track = 0;
+			unsigned sector = 0;
+			unsigned count = 0;
+			input >> track >> sector >> count;
+			SectorReaderState state;
+			bool ok = cbm_image_mount_d64_sector_reader(
+				"memory.d64", ReadSyntheticSector, &state);
+			state.reads.clear(); // Ignore BAM reads performed while mounting.
+			u32 bytes = 0;
+			ok = ok && cbm_image_block_io_begin(static_cast<u8>(track),
+				static_cast<u8>(sector), static_cast<u8>(count), bytes, false);
+			std::vector<u8> data;
+			for (u32 i = 0; ok && i < bytes; ++i)
+			{
+				u8 value = 0;
+				ok = cbm_image_block_io_read_byte(value);
+				data.push_back(value);
+			}
+			cbm_image_block_io_end();
+			cbm_image_unmount();
+			std::cout << "ok=" << (ok ? 1 : 0) << " bytes=" << data.size() << " reads=";
+			for (size_t i = 0; i < state.reads.size(); ++i)
+			{
+				if (i) std::cout << ',';
+				std::cout << unsigned(state.reads[i].first) << '/' << unsigned(state.reads[i].second);
+			}
+			if (!data.empty())
+				std::cout << " first=" << unsigned(data.front()) << " last=" << unsigned(data.back());
+			std::cout << '\n';
+		}
+		else if (command == "callback-block-write")
+		{
+			SectorReaderState state;
+			bool ok = cbm_image_mount_d64_sector_reader(
+				"memory.d64", ReadSyntheticSector, &state);
+			u32 bytes = 0;
+			ok = ok && cbm_image_block_io_begin(1, 0, 1, bytes, true);
+			cbm_image_unmount();
+			std::cout << "ok=" << (ok ? 1 : 0) << " bytes=" << bytes << '\n';
+		}
+		else if (command == "callback-file-read")
+		{
+			SectorReaderState state;
+			state.fileImage = true;
+			bool ok = cbm_image_mount_d64_sector_reader(
+				"memory.d64", ReadSyntheticSector, &state);
+			u32 size = 0;
+			ok = ok && cbm_image_open_file(0, "GAME", size);
+			std::vector<u8> data;
+			u8 value = 0;
+			while (ok && cbm_image_read_channel_byte(0, value))
+				data.push_back(value);
+			cbm_image_unmount();
+			std::cout << "ok=" << (ok ? 1 : 0) << " data=";
+			for (size_t i = 0; i < data.size(); ++i)
+				std::cout << std::hex << std::setw(2) << std::setfill('0') << unsigned(data[i]);
+			std::cout << std::dec << '\n';
 		}
 		else if (command == "status73")
 		{

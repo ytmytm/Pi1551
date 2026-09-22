@@ -2063,9 +2063,17 @@ void TCBM_Commands::MirrorEmulationOpenCommand(u8 channel, const u8* data, size_
 		channel, reinterpret_cast<const char*>(ch.command));
 }
 
+bool TCBM_Commands::CanInterceptEmulationU0Command(const u8* data, size_t length) const
+{
+	const bool inImage = cbm_image_is_mounted() || mountedImagePath[0] != '\0';
+	const Tcbm2sdProtocol::FastRequest parsed =
+		Tcbm2sdProtocol::ParseU0(data, length, inImage);
+	return Tcbm2sdProtocol::CanInterceptU0InEmulation(parsed);
+}
+
 bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 {
-	if (length < 2 || data[0] != 'U' || data[1] != '0')
+	if (!CanInterceptEmulationU0Command(data, length))
 		return false;
 
 	EnsureCbmImageModeFromMounted();
@@ -2081,6 +2089,8 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 		if (!PreparePendingFastTransfer(0) && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
 	}
+	if (!IsTransferActive())
+		RestoreAfterEmulationFastHandoff();
 	return true;
 }
 
@@ -2164,6 +2174,6 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	TCBM_Bus::TPI = savedTpi;
 	if (savedTpi)
 		TCBM_Bus::port = savedTpi->GetPortA();
+	TCBM_Bus::InvalidateOutCache1551();
 	TCBM_Bus::RefreshOuts1551();
-	PrepareBrowseIdleBus();
 }

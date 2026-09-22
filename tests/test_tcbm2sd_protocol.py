@@ -113,6 +113,22 @@ class ProtocolTests(unittest.TestCase):
         [result] = run_cli("u0 0 55 30 3e 08")
         self.assertEqual(result, "type=set-device track=0 sector=0 count=0 device=8 filename=")
 
+    def test_emulation_only_intercepts_supported_read_side_u0_requests(self):
+        filename, track_sector, block_read, block_write, set_device, unknown = run_cli(
+            "emulation-u0 1 55 30 1f 47 41 4d 45",
+            "emulation-u0 1 55 30 3f 12 00",
+            "emulation-u0 1 55 30 00 12 00 01",
+            "emulation-u0 1 55 30 02 12 00 01",
+            "emulation-u0 1 55 30 3e 08",
+            "emulation-u0 1 55 30 55",
+        )
+        self.assertEqual(filename, "intercept=1 type=filename")
+        self.assertEqual(track_sector, "intercept=1 type=track-sector")
+        self.assertEqual(block_read, "intercept=1 type=block-read")
+        self.assertEqual(block_write, "intercept=0 type=block-write")
+        self.assertEqual(set_device, "intercept=0 type=set-device")
+        self.assertEqual(unknown, "intercept=0 type=invalid")
+
     def test_ui_uj_status_identifies_tcbm2sd_fast_protocol(self):
         [status] = run_cli("status73")
         self.assertEqual(status, "73,PI1551 V01.25 (TCBM2SD COMPAT),00,00\\r")
@@ -161,6 +177,25 @@ class ProtocolTests(unittest.TestCase):
             with path.open("wb") as image:
                 image.truncate(819200)
             self.assertEqual(run_cli(f"block-roundtrip {path} 80 40"), ["ok=0 bytes=0"])
+
+    def test_callback_block_read_uses_current_decoded_sectors_and_crosses_tracks(self):
+        [result] = run_cli("callback-block-read 17 20 2")
+        self.assertEqual(
+            result,
+            "ok=1 bytes=512 reads=17/20,18/0 first=123 last=125",
+        )
+
+    def test_callback_mount_refuses_raw_block_write(self):
+        self.assertEqual(
+            run_cli("callback-block-write"),
+            ["ok=0 bytes=0"],
+        )
+
+    def test_fast_file_load_walks_directory_and_file_through_sector_callback(self):
+        self.assertEqual(
+            run_cli("callback-file-read"),
+            ["ok=1 data=0108aa55"],
+        )
 
 
 if __name__ == "__main__":

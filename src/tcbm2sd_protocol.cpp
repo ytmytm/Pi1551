@@ -115,6 +115,19 @@ FastRequest ParseU0(const uint8_t* data, size_t length, bool inImage)
 	return request;
 }
 
+bool CanInterceptU0InEmulation(const FastRequest& request)
+{
+	switch (request.type)
+	{
+		case FAST_REQUEST_FILENAME:
+		case FAST_REQUEST_TRACK_SECTOR:
+		case FAST_REQUEST_BLOCK_READ:
+			return true;
+		default:
+			return false;
+	}
+}
+
 TalkDecision DecodeTalkSecondary(uint8_t secondary, bool pendingU0,
 	uint8_t firstOpenByte, bool channelOpen)
 {
