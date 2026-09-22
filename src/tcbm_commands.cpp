@@ -24,6 +24,9 @@
 #include "DiskImage.h"
 #include "FileBrowser.h"
 #include "Petscii.h"
+#include "options.h"
+
+extern Options options;
 
 #include <cstdarg>
 #include <cstdio>
@@ -189,7 +192,8 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
     // (CD command may have set selectedImageName during state processing)
     if (selectedImageName[0] != 0) updateAction = IMAGE_SELECTED;
 
-    UpdateDebugOverlay();
+    if (options.DisplayTCBMDebug())
+        UpdateDebugOverlay();
     return updateAction;
 }
 

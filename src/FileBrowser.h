@@ -254,6 +254,7 @@ private:
 #endif
 	ScreenBase* screenLCD;
 	float scrollHighlightRate;
+	u32 lastHighlightUpdateTime;
 
 	bool displayingDevices;
 };

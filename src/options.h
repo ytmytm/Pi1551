@@ -81,6 +81,7 @@ public:
 
 	inline unsigned int DisplayTemperature() const { return displayTemperature; }
 	inline unsigned int DisplayPC() const { return displayPC; }
+	inline unsigned int DisplayTCBMDebug() const { return displayTCBMDebug; }
 
 	inline unsigned int LowercaseBrowseModeFilenames() const { return lowercaseBrowseModeFilenames; }
 	DiskImage::DiskType GetNewDiskType() const;
@@ -149,6 +150,7 @@ private:
 
 	unsigned int displayTemperature;
 	unsigned int displayPC;
+	unsigned int displayTCBMDebug;
 
 	unsigned int lowercaseBrowseModeFilenames;
 

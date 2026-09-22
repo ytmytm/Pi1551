@@ -180,7 +180,9 @@ unsigned int screenHeight = 768;
 extern u8 peek6502_1551(u16 address);
 
 static const int PI1551_UI_POLL_CYCLES = 20000; // 50Hz at the 1MHz emulation cadence.
-static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 10;
+static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 1;
+static const u32 PI1551_BROWSE_SCREEN_US = 100000; // 10Hz for browser status text.
+static const u32 PI1551_EMULATION_LCD_US = 100000; // 10Hz; keep core 1 control polling at 50Hz.
 // HYPALOAD7 polls in the 2nd 6502 half; stretch it after all 16 encoder ticks between halves.
 static const unsigned PI1551_ENCODER_TICKS_PER_US = 16;
 
@@ -970,6 +972,7 @@ void UpdateScreen()
 	u32 textColour = COLOUR_BLACK;
 	u32 bgColour = COLOUR_WHITE;
 	u32 oldTemperature = 0;
+	u32 nextTemperatureTime = 0;
 	u32 caddyIndexChangedTimer = 0;
 
 		RGBA atnColour = COLOUR_YELLOW;
@@ -1001,6 +1004,9 @@ void UpdateScreen()
 	char tempBufferTrack[tempBufferTrackSize] = "01.0";
 #if defined(PI1551SUPPORT)
 	char pi1551MinimalLcdText[32] = { 0 };
+	u32 nextBrowseScreenTime = 0;
+	u32 nextTapeServiceTime = 0;
+	u32 nextHeadlessTapeLCDTime = 0;
 #endif
 
 	top = screenHeight - height / 2;
@@ -1013,6 +1019,32 @@ void UpdateScreen()
 	{
 		bool value;
 #if defined(PI1551SUPPORT)
+		if (emulating == IEC_COMMANDS)
+		{
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			if (g_tapePlayer && (int)(now - nextTapeServiceTime) >= 0)
+			{
+				nextTapeServiceTime = now + 100000;
+				g_tapePlayer->Tick10ms();
+			}
+			if (!hdmiPresent)
+			{
+				if (screenLCD && g_tapePlayer && g_tapePlayer->IsLoaded()
+					&& (int)(now - nextHeadlessTapeLCDTime) >= 0)
+				{
+					nextHeadlessTapeLCDTime = now + 100000;
+					UpdateLCD(tempBufferTrack, temperature);
+				}
+				__asm ("WFE");
+				continue;
+			}
+			if ((int)(now - nextBrowseScreenTime) < 0)
+			{
+				__asm ("WFE");
+				continue;
+			}
+			nextBrowseScreenTime = now + PI1551_BROWSE_SCREEN_US;
+		}
 		if (emulating == EMULATING_1551)
 		{
 			unsigned numberOfImages = diskCaddy.GetNumberOfImages();
@@ -1024,9 +1056,14 @@ void UpdateScreen()
 
 			static u32 nextPi1551MinimalUiTick = 0;
 			u32 now = read32(ARM_SYSTIMER_CLO);
+			if (g_tapePlayer && (int)(now - nextTapeServiceTime) >= 0)
+			{
+				nextTapeServiceTime = now + 100000;
+				g_tapePlayer->Tick10ms();
+			}
 			if ((int)(now - nextPi1551MinimalUiTick) < 0)
 				continue;
-			nextPi1551MinimalUiTick = now + PI1551_UI_POLL_CYCLES;
+			nextPi1551MinimalUiTick = now + PI1551_EMULATION_LCD_US;
 
 			Pi1551UiSnapshot pi1551Snapshot = {};
 			ReadPi1551UiSnapshot(pi1551Snapshot);
@@ -1036,8 +1073,9 @@ void UpdateScreen()
 				snprintf(tempBufferTrack, tempBufferTrackSize, "%02d.%d", (oldTrack >> 1) + 1, oldTrack & 1 ? 5 : 0);
 			}
 
-			if (options.DisplayTemperature())
+			if (options.DisplayTemperature() && (int)(now - nextTemperatureTime) >= 0)
 			{
+				nextTemperatureTime = now + 1000000;
 				unsigned currentTemperature = oldTemperature;
 				if (GetTemperature(currentTemperature))
 					currentTemperature /= 1000;
@@ -1052,7 +1090,8 @@ void UpdateScreen()
 
 			bool row0Changed = (strcmp(lcdText, pi1551MinimalLcdText) != 0);
 			bool multiImageCaddy = (diskCaddy.GetNumberOfImages() > 1);
-			if (row0Changed || multiImageCaddy)
+			bool tapeLoaded = g_tapePlayer && g_tapePlayer->IsLoaded();
+			if (row0Changed || multiImageCaddy || tapeLoaded)
 			{
 				if (row0Changed)
 				{
@@ -1425,8 +1464,9 @@ void UpdateScreen()
 		}
 #endif
 		// Temperature display (works in both emulation and browse mode)
-		if (options.DisplayTemperature())
+		if (options.DisplayTemperature() && (int)(read32(ARM_SYSTIMER_CLO) - nextTemperatureTime) >= 0)
 		{
+			nextTemperatureTime = read32(ARM_SYSTIMER_CLO) + 1000000;
 			if (GetTemperature(temperature))
 			{
 				temperature /= 1000;
@@ -1445,8 +1485,6 @@ void UpdateScreen()
 		// Tape player status display (browse and emulation modes)
 		if (g_tapePlayer && tapeUiTick)
 		{
-			g_tapePlayer->Tick10ms();
-			
 			// Display tape counter (3 digits) - always update when loaded
 			if (tapeUiStateValid)
 			{
@@ -1508,8 +1546,8 @@ void UpdateScreen()
 				}
 			}
 			
-			// Display TAPE_READ, TAPE_SENSE, TAPE_WRITE, and TAPE_MOTOR numeric state (always visible for testing)
-			if (g_tapePlayer)
+			// Optional GPIO diagnostics for testing.
+			if (g_tapePlayer && options.DisplayTCBMDebug())
 			{
 				bool tapeReadState = g_tapePlayer->GetTapeReadState();
 				bool tapeSenseState = g_tapePlayer->GetTapeSenseState();
@@ -1521,8 +1559,8 @@ void UpdateScreen()
 			}
 		}
 
-		// TCBM protocol overlay (always visible; independent of DisplayPC)
-		if (emulating == IEC_COMMANDS)
+		// Optional TCBM protocol diagnostics on HDMI.
+		if (emulating == IEC_COMMANDS && options.DisplayTCBMDebug())
 			PrintTcbmDebugOverlay(static_cast<int>(y) - screen.ScaleY(18), textColour, bgColour);
 #endif
 
@@ -1604,25 +1642,15 @@ void UpdateScreen()
 
 			if (caddyIndexChangedTimer == 0)
 			{
-				if (refreshLCDStatusDisplay)
-				{
-					UpdateLCD(tempBufferTrack, temperature);
-					refreshLCDStatusDisplay = false;
-				}
+				bool updateLcd = refreshLCDStatusDisplay;
 #if defined(PI1551SUPPORT)
-				// In browse mode, update LCD periodically to show tape status even if nothing else changed
-				// This ensures tape counter is visible on OLED during playback in browse mode
+				// Browser status runs at 10Hz, including the tape counter on OLED.
 				if (emulating == IEC_COMMANDS && g_tapePlayer && g_tapePlayer->IsLoaded())
-				{
-					// Update every 10 iterations (roughly every 100ms) in browse mode to keep tape counter updated
-					static u32 browseUpdateCounter = 0;
-					if (++browseUpdateCounter >= 10)
-					{
-						browseUpdateCounter = 0;
-						UpdateLCD(tempBufferTrack, temperature);
-					}
-				}
+					updateLcd = true;
 #endif
+				if (updateLcd)
+					UpdateLCD(tempBufferTrack, temperature);
+				refreshLCDStatusDisplay = false;
 			}
 			else
 			{

@@ -619,11 +619,12 @@ FileBrowser::FileBrowser(InputMappings* inputMappings, DiskCaddy* diskCaddy, ROM
 	, screenMain(screenMain)
 #endif
 	, screenLCD(screenLCD)
-	, scrollHighlightRate(scrollHighlightRate)
+	, scrollHighlightRate(scrollHighlightRate < 0.1f ? 0.1f : scrollHighlightRate)
+	, lastHighlightUpdateTime(read32(ARM_SYSTIMER_CLO))
 	, displayingDevices(false)
 {
 
-	folder.scrollHighlightRate = scrollHighlightRate;
+	folder.scrollHighlightRate = this->scrollHighlightRate;
 
 #if not defined(EXPERIMENTALZERO)
 	u32 columns = screenMain->ScaleX(80);
@@ -1126,26 +1127,18 @@ void FileBrowser::PopFolder()
 
 void FileBrowser::UpdateCurrentHighlight()
 {
+	u32 now = read32(ARM_SYSTIMER_CLO);
+	float elapsedSeconds = (now - lastHighlightUpdateTime) / 1000000.0f;
+	lastHighlightUpdateTime = now;
 	if (folder.entries.size() > 0)
 	{
 		FileBrowser::BrowsableList::Entry* current = folder.current;
 		if (current && folder.currentHighlightTime > 0)
 		{
-			folder.currentHighlightTime -= 0.000001f;
+			folder.currentHighlightTime -= elapsedSeconds;
 
 			if (folder.currentHighlightTime <= 0)
-			{
 				folder.RefreshViewsHighlightScroll();
-				
-				// Also update tape status on OLED when scrolling long lines
-				// This ensures tape counter is updated periodically in browse mode
-#if defined(PI1551SUPPORT)
-				if (screenLCD && g_tapePlayer && g_tapePlayer->IsLoaded())
-				{
-					UpdateTapeStatusOnLCD(screenLCD, false, "", 0);  // false = browse mode
-				}
-#endif
-			}
 
 			if (folder.currentHighlightTime <= 0)
 			{
@@ -1161,7 +1154,7 @@ void FileBrowser::UpdateCurrentHighlight()
 		
 		if (current && caddySelections.currentHighlightTime > 0)
 		{
-			caddySelections.currentHighlightTime -= 0.000001f;
+			caddySelections.currentHighlightTime -= elapsedSeconds;
 
 			if (caddySelections.currentHighlightTime <= 0)
 			{

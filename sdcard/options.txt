@@ -16,7 +16,7 @@ ROM4 = super_dos_ram.bin
 //ROM1551 = dos1551.bin
 
 // The rate (in seconds) a long selection is scrolled in browse mode
-scrollHighlightRate = 0.07
+scrollHighlightRate = 0.10
 
 // Enable RAMBoard emulation — 8k drive RAM expansion at $8000
 RAMBOard = 1
@@ -113,6 +113,9 @@ DisplayTemperature = 1
 
 // Display emulated 6502 program counter on HDMI (debug)
 DisplayPC = 0
+
+// Show TCBM protocol diagnostics on HDMI (debug; 0 = off, 1 = on)
+DisplayTCBMDebug = 0
 
 // Tape motor control option
 // If tapeMotorAlwaysOn = 1 (default), motor is always active and tape playback starts immediately
