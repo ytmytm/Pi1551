@@ -2,7 +2,7 @@ OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 	exception.o main.o rpi-aux.o rpi-i2c.o rpi-mailbox-interface.o rpi-mailbox.o \
 	rpi-gpio.o rpi-interrupts.o dmRotary.o cache.o ff.o interrupt.o Keyboard.o performance.o \
 	DiskImage.o m6502.o Pi1551.o Drive1551.o \
-	commands_base.o tcbm_bus.o tcbm_commands.o cbm_diskimage.o m6523.o InputMappings.o \
+	commands_base.o tcbm_bus.o tcbm_commands.o tcbm2sd_protocol.o cbm_diskimage.o m6523.o InputMappings.o \
 	gcr.o prot.o lz.o emmc.o diskio.o options.o Screen.o SSD1306.o ScreenLCD.o \
 	Timer.o FileBrowser.o DiskCaddy.o ROMs.o xga_font_data.o SpinLock.o tape_player.o
 
@@ -16,9 +16,12 @@ INCLUDE  = -Iuspi/include/
 
 TARGET  ?= kernel
 
-.PHONY: all $(LIBS)
+.PHONY: all test-tcbm2sd-native $(LIBS)
 
 all: $(TARGET)
+
+test-tcbm2sd-native:
+	python3 tests/test_tcbm2sd_protocol.py
 
 $(TARGET): $(OBJS) $(LIBS)
 	@echo "  LINK $@"

@@ -117,6 +117,9 @@ int cbm_di_read(CbmImageFile* imgfile, u8* buffer, int len);
 
 int cbm_di_sectors_per_track(CbmImageType type, int track);
 int cbm_di_tracks(CbmImageType type);
+bool cbm_di_valid_ts(CbmImageType type, u8 track, u8 sector);
+u32 cbm_di_block_num(CbmImageType type, CbmTrackSector ts);
+u32 cbm_di_data_size(CbmImageType type);
 u8* cbm_di_title(CbmFsImage* di);
 int cbm_di_track_blocks_free(CbmFsImage* di, int track);
 

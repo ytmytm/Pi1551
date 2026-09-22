@@ -17,6 +17,7 @@
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
 #include "commands_base.h"
+#include "tcbm2sd_protocol.h"
 #include "cbm_diskimage.h"
 #include "defs.h"
 #include "ff.h"
@@ -103,8 +104,8 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 			msg = "WRITE ERROR";
 		break;
 		case ERROR_73_DOSVERSION:
-			snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s V%02d.%02d (TCBM3SD COMPAT),%02d,%02d\r", errorCode,
-						PI_DRIVE_NAME, versionMajor, versionMinor, track, sector);
+			Tcbm2sdProtocol::FormatDosVersionStatus(errorMessage, sizeof(errorMessage),
+				PI_DRIVE_NAME, versionMajor, versionMinor, track, sector);
 			return;
 		break;
 		case ERROR_30_SYNTAX_ERROR:

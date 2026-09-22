@@ -100,7 +100,14 @@ int cbm_di_sectors_per_track(CbmImageType type, int track)
 	}
 }
 
-static u32 get_block_num(CbmImageType type, CbmTrackSector ts)
+bool cbm_di_valid_ts(CbmImageType type, u8 track, u8 sector)
+{
+	return track > 0
+		&& track <= cbm_di_tracks(type)
+		&& sector < cbm_di_sectors_per_track(type, track);
+}
+
+u32 cbm_di_block_num(CbmImageType type, CbmTrackSector ts)
 {
 	u32 block = 0;
 
@@ -162,6 +169,14 @@ static u32 get_block_num(CbmImageType type, CbmTrackSector ts)
 	}
 }
 
+u32 cbm_di_data_size(CbmImageType type)
+{
+	u32 sectors = 0;
+	for (int track = 1; track <= cbm_di_tracks(type); ++track)
+		sectors += static_cast<u32>(cbm_di_sectors_per_track(type, track));
+	return sectors << 8;
+}
+
 static u8* get_ts_addr(CbmFsImage* di, CbmTrackSector ts)
 {
 	if (di->sectorReader)
@@ -172,7 +187,7 @@ static u8* get_ts_addr(CbmFsImage* di, CbmTrackSector ts)
 	}
 	if (!di->file)
 		return di->image;
-	f_lseek(di->file, get_block_num(di->type, ts) * 256);
+	f_lseek(di->file, cbm_di_block_num(di->type, ts) * 256);
 	UINT br = 0;
 	f_read(di->file, di->image, 256, &br);
 	(void)br;
@@ -181,11 +196,7 @@ static u8* get_ts_addr(CbmFsImage* di, CbmTrackSector ts)
 
 static int verify_next_ts(CbmFsImage* di, CbmTrackSector ts)
 {
-	if (ts.track == 0 || ts.track > cbm_di_tracks(di->type))
-		return 0;
-	if (ts.sector >= cbm_di_sectors_per_track(di->type, ts.track))
-		return 0;
-	return 1;
+	return cbm_di_valid_ts(di->type, ts.track, ts.sector) ? 1 : 0;
 }
 
 static CbmTrackSector next_ts_in_chain(CbmFsImage* di, CbmTrackSector ts)
@@ -781,7 +792,7 @@ CbmImageFile* cbm_di_open_ts(CbmFsImage* di, u8 track, u8 sector)
 	CbmImageFile* imgfile = &s_imgfile;
 	imgfile->ts.track = track;
 	imgfile->ts.sector = sector;
-	if (imgfile->ts.track > cbm_di_tracks(di->type))
+	if (!cbm_di_valid_ts(di->type, track, sector))
 		return nullptr;
 
 	u8* p = get_ts_addr(di, imgfile->ts);
@@ -852,16 +863,24 @@ u32 cbm_image_ts_byte_offset(u8 track, u8 sector)
 	CbmTrackSector ts;
 	ts.track = track;
 	ts.sector = sector;
-	return get_block_num(s_mount.fs.type, ts) * 256;
+	return cbm_di_block_num(s_mount.fs.type, ts) * 256;
 }
 
 bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut, bool write)
 {
 	bytesOut = 0;
-	if (!s_mount.active || !s_mount.filOpen || blockCount == 0)
+	if (!s_mount.active || !s_mount.filOpen || blockCount == 0
+		|| !cbm_di_valid_ts(s_mount.fs.type, track, sector))
 		return false;
 
 	bytesOut = static_cast<u32>(blockCount) << 8;
+	const u32 offset = cbm_image_ts_byte_offset(track, sector);
+	if (offset > cbm_di_data_size(s_mount.fs.type)
+		|| bytesOut > cbm_di_data_size(s_mount.fs.type) - offset)
+	{
+		bytesOut = 0;
+		return false;
+	}
 
 	if (write)
 	{
@@ -874,7 +893,7 @@ bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut,
 		s_mount.fs.file = &s_mount.fil;
 	}
 
-	if (f_lseek(&s_mount.fil, cbm_image_ts_byte_offset(track, sector)) != FR_OK)
+	if (f_lseek(&s_mount.fil, offset) != FR_OK)
 		return false;
 
 	s_blockIo.active = true;

@@ -21,6 +21,7 @@
 
 #include "commands_base.h"
 #include "tcbm_bus.h"
+#include "tcbm2sd_protocol.h"
 
 // TCBM layer 2: https://www.pagetable.com/?p=1324 (Kernal handshake)
 // Reference impl: docs/tcbm2sd/tcbm2sd.ino (incl. send_data_stream fast mode)
@@ -145,7 +146,6 @@ protected:
 	void NoteTimeout(const char* what);
 	void AppendCommandByte(Channel& channel, u8 byte);
 	bool HandleU0Command(Channel& channel);
-	bool ExtractU0Filename(const u8* data, size_t length);
 	void ApplyPendingFastFilename(u8 channel);
 	void PrepareFastLoadError(u8 channel);
 	void ReleaseTransferChannel(u8 channel);
@@ -187,8 +187,7 @@ protected:
 	struct FastHandshakeContext
 	{
 		bool initialised;
-		u8   ackLevel;
-		u8   expectedDav;
+		Tcbm2sdProtocol::FastHandshake sequence;
 		u8   status;
 	} fastCtx;
 

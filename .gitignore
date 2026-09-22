@@ -20,3 +20,4 @@ graphify-out/
 # Claude Code artifacts (this repo uses Cursor only)
 .claude/
 CLAUDE.md
+tests/.build/

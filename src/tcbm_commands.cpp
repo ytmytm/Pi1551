@@ -254,8 +254,7 @@ void TCBM_Commands::ResetStateMachine()
     lastTimeoutMessage[0] = '\0';
     debugHistoryCount = 0;
 	fastCtx.initialised = false;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	fastCtx.status = TCBM_STATUS_OK;
 	fastRequest.type = FAST_REQ_NONE;
 	fastRequest.track = 0;
@@ -590,44 +589,33 @@ void TCBM_Commands::HandleTalkSecondary(u8 secondaryByte)
     secondaryAddress = channel;
     activeChannel = channel;
 
-	bool fastMode = (secondaryByte & 0xF0) == SEC_FAST;
+	Channel& ch = channels[channel];
+	bool fastMode = (secondaryByte & 0xf0) == SEC_FAST;
 	if (fastMode && channel != 15)
 		AbortStaleTransferKeepFastRequest(channel);
-	switch (secondaryByte & 0xF0)
+	const Tcbm2sdProtocol::TalkDecision decision =
+		Tcbm2sdProtocol::DecodeTalkSecondary(secondaryByte,
+			fastRequest.type != FAST_REQ_NONE, ch.command[0], ch.open);
+	switch (decision.transfer)
 	{
-		case SEC_FAST:
-		case SEC_SECOND:
-		{
-			if (channel == 15)
-			{
-				PrepareStatusResponse(fastMode);
-			}
-			else
-			{
-				Channel& ch = channels[channel];
-				if (fastMode && fastRequest.type != FAST_REQ_NONE)
-				{
-					PrepareLoadChannel(channel, true);
-				}
-				else if (ch.command[0] == '$' || (channel == 0 && ch.command[0] == '\0' && !ch.open))
-				{
-					PrepareDirectoryResponse(channel, fastMode);
-				}
-				else if (ch.command[0] != '\0' || ch.open)
-				{
-					PrepareLoadChannel(channel, fastMode);
-				}
-				else
-				{
-					PushDebugLine("TALK ch %u with no open file", channel);
-					Error(ERROR_62_FILE_NOT_FOUND);
-					tcbmState = TCBM_STATE_IDLE;
-					deviceRole = DEVICE_ROLE_PASSIVE;
-				}
-			}
+		case Tcbm2sdProtocol::TALK_TRANSFER_STATUS:
+			PrepareStatusResponse(fastMode);
 			break;
-		}
-
+		case Tcbm2sdProtocol::TALK_TRANSFER_PENDING_U0:
+			PrepareLoadChannel(channel, true);
+			break;
+		case Tcbm2sdProtocol::TALK_TRANSFER_DIRECTORY:
+			PrepareDirectoryResponse(channel, fastMode);
+			break;
+		case Tcbm2sdProtocol::TALK_TRANSFER_FILE:
+			PrepareLoadChannel(channel, fastMode);
+			break;
+		case Tcbm2sdProtocol::TALK_TRANSFER_ERROR:
+			PushDebugLine("TALK ch %u with no open file", channel);
+			Error(ERROR_62_FILE_NOT_FOUND);
+			tcbmState = TCBM_STATE_IDLE;
+			deviceRole = DEVICE_ROLE_PASSIVE;
+			break;
 		default:
 			tcbmState = TCBM_STATE_IDLE;
 			deviceRole = DEVICE_ROLE_PASSIVE;
@@ -732,8 +720,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 				statusActive = false;
 				directoryActive = false;
 				fastCtx.initialised = false;
-				fastCtx.ackLevel = 1;
-				fastCtx.expectedDav = 0;
+				fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 				fastCtx.status = TCBM_STATUS_OK;
 				tcbmState = TCBM_STATE_FASTLOAD;
 				deviceRole = DEVICE_ROLE_TALK;
@@ -741,9 +728,10 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 					channel, ch.fileSize, reinterpret_cast<const char*>(ch.command));
 				return true;
 			}
-			PushDebugLine("FAST pending name no image");
-			PrepareFastLoadError(channel);
-			return true;
+			// Browser mode: U0 supplied the filename, but there is no mounted
+			// CBM image. Continue through the ordinary FatFS OpenFile path below.
+			fastRequest.type = FAST_REQ_NONE;
+			PushDebugLine("FAST pending name from browser");
 		}
 		else if (fastRequest.type == FAST_REQ_TRACK_SECTOR)
 		{
@@ -778,8 +766,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 			statusActive = false;
 			directoryActive = false;
 			fastCtx.initialised = false;
-			fastCtx.ackLevel = 1;
-			fastCtx.expectedDav = 0;
+			fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 			fastCtx.status = TCBM_STATUS_OK;
 			tcbmState = TCBM_STATE_FASTLOAD;
 			deviceRole = DEVICE_ROLE_TALK;
@@ -852,8 +839,7 @@ bool TCBM_Commands::PrepareLoadChannel(u8 channel, bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
-		fastCtx.ackLevel = 1;
-		fastCtx.expectedDav = 0;
+		fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTLOAD;
 		fastRequest.type = FAST_REQ_NONE;
@@ -942,8 +928,7 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
-		fastCtx.ackLevel = 1;
-		fastCtx.expectedDav = 0;
+		fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTDIR;
 		deviceRole = DEVICE_ROLE_TALK;
@@ -971,8 +956,7 @@ void TCBM_Commands::PrepareStatusResponse(bool fastMode)
 	if (fastMode)
 	{
 		fastCtx.initialised = false;
-		fastCtx.ackLevel = 1;
-		fastCtx.expectedDav = 0;
+		fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 		fastCtx.status = TCBM_STATUS_OK;
 		tcbmState = TCBM_STATE_FASTDIR;
 		fastRequest.type = FAST_REQ_NONE;
@@ -1005,169 +989,57 @@ void TCBM_Commands::AppendCommandByte(Channel& channel, u8 byte)
 
 bool TCBM_Commands::HandleU0Command(Channel& channel)
 {
-	if (channel.cursor < 2)
+	const bool inImage = cbm_image_is_mounted() || mountedImagePath[0] != '\0';
+	const Tcbm2sdProtocol::FastRequest parsed =
+		Tcbm2sdProtocol::ParseU0(channel.buffer, channel.cursor, inImage);
+
+	if (parsed.type == Tcbm2sdProtocol::FAST_REQUEST_NONE)
 		return false;
 
-	const u8* data = channel.buffer;
-	size_t length = channel.cursor;
-
-	if (data[0] != 'U' || data[1] != '0')
-		return false;
-
-	if (length >= 4 && data[2] == '>' && (data[3] == 8 || data[3] == 9))
-	{
-		u8 id = data[3];
-		SetDeviceId(id);
-		Error(ERROR_00_OK);
-		fastRequest.type = FAST_REQ_NONE;
-		PushDebugLine("U0> set device %u", id);
-		return true;
-	}
-
-	if (length < 3)
+	fastRequest.type = FAST_REQ_NONE;
+	if (parsed.type == Tcbm2sdProtocol::FAST_REQUEST_INVALID)
 	{
 		Error(ERROR_30_SYNTAX_ERROR);
-		fastRequest.type = FAST_REQ_NONE;
 		return true;
 	}
 
-	u8 mode = data[2] & 0x3F;
-	switch (mode)
+	if (parsed.type == Tcbm2sdProtocol::FAST_REQUEST_SET_DEVICE)
 	{
-		case 0x1F:
-		{
-			bool ok = ExtractU0Filename(data + 3, length - 3);
-			if (ok)
-			{
-				fastRequest.type = FAST_REQ_FILENAME;
-				Error(ERROR_00_OK);
-				PushDebugLine("U0 $1f filename len:%u [%s]",
-					static_cast<unsigned>(length - 3), fastRequest.filename);
-			}
-			else
-			{
-				fastRequest.type = FAST_REQ_NONE;
-				Error(ERROR_30_SYNTAX_ERROR);
-			}
-			return true;
-		}
-
-		case 0x3F:
-		{
-			if (length < 5)
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			fastRequest.type = FAST_REQ_TRACK_SECTOR;
-			fastRequest.track = data[3];
-			fastRequest.sector = data[4];
-			Error(ERROR_00_OK);
-			PushDebugLine("U0 $3f T/S %u/%u image:%u mounted:%u",
-				fastRequest.track, fastRequest.sector,
-				static_cast<unsigned>(mountedImagePath[0] != '\0'),
-				static_cast<unsigned>(cbm_image_is_mounted()));
-			return true;
-		}
-
-		case 0x00:
-		{
-			if (length < 6)
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			fastRequest.type = FAST_REQ_BLOCK_READ;
-			fastRequest.track = data[3];
-			fastRequest.sector = data[4];
-			fastRequest.blockCount = data[5];
-			Error(ERROR_00_OK);
-			PushDebugLine("U0 fast block read %u/%u count %u", fastRequest.track, fastRequest.sector, fastRequest.blockCount);
-			return true;
-		}
-
-		case 0x02:
-		{
-			if (length < 6)
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			if (!cbm_image_is_mounted() && mountedImagePath[0] == '\0')
-			{
-				Error(ERROR_30_SYNTAX_ERROR);
-				fastRequest.type = FAST_REQ_NONE;
-				return true;
-			}
-			fastRequest.type = FAST_REQ_BLOCK_WRITE;
-			fastRequest.track = data[3];
-			fastRequest.sector = data[4];
-			fastRequest.blockCount = data[5];
-			Error(ERROR_00_OK);
-			PushDebugLine("U0 fast block write %u/%u count %u", fastRequest.track, fastRequest.sector, fastRequest.blockCount);
-			return true;
-		}
-
-		default:
-			fastRequest.type = FAST_REQ_NONE;
-			Error(ERROR_31_SYNTAX_ERROR);
-			return true;
+		SetDeviceId(parsed.device);
+		Error(ERROR_00_OK);
+		PushDebugLine("U0> set device %u", parsed.device);
+		return true;
 	}
-}
 
-static u8 TcbmToPetscii(u8 c)
-{
-	if (c == 0x5f)
-		return 0x7e;
-	if (c == 0x7e)
-		return 0x5f;
-	if (c >= 0x80 + 'a' && c <= 0x80 + 'z')
-		c -= 0xa0;
-	if (c >= 0x80 + 'A' && c <= 0x80 + 'Z')
-		c -= 0x80;
-	if (c >= 'a' && c <= 'z')
-		c -= 0x20;
-	return c;
-}
+	fastRequest.track = parsed.track;
+	fastRequest.sector = parsed.sector;
+	fastRequest.blockCount = parsed.blockCount;
+	std::memcpy(fastRequest.filename, parsed.filename, sizeof(fastRequest.filename));
+	Error(ERROR_00_OK);
 
-bool TCBM_Commands::ExtractU0Filename(const u8* data, size_t length)
-{
-	fastRequest.filename[0] = '\0';
-	if (length == 0)
-		return false;
-
-	// Skip optional drive prefix 0:
-	size_t in = 0;
-	if (length >= 2 && data[0] == '0' && data[1] == ':')
-		in = 2;
-	else if (data[0] == ':')
-		in = 1;
-
-	size_t out = 0;
-	for (; in < length && out + 1 < FAST_FILENAME_MAX; ++in)
+	switch (parsed.type)
 	{
-		u8 value = data[in];
-		if (value == 0 || value == 0x0D)
+		case Tcbm2sdProtocol::FAST_REQUEST_FILENAME:
+			fastRequest.type = FAST_REQ_FILENAME;
+			PushDebugLine("U0 $1f filename [%s]", fastRequest.filename);
 			break;
-		fastRequest.filename[out++] = static_cast<char>(TcbmToPetscii(value));
+		case Tcbm2sdProtocol::FAST_REQUEST_TRACK_SECTOR:
+			fastRequest.type = FAST_REQ_TRACK_SECTOR;
+			PushDebugLine("U0 $3f T/S %u/%u", fastRequest.track, fastRequest.sector);
+			break;
+		case Tcbm2sdProtocol::FAST_REQUEST_BLOCK_READ:
+			fastRequest.type = FAST_REQ_BLOCK_READ;
+			PushDebugLine("U0 fast block read %u/%u count %u", fastRequest.track, fastRequest.sector, fastRequest.blockCount);
+			break;
+		case Tcbm2sdProtocol::FAST_REQUEST_BLOCK_WRITE:
+			fastRequest.type = FAST_REQ_BLOCK_WRITE;
+			PushDebugLine("U0 fast block write %u/%u count %u", fastRequest.track, fastRequest.sector, fastRequest.blockCount);
+			break;
+		default:
+			Error(ERROR_30_SYNTAX_ERROR);
+			break;
 	}
-	fastRequest.filename[out] = '\0';
-	return out > 0;
+	return true;
 }
 
 void TCBM_Commands::ApplyPendingFastFilename(u8 channel)
@@ -1201,8 +1073,7 @@ void TCBM_Commands::PrepareFastLoadError(u8 channel)
 	statusActive = false;
 	directoryActive = false;
 	fastCtx.initialised = false;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	fastCtx.status = TCBM_STATUS_SEND;
 	tcbmState = TCBM_STATE_FASTLOAD;
 	deviceRole = DEVICE_ROLE_TALK;
@@ -1237,8 +1108,7 @@ void TCBM_Commands::AbortStaleTransferKeepFastRequest(u8 channel)
 	directoryActive = false;
 	statusActive = false;
 	fastCtx.initialised = false;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	fastCtx.status = TCBM_STATUS_OK;
 	if (tcbmState != TCBM_STATE_IDLE && tcbmState != TCBM_STATE_OPEN)
 	{
@@ -1592,8 +1462,7 @@ bool TCBM_Commands::InitialiseFastHandshake(const char* stage)
 	if (fastCtx.initialised)
 		return true;
 
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	fastCtx.status = TCBM_STATUS_OK;
 
 	TCBM_Bus::SetDataInput();
@@ -1611,14 +1480,14 @@ bool TCBM_Commands::FastSendByte(u8 data)
 {
 	TCBM_Bus::SetData(data);
 	TCBM_Bus::SetStatus(fastCtx.status);
-	fastCtx.ackLevel ^= 1;
-	if (fastCtx.ackLevel)
+	const Tcbm2sdProtocol::FastHandshakeStep step =
+		Tcbm2sdProtocol::NextFastStep(fastCtx.sequence);
+	if (step.ack)
 		TCBM_Bus::AssertACK();
 	else
 		TCBM_Bus::ReleaseACK();
 
-	fastCtx.expectedDav ^= 1;
-	return WaitForDAVState(fastCtx.expectedDav != 0, "FAST DAV", COMMAND_TIMEOUT_US);
+	return WaitForDAVState(step.expectedDav != 0, "FAST DAV", COMMAND_TIMEOUT_US);
 }
 
 bool TCBM_Commands::FastSendBlockByte(u8 data)
@@ -1628,20 +1497,17 @@ bool TCBM_Commands::FastSendBlockByte(u8 data)
 
 bool TCBM_Commands::FastReceiveBlockByte(u8& data)
 {
-	fastCtx.ackLevel ^= 1;
-	if (fastCtx.ackLevel)
-		TCBM_Bus::AssertACK();
-	else
-		TCBM_Bus::ReleaseACK();
-
-	fastCtx.expectedDav ^= 1;
-	if (!WaitForDAVState(fastCtx.expectedDav != 0, "FAST block write DAV", COMMAND_TIMEOUT_US))
+	const Tcbm2sdProtocol::FastHandshakeStep step =
+		Tcbm2sdProtocol::NextFastStep(fastCtx.sequence);
+	if (!WaitForDAVState(step.expectedDav != 0, "FAST block write DAV", COMMAND_TIMEOUT_US))
 		return false;
 
 	TCBM_Bus::ReadBrowseMode();
 	data = TCBM_Bus::GetPI_Data();
 	TCBM_Bus::SetStatus(fastCtx.status);
-	if (fastCtx.ackLevel)
+	// ACK is the confirmation. Do not change it before the byte is present and
+	// sampled; doing so races the 6502 block-writer client.
+	if (step.ack)
 		TCBM_Bus::AssertACK();
 	else
 		TCBM_Bus::ReleaseACK();
@@ -1661,8 +1527,7 @@ bool TCBM_Commands::FinaliseFastHandshake()
 	TCBM_Bus::SetStatus(TCBM_STATUS_OK);
 	fastCtx.initialised = false;
 	fastCtx.status = TCBM_STATUS_OK;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	return ok;
 }
 
@@ -1925,8 +1790,7 @@ void TCBM_Commands::ServiceFastBlockWriteState()
 {
 	if (!fastCtx.initialised)
 	{
-		fastCtx.ackLevel = 1;
-		fastCtx.expectedDav = 1;
+		fastCtx.sequence = Tcbm2sdProtocol::BeginFastWrite();
 		fastCtx.status = TCBM_STATUS_OK;
 		TCBM_Bus::SetDataInput();
 		TCBM_Bus::SetStatus(TCBM_STATUS_OK);
@@ -1961,6 +1825,10 @@ void TCBM_Commands::ServiceFastBlockWriteState()
 		}
 
 		u8 data = 0;
+		// The writer samples STATUS immediately after ACK. EOI therefore has
+		// to accompany the final byte, exactly as in state_fastblock().
+		if (blockIoBytesRemaining == 1)
+			fastCtx.status = TCBM_STATUS_EOI;
 		if (!FastReceiveBlockByte(data))
 		{
 			NoteTimeout("FAST block write byte");
@@ -1982,8 +1850,6 @@ void TCBM_Commands::ServiceFastBlockWriteState()
 
 		if (blockIoBytesRemaining > 0)
 			--blockIoBytesRemaining;
-		if (blockIoBytesRemaining == 0)
-			fastCtx.status = TCBM_STATUS_EOI;
 	}
 }
 
@@ -2011,8 +1877,7 @@ bool TCBM_Commands::PrepareFastBlockRead()
 	fastRequest.type = FAST_REQ_NONE;
 
 	fastCtx.initialised = false;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 0;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastRead();
 	fastCtx.status = TCBM_STATUS_OK;
 	tcbmState = TCBM_STATE_FAST_BLOCKREAD;
 	PushDebugLine("FAST BLOCK READ %u/%u x%u (%u bytes)", track, sector, count, bytes);
@@ -2043,8 +1908,7 @@ bool TCBM_Commands::PrepareFastBlockWrite()
 	fastRequest.type = FAST_REQ_NONE;
 
 	fastCtx.initialised = false;
-	fastCtx.ackLevel = 1;
-	fastCtx.expectedDav = 1;
+	fastCtx.sequence = Tcbm2sdProtocol::BeginFastWrite();
 	fastCtx.status = TCBM_STATUS_OK;
 	tcbmState = TCBM_STATE_FAST_BLOCKWRITE;
 	PushDebugLine("FAST BLOCK WRITE %u/%u x%u (%u bytes)", track, sector, count, bytes);
