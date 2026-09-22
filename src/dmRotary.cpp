@@ -81,7 +81,7 @@ rotary_result_t RotaryEncoder::Poll()
 //------------------------------------------------------------------------------
 // Poll
 //
-rotary_result_t RotaryEncoder::Poll(unsigned gplev0)
+rotary_result_t RotaryEncoder::Poll(unsigned gplev0, unsigned sampleUs)
 { 
 
 	rotary_result_t result = NoChange;
@@ -97,7 +97,7 @@ rotary_result_t RotaryEncoder::Poll(unsigned gplev0)
 	{
 
 		//Debounce switch and determine state
-		_switchPin.Update((gplev0 & _switchPin.GetGpioPinMask()) == 0);
+		_switchPin.Update((gplev0 & _switchPin.GetGpioPinMask()) == 0, sampleUs);
 		bool switchState = _switchPin.GetState();
 
 		//Detect switch state change
@@ -119,11 +119,11 @@ rotary_result_t RotaryEncoder::Poll(unsigned gplev0)
 	{
 
 		//Debounce clock and determine state
-		_clockPin.Update((gplev0 & _clockPin.GetGpioPinMask()) == 0);
+		_clockPin.Update((gplev0 & _clockPin.GetGpioPinMask()) == 0, sampleUs);
 		bool clockState = _clockPin.GetState();
 
 		//Debounce data and determine state
-		_dataPin.Update((gplev0 & _dataPin.GetGpioPinMask()) == 0);
+		_dataPin.Update((gplev0 & _dataPin.GetGpioPinMask()) == 0, sampleUs);
 		bool dataState = _dataPin.GetState();
 
 		//Detect rotary state change

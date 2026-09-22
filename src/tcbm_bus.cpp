@@ -154,11 +154,11 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs)
 		int indexBack = InputMappings::INPUT_BUTTON_BACK;
 		int indexInsert = InputMappings::INPUT_BUTTON_INSERT;
 
-		// Static counters to track rotation button hold duration
-		// Buttons are held for a few cycles to ensure they are detected
+		// Keep each decoded detent active until the browser consumes this poll.
+		// A longer hold is interpreted as key repeat and moves multiple rows.
 		static int rotationUpCounter = 0;
 		static int rotationDownCounter = 0;
-		const int ROTATION_BUTTON_HOLD_CYCLES = 5; // Hold button for 5 cycles
+		const int ROTATION_BUTTON_HOLD_CYCLES = 1;
 
 		// Decrement counters and reset buttons when counter reaches zero
 		if (rotationUpCounter > 0)
@@ -185,7 +185,7 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs)
 		//       input button registers to reflect the desired action, and allow the
 		//       original processing logic to do it's work.
 		//
-		rotary_result_t rotaryResult = TCBM_Bus::rotaryEncoder.Poll(gpioLevel);
+		rotary_result_t rotaryResult = TCBM_Bus::rotaryEncoder.Poll(gpioLevel, sampleUs);
 		switch (rotaryResult)
 		{
 

@@ -65,8 +65,8 @@ private:
 
     rpi_gpio_pin_t _gpioPin = RPI_GPIO0;
 
-    int _count = 0;
-    int _threshold = 256; // I just like powers of two
+    unsigned _countUs = 0;
+    static const unsigned DEBOUNCE_US = 256;
 
     bool _currentState = false;
 
@@ -79,22 +79,25 @@ public:
 
     bool GetState() const { return _currentState; }
 
-    void Update(bool state)
+    void Update(bool state, unsigned sampleUs = 1)
     {
-
-		_count += state ? 1 : -1;
-
         bool newState = _currentState;
 
-        if (_count <= 0)
+        if (state)
         {
-            _count = 0;
-            newState = false;
+            if (_countUs < DEBOUNCE_US)
+            {
+                unsigned remaining = DEBOUNCE_US - _countUs;
+                _countUs += sampleUs < remaining ? sampleUs : remaining;
+            }
+            if (_countUs >= DEBOUNCE_US)
+                newState = true;
         }
-        else if (_count >= _threshold)
+        else
         {
-            _count = _threshold;
-            newState = true;
+            _countUs = sampleUs < _countUs ? _countUs - sampleUs : 0;
+            if (_countUs == 0)
+                newState = false;
         }
 
         _currentState = newState;
@@ -245,7 +248,7 @@ public:
     void Initialize(rpi_gpio_pin_t clkGpioPin, rpi_gpio_pin_t dtGpioPin, rpi_gpio_pin_t swGpioPin);
 
     rotary_result_t Poll();
-    rotary_result_t Poll(unsigned gplev0);
+    rotary_result_t Poll(unsigned gplev0, unsigned sampleUs = 1);
 
 };
 
