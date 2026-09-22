@@ -71,6 +71,14 @@ void RPI_PropertyAddTag( rpi_mailbox_tag_t tag, ... )
             pt_index += PROP_SIZE >> 2;
             break;
 
+        case TAG_GET_EDID_BLOCK:
+            /* One 128-byte EDID block plus block number and status. */
+            pt[pt_index++] = 136;
+            pt[pt_index++] = 0; /* Request */
+            pt[pt_index++] = va_arg( vl, int ); /* Block number */
+            pt_index += 33;
+            break;
+
         case TAG_GET_CLOCK_RATE:
         case TAG_GET_MAX_CLOCK_RATE:
         case TAG_GET_MIN_CLOCK_RATE:

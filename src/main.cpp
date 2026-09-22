@@ -140,6 +140,7 @@ Pi1581 pi1581;
 CEMMCDevice	m_EMMC;
 Screen screen;
 ScreenLCD* screenLCD = 0;
+static bool hdmiPresent = true;
 Options options;
 const char* fileBrowserSelectedName;
 u8 deviceID = 8;
@@ -760,7 +761,14 @@ void InitialiseHardware()
 #endif
 
 #if not defined(EXPERIMENTALZERO)
-	screen.Open(screenWidth, screenHeight, 16);
+	// A failed EDID query is inconclusive; keep HDMI enabled in that case.
+	RPI_PropertyInit();
+	RPI_PropertyAddTag(TAG_GET_EDID_BLOCK, 0);
+	RPI_PropertyProcess();
+	rpi_mailbox_property_t* edid = RPI_PropertyGet(TAG_GET_EDID_BLOCK);
+	if (edid && edid->byte_length >= 136 && edid->data.buffer_32[1] != 0)
+		hdmiPresent = false;
+	screen.Open(screenWidth, screenHeight, 16, hdmiPresent);
 #endif
 	RPI_PropertyInit();
 	RPI_PropertyAddTag(TAG_GET_MAX_CLOCK_RATE, ARM_CLK_ID);
@@ -3299,6 +3307,8 @@ static void start_core(int core, func_ptr func)
 static void DisplayLogo()
 {
 #if not defined(EXPERIMENTALZERO)
+	if (!hdmiPresent)
+		return;
 	int w;
 	int h;
 	int channels_in_file;

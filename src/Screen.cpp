@@ -37,7 +37,7 @@ extern unsigned char* CBMFont;
 static const int BitFontHt = 16;
 static const int BitFontWth = 8;
 
-void Screen::Open(u32 widthDesired, u32 heightDesired, u32 colourDepth)
+void Screen::Open(u32 widthDesired, u32 heightDesired, u32 colourDepth, bool enabled)
 {
 	if (widthDesired < 320)
 		widthDesired = 320;
@@ -55,6 +55,12 @@ void Screen::Open(u32 widthDesired, u32 heightDesired, u32 colourDepth)
 
 	scaleX = (float)widthDesired / 1024.0f;
 	scaleY = (float)heightDesired / 768.0f;
+	width = widthDesired;
+	height = heightDesired;
+	bpp = colourDepth;
+	pitch = widthDesired * (colourDepth >> 3);
+	if (!enabled)
+		return;
 
 	RPI_PropertyInit();
 	RPI_PropertyAddTag(TAG_GET_PHYSICAL_SIZE);
@@ -156,6 +162,8 @@ void Screen::PlotPixel8(u32 pixel_offset, RGBA Colour)
 
 void Screen::DrawRectangle(u32 x1, u32 y1, u32 x2, u32 y2, RGBA colour)
 {
+	if (!opened)
+		return;
 	ClipRect(x1, y1, x2, y2);
 
 	for (u32 y = y1; y < y2; y++)
@@ -171,6 +179,8 @@ void Screen::DrawRectangle(u32 x1, u32 y1, u32 x2, u32 y2, RGBA colour)
 
 void Screen::ScrollArea(u32 x1, u32 y1, u32 x2, u32 y2)
 {
+	if (!opened)
+		return;
 	ClipRect(x1, y1, x2, y2);
 
 	if (x2 - 1 <= x1)
@@ -260,6 +270,8 @@ void Screen::WriteChar(bool petscii, u32 x, u32 y, unsigned char c, RGBA colour)
 
 void Screen::PlotPixel(u32 x, u32 y, RGBA colour)
 {
+	if (!opened)
+		return;
 	if (x < 0 || y < 0 || x >= width || y >= height)
 		return;
 	int pixel_offset = (x * (bpp >> 3)) + (y * pitch);
@@ -268,6 +280,8 @@ void Screen::PlotPixel(u32 x, u32 y, RGBA colour)
 
 void Screen::DrawLine(u32 x1, u32 y1, u32 x2, u32 y2, RGBA colour)
 {
+	if (!opened)
+		return;
 	ClipRect(x1, y1, x2, y2);
 
 	int dx0, dy0, ox, oy, eulerMax;
@@ -286,6 +300,8 @@ void Screen::DrawLine(u32 x1, u32 y1, u32 x2, u32 y2, RGBA colour)
 
 void Screen::DrawLineV(u32 x, u32 y1, u32 y2, RGBA colour)
 {
+	if (!opened)
+		return;
 	//ClipRect(x, y1, x, y2);
 	for (u32 y = y1; y <= y2; ++y)
 	{
@@ -311,7 +327,7 @@ u32 Screen::PrintText(bool petscii, u32 x, u32 y, char *ptr, RGBA TxtColour, RGB
 		char c = *ptr++;
 		if ((c != '\r') && (c != '\n'))
 		{
-			if (!measureOnly)
+			if (!measureOnly && opened)
 			{
 				DrawRectangle(xCursor, yCursor, xCursor + BitFontWth, yCursor + fontHeight, BkColour);
 				WriteChar(petscii, xCursor, yCursor, c, TxtColour);
@@ -338,6 +354,8 @@ u32 Screen::MeasureText(bool petscii, char *ptr, u32* width, u32* height)
 
 void Screen::PlotImage(u32* image, int x, int y, int w, int h)
 {
+	if (!opened)
+		return;
 	int px;
 	int py;
 	int i = 0;
@@ -349,4 +367,3 @@ void Screen::PlotImage(u32* image, int x, int y, int w, int h)
 		}
 	}
 }
-
