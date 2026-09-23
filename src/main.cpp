@@ -2226,6 +2226,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 				for (u8 i = 0; i < copyLen; ++i)
 					commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
 
+				m_TCBM_Commands.NoteEmulationU0Trap(copyLen);
 				if (m_TCBM_Commands.CanInterceptEmulationU0Command(commandBuf, copyLen))
 				{
 					Pi1551MountDecodedD64ForBrowserHandoff();

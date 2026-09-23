@@ -14,13 +14,131 @@ using namespace Tcbm2sdProtocol;
 
 static u8 s_cpuMemory[65536];
 
+struct FastClientBusSimulation
+{
+	std::vector<u8> bytes;
+	FastHandshake sequence;
+	size_t byteIndex;
+	u8 offset;
+	u8 status;
+	bool ack;
+	bool dav;
+	bool expectedDav;
+	bool clientOutput;
+	bool serverOutput;
+	bool started;
+	bool finished;
+	bool contention;
+	unsigned dataReads;
+	unsigned startDelayPolls;
+
+	FastClientBusSimulation(const std::vector<u8>& source, u8 deviceOffset,
+		unsigned delayedAckPolls = 0)
+		: bytes(source), sequence(BeginFastRead()), byteIndex(0), offset(deviceOffset),
+		status(0), ack(true), dav(true), expectedDav(false), clientOutput(true),
+		serverOutput(false), started(false), finished(false), contention(false),
+		dataReads(0), startDelayPolls(delayedAckPolls) {}
+
+	bool IsRegister(u16 address, u8 reg) const
+	{
+		return address == static_cast<u16>(0xFEC0 + offset + reg);
+	}
+
+	void CheckContention()
+	{
+		if (clientOutput && serverOutput)
+			contention = true;
+	}
+
+	void PresentByte()
+	{
+		serverOutput = true;
+		status = byteIndex + 1 == bytes.size() ? 3 : 0;
+		const FastHandshakeStep step = NextFastStep(sequence);
+		ack = step.ack != 0;
+		expectedDav = step.expectedDav != 0;
+		CheckContention();
+	}
+
+	void SetDav(bool value)
+	{
+		dav = value;
+		if (!started && !dav && !bytes.empty())
+		{
+			started = true;
+			if (startDelayPolls == 0)
+				PresentByte();
+			return;
+		}
+		if (!started || finished || dav != expectedDav)
+			return;
+
+		if (++byteIndex == bytes.size())
+		{
+			serverOutput = false;
+			ack = true;
+			finished = true;
+			if (dav)
+				status = 0;
+			return;
+		}
+		PresentByte();
+	}
+
+	u8 Read(u16 address)
+	{
+		if (IsRegister(address, 0))
+		{
+			++dataReads;
+			return serverOutput && byteIndex < bytes.size() ? bytes[byteIndex] : 0xff;
+		}
+		if (IsRegister(address, 1))
+			return status;
+		if (IsRegister(address, 2))
+		{
+			if (started && !serverOutput && !finished && byteIndex == 0
+				&& startDelayPolls != 0 && --startDelayPolls == 0)
+				PresentByte();
+			return static_cast<u8>((ack ? 0x80 : 0) | (dav ? 0x40 : 0));
+		}
+		return s_cpuMemory[address];
+	}
+
+	void Write(u16 address, u8 value)
+	{
+		if (IsRegister(address, 3))
+		{
+			clientOutput = value != 0;
+			CheckContention();
+			return;
+		}
+		if (IsRegister(address, 2))
+		{
+			SetDav((value & 0x40) != 0);
+			if (finished && dav)
+				status = 0;
+			return;
+		}
+		s_cpuMemory[address] = value;
+	}
+};
+
+static FastClientBusSimulation* s_fastClientBus = nullptr;
+
 static u8 ReadCpuMemory(u16 address)
 {
+	if (s_fastClientBus)
+		return s_fastClientBus->Read(address);
 	return s_cpuMemory[address];
 }
 
 static void WriteCpuMemory(u16 address, const u8 value)
 {
+	if (s_fastClientBus)
+	{
+		s_fastClientBus->Write(address, value);
+		return;
+	}
 	s_cpuMemory[address] = value;
 }
 
@@ -378,6 +496,85 @@ int main()
 			std::cout << "ok=" << (ok ? 1 : 0)
 				<< " sp-before=" << unsigned(spBefore)
 				<< " sp-after=" << unsigned(spAfter)
+				<< " pc=" << std::hex << pc << std::dec << '\n';
+		}
+		else if (command == "client-fast-read")
+		{
+			const std::vector<u8> loader = ReadBytes(input);
+			std::fill(s_cpuMemory, s_cpuMemory + sizeof(s_cpuMemory), 0);
+			bool ok = loader.size() == 142;
+			if (ok)
+				std::copy(loader.begin(), loader.end(), s_cpuMemory + 0x0762);
+			s_cpuMemory[0xFFFC] = 0x00;
+			s_cpuMemory[0xFFFD] = 0x02;
+			s_cpuMemory[0x0200] = 0xA2; // LDX #$30 (device 8 TPI offset)
+			s_cpuMemory[0x0201] = 0x30;
+			s_cpuMemory[0x0202] = 0x20; // JSR $0762, immediately after U0
+			s_cpuMemory[0x0203] = 0x62;
+			s_cpuMemory[0x0204] = 0x07;
+			s_cpuMemory[0x0205] = 0xEA;
+
+			const u8 streamData[] = { 0x00, 0x20, 0xAA, 0x55, 0x13, 0x7E, 0xC3 };
+			FastClientBusSimulation bus(
+				std::vector<u8>(streamData, streamData + sizeof(streamData)), 0x30, 257);
+			s_fastClientBus = &bus;
+			M6502 cpu(nullptr, ReadCpuMemory, WriteCpuMemory);
+			ok = ok && RunCpuToInstruction(cpu, 0x0205, 10000);
+			s_fastClientBus = nullptr;
+
+			u16 pc = 0;
+			u8 sp = 0, a = 0, x = 0, y = 0, status = 0;
+			cpu.GetRegs(pc, sp, a, x, y, status);
+			ok = ok && bus.started && bus.finished && !bus.contention
+				&& bus.ack && bus.dav && !bus.serverOutput && bus.clientOutput
+				&& bus.dataReads == sizeof(streamData)
+				&& std::equal(streamData + 2, streamData + sizeof(streamData),
+					s_cpuMemory + 0x2000);
+			std::cout << "ok=" << (ok ? 1 : 0)
+				<< " bytes=" << bus.dataReads
+				<< " contention=" << (bus.contention ? 1 : 0)
+				<< " ack=" << (bus.ack ? 1 : 0)
+				<< " dav=" << (bus.dav ? 1 : 0)
+				<< " pc=" << std::hex << pc << std::dec << '\n';
+		}
+		else if (command == "client-geos-block-read")
+		{
+			const std::vector<u8> loader = ReadBytes(input);
+			std::fill(s_cpuMemory, s_cpuMemory + sizeof(s_cpuMemory), 0);
+			bool ok = loader.size() == 86;
+			if (ok)
+				std::copy(loader.begin(), loader.end(), s_cpuMemory + 0x9275);
+			s_cpuMemory[0xFFFC] = 0x00;
+			s_cpuMemory[0xFFFD] = 0x02;
+			const u8 caller[] = {
+				0xA9, 0x00, 0x85, 0x0A, // r4 = $3000
+				0xA9, 0x30, 0x85, 0x0B,
+				0x20, 0x75, 0x92,       // JSR GEOS fast block-read body
+				0xEA
+			};
+			std::copy(caller, caller + sizeof(caller), s_cpuMemory + 0x0200);
+
+			std::vector<u8> sector(256);
+			for (unsigned i = 0; i < sector.size(); ++i)
+				sector[i] = static_cast<u8>(i * 37 + 11);
+			FastClientBusSimulation bus(sector, 0x30, 257);
+			s_fastClientBus = &bus;
+			M6502 cpu(nullptr, ReadCpuMemory, WriteCpuMemory);
+			ok = ok && RunCpuToInstruction(cpu, 0x020B, 200000);
+			s_fastClientBus = nullptr;
+
+			u16 pc = 0;
+			u8 sp = 0, a = 0, x = 0, y = 0, status = 0;
+			cpu.GetRegs(pc, sp, a, x, y, status);
+			ok = ok && bus.started && bus.finished && !bus.contention
+				&& bus.ack && bus.dav && !bus.serverOutput && bus.clientOutput
+				&& bus.dataReads == sector.size()
+				&& std::equal(sector.begin(), sector.end(), s_cpuMemory + 0x3000);
+			std::cout << "ok=" << (ok ? 1 : 0)
+				<< " bytes=" << bus.dataReads
+				<< " contention=" << (bus.contention ? 1 : 0)
+				<< " ack=" << (bus.ack ? 1 : 0)
+				<< " dav=" << (bus.dav ? 1 : 0)
 				<< " pc=" << std::hex << pc << std::dec << '\n';
 		}
 		else if (!command.empty())

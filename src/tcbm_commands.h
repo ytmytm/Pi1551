@@ -80,6 +80,7 @@ public:
 	// Emulation-mode traps (1551 ROM) delegate fast transfers to browser handler
 	void MirrorEmulationOpenCommand(u8 channel, const u8* data, size_t length);
 	bool CanInterceptEmulationU0Command(const u8* data, size_t length) const;
+	void NoteEmulationU0Trap(size_t length);
 	bool InterceptEmulationU0Command(const u8* data, size_t length);
 	void HandleEmulationFastTalkHandoff(u8 channel);
 	bool PreparePendingFastTransfer(u8 channel = 0);
@@ -170,7 +171,12 @@ protected:
     static int  debugLineCount;
     static char debugHistory[DEBUG_LINE_CAPACITY][DEBUG_LINE_LENGTH];
     static int  debugHistoryCount;
-    static char lastTimeoutMessage[DEBUG_LINE_LENGTH];
+	static char lastTimeoutMessage[DEBUG_LINE_LENGTH];
+	u32 diagnosticU0Traps;
+	u32 diagnosticHandoffs;
+	u32 diagnosticFastBytes;
+	u8 diagnosticFastStage;
+	u8 diagnosticHandoffDav;
 
 	// TCBM-specific members
 	TCBMState tcbmState;

@@ -12,6 +12,26 @@ BUILD = ROOT / "tests" / ".build"
 CLI = BUILD / "tcbm2sd-native"
 DISKIMAGE_CLI = BUILD / "diskimage-native-probe"
 
+# $0762-$07EF from the actual Turbo Outrun tcbmfast loader, starting
+# immediately after TCBM_SendDOSCommand returns from sending U0.
+TURBO_OUTRUN_FAST_CLIENT = """
+a9 00 9d c3 fe 9d c2 fe bd c2 fe 30 fb bd c0 fe 85 9e bd c1 fe a8 a9 40 9d
+c2 fe 98 29 03 f0 12 a9 40 9d c2 fe a9 ff 9d c3 fe ae f3 07 ac f3 07 38 60
+bd c2 fe 10 fb bd c0 fe 85 9f bd c1 fe a8 a9 00 9d c2 fe 98 29 03 d0 d6 a0
+00 bd c2 fe 30 fb bd c0 fe 91 9e c8 bd c1 fe 85 b7 a9 40 9d c2 fe a5 b7 29
+03 d0 22 bd c2 fe 10 fb bd c0 fe 91 9e c8 bd c1 fe 85 b7 a9 00 9d c2 fe a5
+b7 29 03 d0 07 98 d0 c7 e6 9f d0 c3 20 82 07 18 60
+"""
+
+# $9275-$92CA from the GEOS 1551 driver, immediately after its U0 block-read
+# command returns. This is the actual 256-byte fast receive loop.
+GEOS_FAST_BLOCK_READ_CLIENT = """
+a9 00 8d f3 fe 8d f0 fe 8d f2 fe a8 ad f2 fe 30 fb ad f0 fe 91 0a c8 ae f1
+fe a9 40 8d f2 fe 8a 29 03 d0 1b ad f2 fe 10 fb ad f0 fe 91 0a c8 ae f1 fe
+a9 00 8d f2 fe 8a 29 03 d0 03 98 d0 cd ad f2 fe 10 fb a9 00 8d f0 fe a9 ff
+8d f3 fe a9 40 8d f2 fe a2 00 60
+"""
+
 
 def build_cli():
     BUILD.mkdir(exist_ok=True)
@@ -288,6 +308,20 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(
             run_cli("handoff-unwind"),
             ["ok=1 sp-before=253 sp-after=253 pc=203"],
+        )
+
+    def test_actual_turbo_outrun_client_completes_full_duplex_fast_read(self):
+        loader = " ".join(TURBO_OUTRUN_FAST_CLIENT.split())
+        self.assertEqual(
+            run_cli(f"client-fast-read {loader}"),
+            ["ok=1 bytes=7 contention=0 ack=1 dav=1 pc=205"],
+        )
+
+    def test_actual_geos_client_completes_delayed_256_byte_block_read(self):
+        loader = " ".join(GEOS_FAST_BLOCK_READ_CLIENT.split())
+        self.assertEqual(
+            run_cli(f"client-geos-block-read {loader}"),
+            ["ok=1 bytes=256 contention=0 ack=1 dav=1 pc=20b"],
         )
 
 
