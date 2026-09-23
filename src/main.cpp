@@ -2186,10 +2186,8 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 		}
 	}
 
-	// CD command trap: intercept CD_/CD:_/CD../CD:.. commands at PC=0xc230
-	// Input buffer length is at 0xa4, buffer data starts at 0x0200
-	// If we detect a CD command, set buffer length to 0 to make ROM ignore it
-	// and request a directory pop in browser mode
+	// At entry to the command dispatcher $A4 still holds the received length.
+	// Mirror OPENs here because non-command channels branch away before $C24D.
 	if (pc == 0xc230)
 	{
 		u8 bufferLen = peek6502_1551(0xa4);
@@ -2205,7 +2203,15 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 
 			m_TCBM_Commands.MirrorEmulationOpenCommand(secondary & 0x0f, commandBuf, copyLen);
 		}
+	}
 
+	// Command-channel trap after JSR $C39D has finalised the command: $0274 is
+	// its trimmed length, $A4/$A5 points at $0200, and the parser scratch state
+	// expected by the common $C283 epilogue has been initialised. Intercepting
+	// at $C230 skipped that prologue and left the ROM inconsistent after U0.
+	if (pc == 0xC24D)
+	{
+		u8 bufferLen = peek6502_1551(0x0274);
 		if (bufferLen >= 2)
 		{
 			u8 byte0 = peek6502_1551(0x0200);
@@ -2225,7 +2231,6 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 					Pi1551MountDecodedD64ForBrowserHandoff();
 					if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
 					{
-						write6502_1551(0xa4, 0);
 						pi1551.m6502.SetPC(0xC283);
 					}
 				}
@@ -2266,9 +2271,6 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 
 			if (isPopDir)
 			{
-				// Clear ROM input buffer so it ignores the command
-				write6502_1551(0xa4, 0);
-
 				// Request directory pop in browser mode and exit emulation
 				m_TCBM_Commands.RequestPopDir();
 				emulating = IEC_COMMANDS;

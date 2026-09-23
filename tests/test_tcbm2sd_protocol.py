@@ -99,6 +99,11 @@ class ProtocolTests(unittest.TestCase):
         [result] = run_cli("u0 0 55 30 5f 30 3a 67 61 6d 65 2e 70 72 67 0d")
         self.assertEqual(result, "type=filename track=0 sector=0 count=0 device=0 filename=GAME.PRG")
 
+        # Turbo Outrun uses two-character lower-case PETSCII names such as
+        # "mh". The Arduino reference normalises these to upper-case PETSCII.
+        [result] = run_cli("u0 1 55 30 1f 6d 68")
+        self.assertEqual(result, "type=filename track=0 sector=0 count=0 device=0 filename=MH")
+
     def test_u0_track_sector_requires_mounted_image(self):
         outside, inside = run_cli("u0 0 55 30 3f 28 03", "u0 1 55 30 3f 28 03")
         self.assertTrue(outside.startswith("type=invalid"))
@@ -255,6 +260,29 @@ class ProtocolTests(unittest.TestCase):
                 reference = epilogue
             else:
                 self.assertEqual(epilogue, reference, path.name)
+
+    def test_all_shipped_1551_roms_share_post_parser_u0_trap_point(self):
+        roms = [
+            (ROOT / "sdcard" / "dos1551.bin", 0xC000),
+            (ROOT / "sdcard" / "super_dos_1551.rom", 0xC000),
+            (ROOT / "sdcard" / "dos1551-ram.bin", 0x8000),
+            (ROOT / "sdcard" / "super_dos_ram.bin", 0x8000),
+        ]
+        reference = None
+        for path, load_address in roms:
+            data = path.read_bytes()
+            start = 0xC230 - load_address
+            end = 0xC286 - load_address
+            dispatcher = data[start:end]
+            self.assertEqual(
+                dispatcher[0xC24A - 0xC230:0xC24F - 0xC230],
+                bytes.fromhex("209dc3b1a4"),
+                f"{path.name}: unexpected $C24A command-parser return",
+            )
+            if reference is None:
+                reference = dispatcher
+            else:
+                self.assertEqual(dispatcher, reference, path.name)
 
     def test_fast_talk_handoff_epilogue_unwinds_the_emulated_jsr(self):
         self.assertEqual(
