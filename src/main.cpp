@@ -643,6 +643,11 @@ static void ReadPi1551UiSnapshot(Pi1551UiSnapshot& snapshot)
 		for (int index = 0; index < 3; ++index)
 			snapshot.memAtPc[index] = g_pi1551UiSnapshot.memAtPc[index];
 		snapshot.cpuPort = g_pi1551UiSnapshot.cpuPort;
+		snapshot.fastU0Traps = g_pi1551UiSnapshot.fastU0Traps;
+		snapshot.fastHandoffs = g_pi1551UiSnapshot.fastHandoffs;
+		snapshot.fastBytes = g_pi1551UiSnapshot.fastBytes;
+		snapshot.fastStage = g_pi1551UiSnapshot.fastStage;
+		snapshot.fastHandoffDav = g_pi1551UiSnapshot.fastHandoffDav;
 		Pi1551DataBarrier();
 		sequenceAfter = g_pi1551UiSnapshotSequence;
 	}
