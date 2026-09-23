@@ -3,3 +3,5 @@ force_turbo=1
 temp_soft_limit=70
 dtparam=spi=off
 force_eeprom_read=0
+disable_pvt=1
+core_freq=250
