@@ -73,11 +73,6 @@ char TCBM_Commands::lastTimeoutMessage[DEBUG_LINE_LENGTH] = { 0 };
 TCBM_Commands::TCBM_Commands()
 {
     deviceID = 8;
-	diagnosticU0Traps = 0;
-	diagnosticHandoffs = 0;
-	diagnosticFastBytes = 0;
-	diagnosticFastStage = 0;
-	diagnosticHandoffDav = 0xff;
     ResetStateMachine();
 }
 
@@ -85,16 +80,6 @@ void TCBM_Commands::Initialise()
 {
     SetHeaderVersion();
     PrepareBrowseIdleBus();
-}
-
-void TCBM_Commands::GetFastDiagnostics(u32& u0Traps, u32& handoffs,
-	u32& fastBytes, u8& stage, u8& handoffDav) const
-{
-	u0Traps = diagnosticU0Traps;
-	handoffs = diagnosticHandoffs;
-	fastBytes = diagnosticFastBytes;
-	stage = diagnosticFastStage;
-	handoffDav = diagnosticHandoffDav;
 }
 
 void TCBM_Commands::Reset(void)
@@ -339,15 +324,9 @@ void TCBM_Commands::UpdateDebugOverlay()
         static_cast<unsigned>(mountedImagePath[0] != '\0'),
         static_cast<unsigned>(cbm_image_is_mounted()),
         static_cast<unsigned>(fastRequest.type));
-	SetDebugLine(3, "U0:%lu RUN:%lu BYTE:%lu STG:%u DAV:%u",
-		static_cast<unsigned long>(diagnosticU0Traps),
-		static_cast<unsigned long>(diagnosticHandoffs),
-		static_cast<unsigned long>(diagnosticFastBytes),
-		static_cast<unsigned>(diagnosticFastStage),
-		static_cast<unsigned>(diagnosticHandoffDav));
 
-	if (debugWriteStep > 0 && debugWriteBuffer[0] != '\0')
-		SetDebugLine(10, "WRITE[%d] %s", debugWriteStep, debugWriteBuffer);
+    if (debugWriteStep > 0 && debugWriteBuffer[0] != '\0')
+        SetDebugLine(3, "WRITE[%d] %s", debugWriteStep, debugWriteBuffer);
 
     if (lastTimeoutMessage[0] != '\0')
         SetDebugLine(4, "%s", lastTimeoutMessage);
@@ -393,7 +372,6 @@ void TCBM_Commands::UpdateDebugOverlay()
 
 void TCBM_Commands::NoteTimeout(const char* what)
 {
-	diagnosticFastStage = 6;
     std::snprintf(lastTimeoutMessage, DEBUG_LINE_LENGTH, "TIMEOUT waiting for %s", what);
 }
 
@@ -1500,7 +1478,6 @@ bool TCBM_Commands::InitialiseFastHandshake(const char* stage)
 
 bool TCBM_Commands::FastSendByte(u8 data)
 {
-	diagnosticFastStage = 4;
 	TCBM_Bus::SetData(data);
 	TCBM_Bus::SetStatus(fastCtx.status);
 	const Tcbm2sdProtocol::FastHandshakeStep step =
@@ -1510,10 +1487,7 @@ bool TCBM_Commands::FastSendByte(u8 data)
 	else
 		TCBM_Bus::ReleaseACK();
 
-	const bool ok = WaitForDAVState(step.expectedDav != 0, "FAST DAV", COMMAND_TIMEOUT_US);
-	if (ok)
-		++diagnosticFastBytes;
-	return ok;
+	return WaitForDAVState(step.expectedDav != 0, "FAST DAV", COMMAND_TIMEOUT_US);
 }
 
 bool TCBM_Commands::FastSendBlockByte(u8 data)
@@ -1523,7 +1497,6 @@ bool TCBM_Commands::FastSendBlockByte(u8 data)
 
 bool TCBM_Commands::FastReceiveBlockByte(u8& data)
 {
-	diagnosticFastStage = 4;
 	const Tcbm2sdProtocol::FastHandshakeStep step =
 		Tcbm2sdProtocol::NextFastStep(fastCtx.sequence);
 	if (!WaitForDAVState(step.expectedDav != 0, "FAST block write DAV", COMMAND_TIMEOUT_US))
@@ -1538,7 +1511,6 @@ bool TCBM_Commands::FastReceiveBlockByte(u8& data)
 		TCBM_Bus::AssertACK();
 	else
 		TCBM_Bus::ReleaseACK();
-	++diagnosticFastBytes;
 	return true;
 }
 
@@ -2091,26 +2063,9 @@ void TCBM_Commands::MirrorEmulationOpenCommand(u8 channel, const u8* data, size_
 		channel, reinterpret_cast<const char*>(ch.command));
 }
 
-bool TCBM_Commands::CanInterceptEmulationU0Command(const u8* data, size_t length) const
-{
-	const bool inImage = cbm_image_is_mounted() || mountedImagePath[0] != '\0';
-	const Tcbm2sdProtocol::FastRequest parsed =
-		Tcbm2sdProtocol::ParseU0(data, length, inImage);
-	return Tcbm2sdProtocol::CanInterceptU0InEmulation(parsed);
-}
-
-void TCBM_Commands::NoteEmulationU0Trap(size_t length)
-{
-	++diagnosticU0Traps;
-	diagnosticFastBytes = 0;
-	diagnosticFastStage = 1;
-	diagnosticHandoffDav = 0xff;
-	PushDebugLine("EMU U0 trap len:%u", static_cast<unsigned>(length));
-}
-
 bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 {
-	if (!CanInterceptEmulationU0Command(data, length))
+	if (length < 2 || data[0] != 'U' || data[1] != '0')
 		return false;
 
 	EnsureCbmImageModeFromMounted();
@@ -2126,10 +2081,6 @@ bool TCBM_Commands::InterceptEmulationU0Command(const u8* data, size_t length)
 		if (!PreparePendingFastTransfer(0) && fastRequest.type != FAST_REQ_NONE)
 			channels[0].command[0] = '\0';
 	}
-	if (!IsTransferActive())
-		RestoreAfterEmulationFastHandoff();
-	else
-		diagnosticFastStage = 2;
 	return true;
 }
 
@@ -2191,9 +2142,6 @@ void TCBM_Commands::RestoreAfterEmulationFastHandoff()
 
 void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 {
-	++diagnosticHandoffs;
-	diagnosticFastStage = 3;
-	diagnosticHandoffDav = TCBM_Bus::IsDAVAsserted() ? 1 : 0;
 	m6523* savedTpi = TCBM_Bus::TPI;
 	TCBM_Bus::TPI = 0;
 	PrepareBrowseIdleBus();
@@ -2210,14 +2158,12 @@ void TCBM_Commands::RunBrowserModeTransferUntilIdle()
 	}
 
 	RestoreAfterEmulationFastHandoff();
-	if (diagnosticFastStage != 6)
-		diagnosticFastStage = 5;
 	PushDebugLine("FAST handoff done state:%s mounted:%u",
 		GetStateName(), static_cast<unsigned>(cbm_image_is_mounted()));
 
 	TCBM_Bus::TPI = savedTpi;
 	if (savedTpi)
 		TCBM_Bus::port = savedTpi->GetPortA();
-	TCBM_Bus::InvalidateOutCache1551();
 	TCBM_Bus::RefreshOuts1551();
+	PrepareBrowseIdleBus();
 }

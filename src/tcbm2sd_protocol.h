@@ -35,10 +35,6 @@ struct FastRequest
 // FAST_REQUEST_NONE; malformed or context-inappropriate U0 is INVALID.
 FastRequest ParseU0(const uint8_t* data, size_t length, bool inImage);
 
-// Only TCBM2SD transfer requests backed by the active emulated image are
-// intercepted. Unknown/malformed U0 commands remain visible to the 1551 ROM.
-bool CanInterceptU0InEmulation(const FastRequest& request);
-
 void FormatDosVersionStatus(char* output, size_t outputSize,
 	const char* driveName, unsigned versionMajor, unsigned versionMinor,
 	uint8_t track, uint8_t sector);

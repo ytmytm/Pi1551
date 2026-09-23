@@ -26,11 +26,6 @@ static struct CbmImageSession {
 static struct {
 	bool active;
 	bool writeMode;
-	bool sectorReaderMode;
-	CbmTrackSector ts;
-	u16 bufferPosition;
-	u32 bytesRemaining;
-	u8 buffer[256];
 } s_blockIo = {};
 
 static int set_status(CbmFsImage* di, int status, int track, int sector)
@@ -411,7 +406,6 @@ void cbm_image_close_all_channels()
 
 void cbm_image_unmount()
 {
-	s_blockIo = {};
 	cbm_image_close_all_channels();
 	if (s_mount.filOpen)
 	{
@@ -452,17 +446,12 @@ bool cbm_image_mount(const char* path)
 	return true;
 }
 
-bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader,
-	void* context, CbmImageSectorWriter writer)
+bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader, void* context)
 {
 	if (!reader || !context)
 		return false;
 
-	if (s_mount.active && path && path[0] != '\0'
-		&& strcasecmp(path, s_mount.path) == 0
-		&& s_mount.fs.sectorReader == reader
-		&& s_mount.fs.sectorWriter == writer
-		&& s_mount.fs.sectorReaderContext == context)
+	if (s_mount.active && path && path[0] != '\0' && strcasecmp(path, s_mount.path) == 0)
 		return true;
 
 	cbm_image_unmount();
@@ -475,7 +464,6 @@ bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader re
 	s_mount.fs.dir.sector = 0;
 	s_mount.fs.file = nullptr;
 	s_mount.fs.sectorReader = reader;
-	s_mount.fs.sectorWriter = writer;
 	s_mount.fs.sectorReaderContext = context;
 	s_mount.fs.blocksfree = blocks_free(&s_mount.fs);
 	set_status(&s_mount.fs, 254, 0, 0);
@@ -675,7 +663,6 @@ void cbm_di_unload_image(CbmFsImage* di)
 		return;
 	di->file = nullptr;
 	di->sectorReader = nullptr;
-	di->sectorWriter = nullptr;
 	di->sectorReaderContext = nullptr;
 	di->status = 0;
 }
@@ -882,11 +869,7 @@ u32 cbm_image_ts_byte_offset(u8 track, u8 sector)
 bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut, bool write)
 {
 	bytesOut = 0;
-	const bool sectorReaderMode = s_mount.active
-		&& ((!write && s_mount.fs.sectorReader != nullptr)
-			|| (write && s_mount.fs.sectorWriter != nullptr));
-	if (!s_mount.active || (!s_mount.filOpen && !sectorReaderMode) || blockCount == 0
-		|| (write && !s_mount.filOpen && !sectorReaderMode)
+	if (!s_mount.active || !s_mount.filOpen || blockCount == 0
 		|| !cbm_di_valid_ts(s_mount.fs.type, track, sector))
 		return false;
 
@@ -899,7 +882,7 @@ bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut,
 		return false;
 	}
 
-	if (write && !sectorReaderMode)
+	if (write)
 	{
 		f_close(&s_mount.fil);
 		if (f_open(&s_mount.fil, s_mount.path, FA_READ | FA_WRITE) != FR_OK)
@@ -910,53 +893,17 @@ bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut,
 		s_mount.fs.file = &s_mount.fil;
 	}
 
-	if (!sectorReaderMode && f_lseek(&s_mount.fil, offset) != FR_OK)
+	if (f_lseek(&s_mount.fil, offset) != FR_OK)
 		return false;
 
 	s_blockIo.active = true;
 	s_blockIo.writeMode = write;
-	s_blockIo.sectorReaderMode = sectorReaderMode;
-	s_blockIo.ts.track = track;
-	s_blockIo.ts.sector = sector;
-	s_blockIo.bufferPosition = write ? 0 : sizeof(s_blockIo.buffer);
-	s_blockIo.bytesRemaining = bytesOut;
 	return true;
 }
 
 bool cbm_image_block_io_read_byte(u8& data)
 {
-	if (!s_blockIo.active || s_blockIo.writeMode)
-		return false;
-
-	if (s_blockIo.sectorReaderMode)
-	{
-		if (s_blockIo.bytesRemaining == 0 || !s_mount.fs.sectorReader)
-			return false;
-
-		if (s_blockIo.bufferPosition == sizeof(s_blockIo.buffer))
-		{
-			if (!s_mount.fs.sectorReader(s_mount.fs.sectorReaderContext,
-				s_blockIo.ts.track, s_blockIo.ts.sector, s_blockIo.buffer))
-				return false;
-			s_blockIo.bufferPosition = 0;
-		}
-
-		data = s_blockIo.buffer[s_blockIo.bufferPosition++];
-		--s_blockIo.bytesRemaining;
-		if (s_blockIo.bufferPosition == sizeof(s_blockIo.buffer)
-			&& s_blockIo.bytesRemaining != 0)
-		{
-			++s_blockIo.ts.sector;
-			if (s_blockIo.ts.sector >= cbm_di_sectors_per_track(s_mount.fs.type, s_blockIo.ts.track))
-			{
-				++s_blockIo.ts.track;
-				s_blockIo.ts.sector = 0;
-			}
-		}
-		return true;
-	}
-
-	if (!s_mount.filOpen)
+	if (!s_blockIo.active || s_blockIo.writeMode || !s_mount.filOpen)
 		return false;
 
 	UINT br = 0;
@@ -967,36 +914,7 @@ bool cbm_image_block_io_read_byte(u8& data)
 
 bool cbm_image_block_io_write_byte(u8 data)
 {
-	if (!s_blockIo.active || !s_blockIo.writeMode)
-		return false;
-
-	if (s_blockIo.sectorReaderMode)
-	{
-		if (s_blockIo.bytesRemaining == 0 || !s_mount.fs.sectorWriter)
-			return false;
-
-		s_blockIo.buffer[s_blockIo.bufferPosition++] = data;
-		--s_blockIo.bytesRemaining;
-		if (s_blockIo.bufferPosition == sizeof(s_blockIo.buffer))
-		{
-			if (!s_mount.fs.sectorWriter(s_mount.fs.sectorReaderContext,
-				s_blockIo.ts.track, s_blockIo.ts.sector, s_blockIo.buffer))
-				return false;
-			s_blockIo.bufferPosition = 0;
-			if (s_blockIo.bytesRemaining != 0)
-			{
-				++s_blockIo.ts.sector;
-				if (s_blockIo.ts.sector >= cbm_di_sectors_per_track(s_mount.fs.type, s_blockIo.ts.track))
-				{
-					++s_blockIo.ts.track;
-					s_blockIo.ts.sector = 0;
-				}
-			}
-		}
-		return true;
-	}
-
-	if (!s_mount.filOpen)
+	if (!s_blockIo.active || !s_blockIo.writeMode || !s_mount.filOpen)
 		return false;
 
 	UINT bw = 0;
@@ -1025,6 +943,4 @@ void cbm_image_block_io_end()
 
 	s_blockIo.active = false;
 	s_blockIo.writeMode = false;
-	s_blockIo.sectorReaderMode = false;
-	s_blockIo.bytesRemaining = 0;
 }

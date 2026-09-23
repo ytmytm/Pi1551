@@ -352,9 +352,7 @@ public:
 	static void ReadGPIOUserInput(void);
 	static void ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs = 1);
 	static void PollGPIOUserInput1551(void);
-	/// Sample DAV, reset and GPLEV0 without merging GPIO into TPI inputs.
-	/// Call once per emulation loop so a pending fast handoff wins the bus
-	/// before the emulated ROM can interpret its first DAV transition.
+	/// Sample reset line and GPLEV0 for buttons/rotary (no TPI input merge). Call once per emulation loop before ReadGPIOUserInput when not using ReadEmulationMode1551 every step.
 	static void PollGPIOInputs1551(void);
 	static void ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk);
 	static void ClearRotaryDiskSteps(void);
@@ -380,9 +378,6 @@ public:
 	static void PortA_OnPortOut(void* pUserData, unsigned char status);
 
 	static void RefreshOuts1551(void);
-	// Browser-mode handoffs drive GPIO without updating the emulation cache.
-	// Invalidate it before restoring outputs from the attached TPI.
-	static void InvalidateOutCache1551(void);
 
 	static void WaitMicroSeconds(u32 amount)
 	{

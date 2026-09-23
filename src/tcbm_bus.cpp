@@ -107,9 +107,6 @@ static u32 ReadStableGplev0ForTCBM(void)
 void TCBM_Bus::PollGPIOInputs1551(void)
 {
 	gplev0 = ReadStableGplev0ForTCBM();
-	// The emulation loop uses PI_DAV to decide whether a pending U0 fast
-	// transfer must take ownership before the 1551 ROM executes again.
-	PI_DAV = (gplev0 & PIGPIO_MASK_IN_DAV) == PIGPIO_MASK_IN_DAV;
 	Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
@@ -427,25 +424,6 @@ push_led_sound:
 	}
 	write32(ARM_GPIO_GPCLR0, ledSoundClear);
 	write32(ARM_GPIO_GPSET0, ledSoundSet);
-}
-
-void TCBM_Bus::InvalidateOutCache1551(void)
-{
-	if (TPI && port)
-	{
-		lastDirA = static_cast<u8>(~port->GetDirection());
-		lastOutA = static_cast<u8>(~port->GetOutput());
-		IOPort* portC = TPI->GetPortC();
-		lastDirC = static_cast<u8>(~portC->GetDirection());
-		lastOutC = static_cast<u8>(~portC->GetOutput());
-	}
-	else
-	{
-		lastDirA = lastDirC = 0xff;
-		lastOutA = lastOutC = 0xff;
-	}
-	lastSet = ~0u;
-	lastClear = ~0u;
 }
 
 // called whenever the emulated 6502 writes to port A ($4000) or DDRA ($4003)

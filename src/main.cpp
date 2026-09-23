@@ -207,11 +207,6 @@ struct Pi1551UiSnapshot
 	u8 mem4000[6];
 	u8 memAtPc[3];
 	u8 cpuPort;
-	u32 fastU0Traps;
-	u32 fastHandoffs;
-	u32 fastBytes;
-	u8 fastStage;
-	u8 fastHandoffDav;
 };
 
 static volatile unsigned g_pi1551UiSnapshotSequence = 0;
@@ -574,18 +569,6 @@ static void PublishPi1551UiSnapshot(bool includeDebug)
 	g_pi1551UiSnapshot.data = TCBM_Bus::GetPI_Data();
 	g_pi1551UiSnapshot.track = pi1551.drive.Track();
 	g_pi1551UiSnapshot.overrunCounter = g_overrunCounter;
-	u32 fastU0Traps;
-	u32 fastHandoffs;
-	u32 fastBytes;
-	u8 fastStage;
-	u8 fastHandoffDav;
-	m_TCBM_Commands.GetFastDiagnostics(fastU0Traps, fastHandoffs, fastBytes,
-		fastStage, fastHandoffDav);
-	g_pi1551UiSnapshot.fastU0Traps = fastU0Traps;
-	g_pi1551UiSnapshot.fastHandoffs = fastHandoffs;
-	g_pi1551UiSnapshot.fastBytes = fastBytes;
-	g_pi1551UiSnapshot.fastStage = fastStage;
-	g_pi1551UiSnapshot.fastHandoffDav = fastHandoffDav;
 
 	if (includeDebug)
 	{
@@ -643,11 +626,6 @@ static void ReadPi1551UiSnapshot(Pi1551UiSnapshot& snapshot)
 		for (int index = 0; index < 3; ++index)
 			snapshot.memAtPc[index] = g_pi1551UiSnapshot.memAtPc[index];
 		snapshot.cpuPort = g_pi1551UiSnapshot.cpuPort;
-		snapshot.fastU0Traps = g_pi1551UiSnapshot.fastU0Traps;
-		snapshot.fastHandoffs = g_pi1551UiSnapshot.fastHandoffs;
-		snapshot.fastBytes = g_pi1551UiSnapshot.fastBytes;
-		snapshot.fastStage = g_pi1551UiSnapshot.fastStage;
-		snapshot.fastHandoffDav = g_pi1551UiSnapshot.fastHandoffDav;
 		Pi1551DataBarrier();
 		sequenceAfter = g_pi1551UiSnapshotSequence;
 	}
@@ -896,8 +874,7 @@ void InitialiseLCD()
 //		printf("\E[1ALED %s%d\E[0m Motor %d Track %0d.%d ATN %d DAT %d CLK %d %s\r\n", LED ? termainalTextRed : termainalTextNormal, LED, Motor, Track >> 1, Track & 1 ? 5 : 0, ATN, DATA, CLOCK, roms.ROMNames[romIndex]);
 //}
 
-void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = false,
-	const char* fastDiagnostic = 0)
+void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = false)
 {
 	if (screenLCD)
 	{
@@ -933,17 +910,11 @@ void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = 
 			screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 		}
 
-#if defined(PI1551SUPPORT)
-		if (inEmulation && fastDiagnostic)
-			screenLCD->PrintText(false, 0, screenLCD->GetFontHeight(),
-				const_cast<char*>(fastDiagnostic), 0, RGBA(0xff, 0xff, 0xff, 0xff));
-#endif
-
 		if (refreshCaddyList)
 			caddyChanged = diskCaddy.Update();
 
-		if (inEmulation && !caddyChanged)
-			screenLCD->RefreshRows(0, fastDiagnostic ? 2 : (tapeLoaded ? 2 : 1));
+		if (inEmulation && !tapeLoaded && !caddyChanged)
+			screenLCD->RefreshRows(0, 1);
 
 #if defined(PI1551SUPPORT)
 		TCBM_Bus::WaitMicroSeconds(100);
@@ -1034,7 +1005,6 @@ void UpdateScreen()
 	char tempBufferTrack[tempBufferTrackSize] = "01.0";
 #if defined(PI1551SUPPORT)
 	char pi1551MinimalLcdText[32] = { 0 };
-	char pi1551FastDiagnosticText[32] = { 0 };
 	u32 nextBrowseScreenTime = 0;
 	u32 nextTapeServiceTime = 0;
 	u32 nextHeadlessTapeLCDTime = 0;
@@ -1120,19 +1090,9 @@ void UpdateScreen()
 				snprintf(lcdText, sizeof(lcdText), "%s", tempBufferTrack);
 
 			bool row0Changed = (strcmp(lcdText, pi1551MinimalLcdText) != 0);
-			char fastDiagnosticText[32];
-			snprintf(fastDiagnosticText, sizeof(fastDiagnosticText),
-				"U%uR%u B%04u S%uD%c ",
-				static_cast<unsigned>(pi1551Snapshot.fastU0Traps > 9 ? 9 : pi1551Snapshot.fastU0Traps),
-				static_cast<unsigned>(pi1551Snapshot.fastHandoffs > 9 ? 9 : pi1551Snapshot.fastHandoffs),
-				static_cast<unsigned>(pi1551Snapshot.fastBytes > 9999 ? 9999 : pi1551Snapshot.fastBytes),
-				static_cast<unsigned>(pi1551Snapshot.fastStage),
-				pi1551Snapshot.fastHandoffDav <= 1
-					? static_cast<char>('0' + pi1551Snapshot.fastHandoffDav) : '?');
-			bool row1Changed = (strcmp(fastDiagnosticText, pi1551FastDiagnosticText) != 0);
 			bool multiImageCaddy = (diskCaddy.GetNumberOfImages() > 1);
 			bool tapeLoaded = g_tapePlayer && g_tapePlayer->IsLoaded();
-			if (row0Changed || row1Changed || multiImageCaddy || tapeLoaded)
+			if (row0Changed || multiImageCaddy || tapeLoaded)
 			{
 				if (row0Changed)
 				{
@@ -1140,14 +1100,8 @@ void UpdateScreen()
 					pi1551MinimalLcdText[sizeof(pi1551MinimalLcdText) - 1] = 0;
 					oldTemperature = temperature;
 				}
-				if (row1Changed)
-				{
-					strncpy(pi1551FastDiagnosticText, fastDiagnosticText,
-						sizeof(pi1551FastDiagnosticText) - 1);
-					pi1551FastDiagnosticText[sizeof(pi1551FastDiagnosticText) - 1] = 0;
-				}
 				// OLED/I2C is core0-only: never call diskCaddy.Update() from Emulate1551.
-				UpdateLCD(tempBufferTrack, temperature, multiImageCaddy, fastDiagnosticText);
+				UpdateLCD(tempBufferTrack, temperature, multiImageCaddy);
 			}
 			continue;
 		}
@@ -2198,26 +2152,15 @@ static bool Pi1551DecodedSectorReader(void* context, u8 track, u8 sector, u8* bu
 	return image && image->GetDecodedSector(track, sector, buffer);
 }
 
-static bool Pi1551DecodedSectorWriter(void* context, u8 track, u8 sector, const u8* buffer)
-{
-	DiskImage* image = static_cast<DiskImage*>(context);
-	return image && image->SetDecodedSector(track, sector, buffer);
-}
-
-static void Pi1551MountDecodedD64ForBrowserHandoff()
+static void Pi1551MountDecodedG64ForBrowserHandoff()
 {
 	const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
-	if (!path)
-		return;
-
-	const DiskImage::DiskType type = DiskImage::GetDiskImageTypeViaExtention(path);
-	if (type != DiskImage::D64 && type != DiskImage::G64)
+	if (!path || DiskImage::GetDiskImageTypeViaExtention(path) != DiskImage::G64)
 		return;
 
 	DiskImage* image = pi1551.drive.GetDiskImage();
 	if (image)
-		cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image,
-			Pi1551DecodedSectorWriter);
+		cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image);
 }
 
 static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
@@ -2232,8 +2175,10 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 		}
 	}
 
-	// At entry to the command dispatcher $A4 still holds the received length.
-	// Mirror OPENs here because non-command channels branch away before $C24D.
+	// CD command trap: intercept CD_/CD:_/CD../CD:.. commands at PC=0xc230
+	// Input buffer length is at 0xa4, buffer data starts at 0x0200
+	// If we detect a CD command, set buffer length to 0 to make ROM ignore it
+	// and request a directory pop in browser mode
 	if (pc == 0xc230)
 	{
 		u8 bufferLen = peek6502_1551(0xa4);
@@ -2249,15 +2194,7 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 
 			m_TCBM_Commands.MirrorEmulationOpenCommand(secondary & 0x0f, commandBuf, copyLen);
 		}
-	}
 
-	// Command-channel trap after JSR $C39D has finalised the command: $0274 is
-	// its trimmed length, $A4/$A5 points at $0200, and the parser scratch state
-	// expected by the common $C283 epilogue has been initialised. Intercepting
-	// at $C230 skipped that prologue and left the ROM inconsistent after U0.
-	if (pc == 0xC24D)
-	{
-		u8 bufferLen = peek6502_1551(0x0274);
 		if (bufferLen >= 2)
 		{
 			u8 byte0 = peek6502_1551(0x0200);
@@ -2272,14 +2209,11 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 				for (u8 i = 0; i < copyLen; ++i)
 					commandBuf[i] = peek6502_1551(static_cast<u16>(0x0200 + i));
 
-				m_TCBM_Commands.NoteEmulationU0Trap(copyLen);
-				if (m_TCBM_Commands.CanInterceptEmulationU0Command(commandBuf, copyLen))
+				Pi1551MountDecodedG64ForBrowserHandoff();
+				if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
 				{
-					Pi1551MountDecodedD64ForBrowserHandoff();
-					if (m_TCBM_Commands.InterceptEmulationU0Command(commandBuf, copyLen))
-					{
-						pi1551.m6502.SetPC(0xC283);
-					}
+					write6502_1551(0xa4, 0);
+					pi1551.m6502.SetPC(0xC283);
 				}
 			}
 			else if (bufferLen >= 3)
@@ -2318,6 +2252,9 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 
 			if (isPopDir)
 			{
+				// Clear ROM input buffer so it ignores the command
+				write6502_1551(0xa4, 0);
+
 				// Request directory pop in browser mode and exit emulation
 				m_TCBM_Commands.RequestPopDir();
 				emulating = IEC_COMMANDS;
@@ -2337,23 +2274,13 @@ static void Pi1551ApplyNewInstructionTraps(u16 pc, EXIT_TYPE& exitReason)
 		{
 			u8 channel = secondary & 0x0F;
 			write6502_1551(0x7C, secondary & 0x0F);
-			// Reproduce the state written by the skipped tail at $C135. The
-			// browser handler completes the electrical handshake below.
-			write6502_1551(0x97, 0x08);
 			m_TCBM_Commands.CompleteEmulationSecondaryCommandAck();
-			Pi1551MountDecodedD64ForBrowserHandoff();
+			Pi1551MountDecodedG64ForBrowserHandoff();
 			m_TCBM_Commands.HandleEmulationFastTalkHandoff(channel);
 			m_TCBM_Commands.RunBrowserModeTransferUntilIdle();
-
-			// $C0D6 is reached through the indirect dispatch from a JSR $C022.
-			// Resume at the real bus-idle epilogue ($C143..$C14D), which samples
-			// final DAV, normalises port C and executes RTS. Jumping to the main
-			// loop would leak that JSR return address on every transfer.
-			// Keep $5B/$5C intact as well; the client's later UNTALK owns the
-			// transition out of TALK mode. TAY at $C0E4 was the only skipped
-			// instruction whose result survives into the epilogue.
-			pi1551.m6502.SetY(secondary);
-			pi1551.m6502.SetPC(0xC143);
+			write6502_1551(0x5B, 0);
+			write6502_1551(0x5C, 0);
+			pi1551.m6502.SetPC(0xEABD);
 		}
 	}
 }
