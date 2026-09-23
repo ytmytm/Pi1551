@@ -87,6 +87,16 @@ void TCBM_Commands::Initialise()
     PrepareBrowseIdleBus();
 }
 
+void TCBM_Commands::GetFastDiagnostics(u32& u0Traps, u32& handoffs,
+	u32& fastBytes, u8& stage, u8& handoffDav) const
+{
+	u0Traps = diagnosticU0Traps;
+	handoffs = diagnosticHandoffs;
+	fastBytes = diagnosticFastBytes;
+	stage = diagnosticFastStage;
+	handoffDav = diagnosticHandoffDav;
+}
+
 void TCBM_Commands::Reset(void)
 {
     Commands_Base::Reset();

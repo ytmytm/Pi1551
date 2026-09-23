@@ -81,6 +81,8 @@ public:
 	void MirrorEmulationOpenCommand(u8 channel, const u8* data, size_t length);
 	bool CanInterceptEmulationU0Command(const u8* data, size_t length) const;
 	void NoteEmulationU0Trap(size_t length);
+	void GetFastDiagnostics(u32& u0Traps, u32& handoffs, u32& fastBytes,
+		u8& stage, u8& handoffDav) const;
 	bool InterceptEmulationU0Command(const u8* data, size_t length);
 	void HandleEmulationFastTalkHandoff(u8 channel);
 	bool PreparePendingFastTransfer(u8 channel = 0);

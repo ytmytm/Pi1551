@@ -207,6 +207,11 @@ struct Pi1551UiSnapshot
 	u8 mem4000[6];
 	u8 memAtPc[3];
 	u8 cpuPort;
+	u32 fastU0Traps;
+	u32 fastHandoffs;
+	u32 fastBytes;
+	u8 fastStage;
+	u8 fastHandoffDav;
 };
 
 static volatile unsigned g_pi1551UiSnapshotSequence = 0;
@@ -569,6 +574,18 @@ static void PublishPi1551UiSnapshot(bool includeDebug)
 	g_pi1551UiSnapshot.data = TCBM_Bus::GetPI_Data();
 	g_pi1551UiSnapshot.track = pi1551.drive.Track();
 	g_pi1551UiSnapshot.overrunCounter = g_overrunCounter;
+	u32 fastU0Traps;
+	u32 fastHandoffs;
+	u32 fastBytes;
+	u8 fastStage;
+	u8 fastHandoffDav;
+	m_TCBM_Commands.GetFastDiagnostics(fastU0Traps, fastHandoffs, fastBytes,
+		fastStage, fastHandoffDav);
+	g_pi1551UiSnapshot.fastU0Traps = fastU0Traps;
+	g_pi1551UiSnapshot.fastHandoffs = fastHandoffs;
+	g_pi1551UiSnapshot.fastBytes = fastBytes;
+	g_pi1551UiSnapshot.fastStage = fastStage;
+	g_pi1551UiSnapshot.fastHandoffDav = fastHandoffDav;
 
 	if (includeDebug)
 	{
@@ -874,7 +891,8 @@ void InitialiseLCD()
 //		printf("\E[1ALED %s%d\E[0m Motor %d Track %0d.%d ATN %d DAT %d CLK %d %s\r\n", LED ? termainalTextRed : termainalTextNormal, LED, Motor, Track >> 1, Track & 1 ? 5 : 0, ATN, DATA, CLOCK, roms.ROMNames[romIndex]);
 //}
 
-void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = false)
+void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = false,
+	const char* fastDiagnostic = 0)
 {
 	if (screenLCD)
 	{
@@ -910,11 +928,17 @@ void UpdateLCD(const char* track, unsigned temperature, bool refreshCaddyList = 
 			screenLCD->PrintText(false, 0, 0, tempBuffer, 0, RGBA(0xff, 0xff, 0xff, 0xff));
 		}
 
+#if defined(PI1551SUPPORT)
+		if (inEmulation && fastDiagnostic)
+			screenLCD->PrintText(false, 0, screenLCD->GetFontHeight(),
+				const_cast<char*>(fastDiagnostic), 0, RGBA(0xff, 0xff, 0xff, 0xff));
+#endif
+
 		if (refreshCaddyList)
 			caddyChanged = diskCaddy.Update();
 
-		if (inEmulation && !tapeLoaded && !caddyChanged)
-			screenLCD->RefreshRows(0, 1);
+		if (inEmulation && !caddyChanged)
+			screenLCD->RefreshRows(0, fastDiagnostic ? 2 : (tapeLoaded ? 2 : 1));
 
 #if defined(PI1551SUPPORT)
 		TCBM_Bus::WaitMicroSeconds(100);
@@ -1005,6 +1029,7 @@ void UpdateScreen()
 	char tempBufferTrack[tempBufferTrackSize] = "01.0";
 #if defined(PI1551SUPPORT)
 	char pi1551MinimalLcdText[32] = { 0 };
+	char pi1551FastDiagnosticText[32] = { 0 };
 	u32 nextBrowseScreenTime = 0;
 	u32 nextTapeServiceTime = 0;
 	u32 nextHeadlessTapeLCDTime = 0;
@@ -1090,9 +1115,19 @@ void UpdateScreen()
 				snprintf(lcdText, sizeof(lcdText), "%s", tempBufferTrack);
 
 			bool row0Changed = (strcmp(lcdText, pi1551MinimalLcdText) != 0);
+			char fastDiagnosticText[32];
+			snprintf(fastDiagnosticText, sizeof(fastDiagnosticText),
+				"U%uR%u B%04u S%uD%c ",
+				static_cast<unsigned>(pi1551Snapshot.fastU0Traps > 9 ? 9 : pi1551Snapshot.fastU0Traps),
+				static_cast<unsigned>(pi1551Snapshot.fastHandoffs > 9 ? 9 : pi1551Snapshot.fastHandoffs),
+				static_cast<unsigned>(pi1551Snapshot.fastBytes > 9999 ? 9999 : pi1551Snapshot.fastBytes),
+				static_cast<unsigned>(pi1551Snapshot.fastStage),
+				pi1551Snapshot.fastHandoffDav <= 1
+					? static_cast<char>('0' + pi1551Snapshot.fastHandoffDav) : '?');
+			bool row1Changed = (strcmp(fastDiagnosticText, pi1551FastDiagnosticText) != 0);
 			bool multiImageCaddy = (diskCaddy.GetNumberOfImages() > 1);
 			bool tapeLoaded = g_tapePlayer && g_tapePlayer->IsLoaded();
-			if (row0Changed || multiImageCaddy || tapeLoaded)
+			if (row0Changed || row1Changed || multiImageCaddy || tapeLoaded)
 			{
 				if (row0Changed)
 				{
@@ -1100,8 +1135,14 @@ void UpdateScreen()
 					pi1551MinimalLcdText[sizeof(pi1551MinimalLcdText) - 1] = 0;
 					oldTemperature = temperature;
 				}
+				if (row1Changed)
+				{
+					strncpy(pi1551FastDiagnosticText, fastDiagnosticText,
+						sizeof(pi1551FastDiagnosticText) - 1);
+					pi1551FastDiagnosticText[sizeof(pi1551FastDiagnosticText) - 1] = 0;
+				}
 				// OLED/I2C is core0-only: never call diskCaddy.Update() from Emulate1551.
-				UpdateLCD(tempBufferTrack, temperature, multiImageCaddy);
+				UpdateLCD(tempBufferTrack, temperature, multiImageCaddy, fastDiagnosticText);
 			}
 			continue;
 		}
