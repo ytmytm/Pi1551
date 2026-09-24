@@ -187,6 +187,10 @@ int main()
 			for (u16 address = Pi1551IdleSleep::CHANNEL_FIRST;
 				address <= Pi1551IdleSleep::CHANNEL_LAST; ++address)
 				memory[address] = 0xFF;
+			// Stock DOS leaves these non-channel bytes at these values in idle.
+			// They must not prevent sleep (captured with headless VICE).
+			memory[0x023A] = 0x84;
+			memory[0x023B] = 0x05;
 
 			const bool ready = Pi1551IdleSleep::CanSleep(true, true,
 				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
@@ -202,6 +206,14 @@ int main()
 			const bool channelOpen = Pi1551IdleSleep::CanSleep(true, true,
 				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
 			memory[Pi1551IdleSleep::CHANNEL_FIRST + 7] = 0xFF;
+			memory[Pi1551IdleSleep::TALK_ACTIVE] = 0x40;
+			const bool talkActive = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::TALK_ACTIVE] = 0;
+			memory[Pi1551IdleSleep::LISTEN_ACTIVE] = 0x20;
+			const bool listenActive = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::LISTEN_ACTIVE] = 0;
 
 			std::cout << "ready=" << ready
 				<< " disabled=" << Pi1551IdleSleep::CanSleep(false, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory)
@@ -212,6 +224,8 @@ int main()
 				<< " job=" << activeJob
 				<< " pending=" << commandPending
 				<< " channel=" << channelOpen
+				<< " talk=" << talkActive
+				<< " listen=" << listenActive
 				<< " irq=" << Pi1551IdleSleep::CanSleep(true, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, true, memory)
 				<< " wake-none=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, true, false, false)
 				<< " wake-data=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0x81, true, false, false)
@@ -220,6 +234,8 @@ int main()
 				<< " wake-ui=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, true, false, true)
 				<< " cmd-idle=" << Pi1551IdleSleep::HostCommandPending(0)
 				<< " cmd-81=" << Pi1551IdleSleep::HostCommandPending(0x81)
+				<< " bus-same=" << Pi1551IdleSleep::HostBusChanged(0x81, true, 0x81, true)
+				<< " bus-dav=" << Pi1551IdleSleep::HostBusChanged(0x81, true, 0x81, false)
 				<< '\n';
 		}
 		else if (!command.empty())

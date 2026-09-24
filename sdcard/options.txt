@@ -127,6 +127,16 @@ tapeMotorAlwaysOn = 1
 // Skip drive motor spin-up delay for 1551: 1 = skip delay, 0 = normal delay
 skipMotorSpinUpDelay = 1
 
-// Pause D64 emulation while the stock 1551 ROM is idle with no motor/jobs/open channels.
-// GPIO is still sampled at 100Hz; 0 disables this power/temperature optimisation.
+// Reduce Raspberry Pi power use and temperature by pausing D64 emulation when
+// the 1551 DOS ROM is in its idle TCBM wait loop. Enabled by default even when
+// omitted. Sleep is entered only with the motor and LED off and with no active
+// jobs, no open file channels, no TALK/LISTEN transfer (including status channel
+// 15), and no IRQ, disk swap, head sound, or pending host request. The emulated
+// CPU, disk, and 100 Hz drive IRQ stop while asleep; TCBM GPIO, RESET and UI
+// requests are still checked at 100 Hz and wake the drive (up to about 10 ms
+// latency). On the OLED,
+// an S after the track number, for example "18.0S", indicates actual sleep.
+// This applies only to D64 emulation and the four supplied 1551 ROM variants;
+// G64, browser mode, active transfers and fastloader drive code never sleep.
+// Set to 0 for diagnostics or an unsupported/custom ROM.
 IdleSleep = 1

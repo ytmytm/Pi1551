@@ -122,14 +122,25 @@ class ProtocolTests(unittest.TestCase):
         [result] = run_cli("idle-sleep")
         self.assertEqual(
             result,
-            "ready=1 disabled=0 non-d64=0 wrong-pc=0 motor=0 swap=0 job=0 pending=0 channel=0 irq=0"
+            "ready=1 disabled=0 non-d64=0 wrong-pc=0 motor=0 swap=0 job=0 pending=0 channel=0 talk=0 listen=0 irq=0"
             " wake-none=0 wake-data=1 wake-dav=1 wake-reset=1 wake-ui=1"
-            " cmd-idle=0 cmd-81=1",
+            " cmd-idle=0 cmd-81=1 bus-same=0 bus-dav=1",
         )
 
     def test_all_shipped_1551_roms_share_idle_tpi_wait_loop(self):
-        signature = bytes.fromhex(
-            "e661d00320dceaad004010032022c0ad5502f0ec"
+        signatures = (
+            # Primary TALK/LISTEN state in $5b/$5c, including UNTALK $5f.
+            (0xC0A8, bytes.fromhex(
+                "865b98c95ff00d855b865ca920857c857d4c33c1a900f07598c93fd00a"
+                "a9ff8595a200865cf0ed855c865b4cb3c0"
+            )),
+            (0xEABD, bytes.fromhex(
+                "e661d00320dceaad004010032022c0ad5502f0ec"
+            )),
+            # LEADC scans 15 channel markers: $022b + X, X=$0e..$00.
+            (0xEADC, bytes.fromhex(
+                "a90e8563a9008562a663bd2b02c9fff002e662c66310f1"
+            )),
         )
         roms = [
             (ROOT / "sdcard" / "dos1551.bin", 0xC000),
@@ -139,8 +150,9 @@ class ProtocolTests(unittest.TestCase):
         ]
         for path, load_address in roms:
             data = path.read_bytes()
-            start = 0xEABD - load_address
-            self.assertEqual(data[start:start + len(signature)], signature, path.name)
+            for address, signature in signatures:
+                start = address - load_address
+                self.assertEqual(data[start:start + len(signature)], signature, path.name)
 
     def test_reference_image_geometries_and_side_boundaries(self):
         results = run_cli(

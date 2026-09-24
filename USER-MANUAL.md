@@ -338,6 +338,7 @@ For Pi1551 hardware with a piezo or buzzer on the SOUND pin, use
 | --- | --- | --- |
 | `RAMBOard` | `0` | Enable 8 KiB drive RAM expansion at `$8000`. Use with `dos1551-ram.bin`; this comes from the [1551-RAMBOard](https://github.com/ytmytm/1551-RAMBOard) project and is supported by [Parobek](https://github.com/ytmytm/plus4-parobek) fastloaders. |
 | `skipMotorSpinUpDelay` | `0` | Skip 1551 motor spin-up delay when set to `1`. |
+| `IdleSleep` | `1` | Pause idle D64 emulation at the supplied 1551 ROMs' TCBM wait loop to reduce Pi power use and temperature. TCBM/RESET/UI wake polling continues at 100 Hz; OLED shows an `S` after the track number while asleep. Set to `0` for timing diagnostics or unsupported custom ROMs. |
 
 ### Rotary
 
@@ -383,6 +384,7 @@ RotaryEncoderEnable = 1
 SoundOnGPIO = 1
 tapeMotorAlwaysOn = 1
 skipMotorSpinUpDelay = 1
+IdleSleep = 1
 QuickBoot = 1
 ```
 

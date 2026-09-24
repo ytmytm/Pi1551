@@ -10,8 +10,27 @@ namespace Pi1551IdleSleep
 	static constexpr u16 JOB_CODE_FIRST = 0x0002;
 	static constexpr u16 JOB_CODE_LAST = 0x0006;
 	static constexpr u16 CHANNEL_FIRST = 0x022B;
-	static constexpr u16 CHANNEL_LAST = 0x023D;
+	// The ROM's LEADC housekeeping loop loads X with $0e and scans exactly
+	// $022b-$0239.  The following bytes are initialized alongside the table,
+	// but are reused for other state ($023a/$023b are commonly $84/$05 while
+	// an otherwise idle stock drive waits at $eac4).
+	static constexpr u16 CHANNEL_LAST = 0x0239;
 	static constexpr u16 COMMAND_PENDING = 0x0255;
+	// Primary TALK/LISTEN state.  These remain non-zero for the whole transfer,
+	// including command/status channel 15 which LEADC deliberately does not scan.
+	static constexpr u16 TALK_ACTIVE = 0x005B;
+	static constexpr u16 LISTEN_ACTIVE = 0x005C;
+
+	inline bool HostBusChanged(u8 previousData, bool previousDav,
+		u8 currentData, bool currentDav)
+	{
+		return currentData != previousData || currentDav != previousDav;
+	}
+
+	inline bool HostTransferIsIdle(const u8* memory)
+	{
+		return memory[TALK_ACTIVE] == 0 && memory[LISTEN_ACTIVE] == 0;
+	}
 
 	inline bool JobsAreIdle(const u8* memory)
 	{
@@ -42,7 +61,8 @@ namespace Pi1551IdleSleep
 		return enabled && d64 && pc == ROM_TPI_WAIT_PC
 			&& !motorOn && !ledOn && !diskChangeInProgress
 			&& !dataBusIsOutput && !irqAsserted
-			&& JobsAreIdle(memory) && ChannelsAreClosed(memory);
+			&& JobsAreIdle(memory) && ChannelsAreClosed(memory)
+			&& HostTransferIsIdle(memory);
 	}
 
 	inline bool HostNeedsWake(u8 sleepingData, bool sleepingDav,
@@ -50,7 +70,7 @@ namespace Pi1551IdleSleep
 		bool uiCommandPending)
 	{
 		return resetAsserted || uiCommandPending
-			|| currentData != sleepingData || currentDav != sleepingDav;
+			|| HostBusChanged(sleepingData, sleepingDav, currentData, currentDav);
 	}
 
 	inline bool HostCommandPending(u8 data)

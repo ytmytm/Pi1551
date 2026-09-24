@@ -120,6 +120,7 @@ Common `options.txt` settings:
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
 | `tapeMotorAlwaysOn` | Keeps TAP playback motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` to follow MOTOR on original machines. |
 | `skipMotorSpinUpDelay` | Skips the emulated 1551 motor spin-up delay when set. |
+| `IdleSleep` | Pauses an idle D64 drive at the stock ROM TCBM wait loop to reduce Raspberry Pi power use and temperature. Enabled by default. |
 
 Put disk images, PRG files, folders, and TAP files under `/1551`. The firmware
 starts in that folder by default.
@@ -160,6 +161,28 @@ Pi1551 has three practical modes:
 
 See [USER-MANUAL.md](USER-MANUAL.md) for the full button map,
 keyboard shortcuts, TAP behavior, and every accepted `options.txt` setting.
+
+### D64 idle sleep
+
+`IdleSleep = 1` (the default) pauses cycle-exact emulation only when a mounted
+D64 is demonstrably idle in the stock 1551 ROM TCBM wait loop. Before sleeping,
+Pi1551 verifies that the motor and activity LED are off, mechanism jobs are
+finished, file channels are closed, no TALK or LISTEN transfer is active
+(including command/status channel 15), no drive IRQ is pending, and neither a
+disk swap nor head sound is in progress. The supplied DOS, DOS-RAM, SuperDOS,
+and SuperDOS-RAM images share the ROM code and RAM state used by this check.
+
+While asleep, the emulated 6502, disk mechanism, and 100 Hz drive IRQ are
+frozen. Pi1551 samples the TCBM bus at 100 Hz and wakes on DATA or DAV activity,
+RESET, or a pending UI action, so the worst-case wake latency is approximately
+10 ms. Once awake, an active TALK/LISTEN state prevents sleeping between bytes;
+normal status-channel reads therefore run at full speed. The OLED appends `S`
+to the track number (for example `18.0S`) only while sleep is actually active.
+
+Idle sleep is not used in browser mode, for G64 images, while a fastloader or
+other drive code is running, or whenever any safety condition above is not
+met. Set `IdleSleep = 0` when diagnosing timing or using a custom ROM that does
+not retain the supplied ROMs' idle-loop and RAM conventions.
 
 ## SD2IEC And tcbm2sd Comparison
 

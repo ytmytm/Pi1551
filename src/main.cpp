@@ -199,6 +199,7 @@ struct Pi1551UiSnapshot
 	u8 status;
 	u8 data;
 	u32 track;
+	bool idleSleeping;
 	unsigned long long overrunCounter;
 	u16 pc;
 	u8 a;
@@ -559,7 +560,7 @@ static void TakePi1551Commands(Pi1551EmulationCommands& commands)
 	g_pi1551CommandGenerationAck = generation;
 }
 
-static void PublishPi1551UiSnapshot(bool includeDebug)
+static void PublishPi1551UiSnapshot(bool includeDebug, bool idleSleeping)
 {
 	unsigned sequence = g_pi1551UiSnapshotSequence + 1;
 	if ((sequence & 1) == 0)
@@ -575,6 +576,7 @@ static void PublishPi1551UiSnapshot(bool includeDebug)
 	g_pi1551UiSnapshot.status = TCBM_Bus::GetPI_Status();
 	g_pi1551UiSnapshot.data = TCBM_Bus::GetPI_Data();
 	g_pi1551UiSnapshot.track = pi1551.drive.Track();
+	g_pi1551UiSnapshot.idleSleeping = idleSleeping;
 	g_pi1551UiSnapshot.overrunCounter = g_overrunCounter;
 
 	if (includeDebug)
@@ -621,6 +623,7 @@ static void ReadPi1551UiSnapshot(Pi1551UiSnapshot& snapshot)
 		snapshot.status = g_pi1551UiSnapshot.status;
 		snapshot.data = g_pi1551UiSnapshot.data;
 		snapshot.track = g_pi1551UiSnapshot.track;
+		snapshot.idleSleeping = g_pi1551UiSnapshot.idleSleeping;
 		snapshot.overrunCounter = g_pi1551UiSnapshot.overrunCounter;
 		snapshot.pc = g_pi1551UiSnapshot.pc;
 		snapshot.a = g_pi1551UiSnapshot.a;
@@ -1075,10 +1078,12 @@ void UpdateScreen()
 
 			Pi1551UiSnapshot pi1551Snapshot = {};
 			ReadPi1551UiSnapshot(pi1551Snapshot);
-			if (pi1551Snapshot.valid && pi1551Snapshot.track != oldTrack)
+			if (pi1551Snapshot.valid)
 			{
 				oldTrack = pi1551Snapshot.track;
-				snprintf(tempBufferTrack, tempBufferTrackSize, "%02d.%d", (oldTrack >> 1) + 1, oldTrack & 1 ? 5 : 0);
+				snprintf(tempBufferTrack, tempBufferTrackSize, "%02d.%d%c",
+					(oldTrack >> 1) + 1, oldTrack & 1 ? 5 : 0,
+					pi1551Snapshot.idleSleeping ? 'S' : ' ');
 			}
 
 			if (options.DisplayTemperature() && (int)(now - nextTemperatureTime) >= 0)
@@ -2394,6 +2399,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				continue;
 
 			idleSleeping = false;
+			PublishPi1551UiSnapshot(options.DisplayPC(), false);
 			uiPollCountdown = 0;
 			ctBefore = now;
 		}
@@ -2452,6 +2458,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 						idleSleepingData = TCBM_Bus::GetPI_Data();
 						idleSleepingDav = TCBM_Bus::GetPI_DAV();
 						idleSleeping = true;
+						PublishPi1551UiSnapshot(options.DisplayPC(), true);
 						nextIdleSleepPollUs = read32(ARM_SYSTIMER_CLO);
 						break;
 					}
@@ -2520,7 +2527,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		}
 
 		if (slowUiTick)
-			PublishPi1551UiSnapshot(options.DisplayPC());
+			PublishPi1551UiSnapshot(options.DisplayPC(), idleSleeping);
 
 		if (slowUiTick && diskCaddy.GetNumberOfImages() > 1)
 		{
