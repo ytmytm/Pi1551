@@ -72,6 +72,7 @@ public:
 	inline unsigned GetHeadBitOffset() const { return headBitOffset; }
 	inline bool IsMotorOn() const { return motor; }
 	inline bool IsLEDOn() const { return LED; }
+	inline bool IsDiskChangeInProgress() const { return newDiskImageQueuedCylesRemaining != 0; }
 
 	inline unsigned char GetLastHeadDirection() const { return lastHeadDirection; } // For simulated head movement sounds
 private:

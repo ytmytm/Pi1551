@@ -126,3 +126,7 @@ tapeMotorAlwaysOn = 1
 
 // Skip drive motor spin-up delay for 1551: 1 = skip delay, 0 = normal delay
 skipMotorSpinUpDelay = 1
+
+// Pause D64 emulation while the stock 1551 ROM is idle with no motor/jobs/open channels.
+// GPIO is still sampled at 100Hz; 0 disables this power/temperature optimisation.
+IdleSleep = 1

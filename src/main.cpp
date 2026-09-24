@@ -42,6 +42,7 @@ extern "C"
 #include "tcbm_commands.h"
 #include "Pi1551.h"
 #include "cbm_diskimage.h"
+#include "pi1551_idle_sleep.h"
 #else
 #include "iec_commands.h"
 #include "Pi1541.h"
@@ -184,6 +185,7 @@ static const unsigned PI1551_TAPE_UI_UPDATE_DIVIDER = 1;
 static const u32 PI1551_BROWSE_POLL_US = 10000; // 100Hz while waiting for a TCBM command.
 static const u32 PI1551_BROWSE_SCREEN_US = 100000; // 10Hz for browser status text.
 static const u32 PI1551_EMULATION_LCD_US = 100000; // 10Hz; keep core 1 control polling at 50Hz.
+static const u32 PI1551_IDLE_SLEEP_POLL_US = 10000; // 100Hz while the stock ROM waits for TCBM input.
 // HYPALOAD7 polls in the 2nd 6502 half; stretch it after all 16 encoder ticks between halves.
 static const unsigned PI1551_ENCODER_TICKS_PER_US = 16;
 
@@ -242,6 +244,11 @@ static const u32 PI1551_ROM_SELECT_SUPPRESS_ENTER_CYCLES = 400000; // 400ms — 
 static volatile unsigned g_pi1551CommandGeneration = 0;
 static volatile unsigned g_pi1551CommandGenerationAck = 0;
 static volatile Pi1551EmulationCommands g_pi1551Commands = {};
+
+static bool Pi1551UiCommandPending()
+{
+	return g_pi1551CommandGeneration != g_pi1551CommandGenerationAck;
+}
 
 static inline void Pi1551DataBarrier()
 {
@@ -2301,6 +2308,10 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	bool exitDoAutoLoad = false;
 	bool nextDisk = false;
 	bool prevDisk = false;
+	bool idleSleeping = false;
+	u8 idleSleepingData = 0;
+	bool idleSleepingDav = false;
+	u32 nextIdleSleepPollUs = 0;
 	unsigned directDiskSwapRequest = 0;
 	unsigned numberOfImages = diskCaddy.GetNumberOfImages();
 	unsigned numberOfImagesMax = numberOfImages;
@@ -2366,6 +2377,27 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	while (exitReason == EXIT_UNKNOWN)
 	{
+		if (idleSleeping)
+		{
+			// The system timer sends an event at 100Hz. No emulated time passes
+			// while asleep: the stock-ROM IRQ and disk encoder are intentionally frozen.
+			__asm ("WFE");
+			u32 now = read32(ARM_SYSTIMER_CLO);
+			if ((int)(now - nextIdleSleepPollUs) < 0)
+				continue;
+			nextIdleSleepPollUs = now + PI1551_IDLE_SLEEP_POLL_US;
+
+			TCBM_Bus::ReadEmulationMode1551();
+			if (!Pi1551IdleSleep::HostNeedsWake(idleSleepingData, idleSleepingDav,
+				TCBM_Bus::GetPI_Data(), TCBM_Bus::GetPI_DAV(), TCBM_Bus::IsReset(),
+				Pi1551UiCommandPending()))
+				continue;
+
+			idleSleeping = false;
+			uiPollCountdown = 0;
+			ctBefore = now;
+		}
+
 		TCBM_Bus::PollGPIOInputs1551();
 		TCBM_Commands::TCBMState tcbmState = m_TCBM_Commands.GetState();
 		bool browserFastTransfer =
@@ -2403,6 +2435,27 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			{
 				pc = pi1551.m6502.GetPC();
 				Pi1551ApplyNewInstructionTraps(pc, exitReason);
+
+				DiskImage* image = pi1551.drive.GetDiskImage();
+				if (!exitEmulation && !exitDoAutoLoad && !nextDisk && !prevDisk
+					&& headSoundCounter <= 0
+					&& directDiskSwapRequest == 0
+					&& Pi1551IdleSleep::CanSleep(options.IdleSleep(),
+					image && image->IsD64(), pc, pi1551.drive.IsMotorOn(),
+					pi1551.drive.IsLEDOn(), pi1551.drive.IsDiskChangeInProgress(),
+					TCBM_Bus::IsDataSetToOut(),
+					pi1551.m6502.IRQ.IsAsserted(), s_u8Memory))
+				{
+					TCBM_Bus::ReadEmulationMode1551();
+					if (!Pi1551IdleSleep::HostCommandPending(TCBM_Bus::GetPI_Data()))
+					{
+						idleSleepingData = TCBM_Bus::GetPI_Data();
+						idleSleepingDav = TCBM_Bus::GetPI_DAV();
+						idleSleeping = true;
+						nextIdleSleepPollUs = read32(ARM_SYSTIMER_CLO);
+						break;
+					}
+				}
 			}
 			pi1551.m6502.Step();
 			TCBM_Bus::RefreshOuts1551();
@@ -2415,7 +2468,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			}
 		}
 
-		pi1551.EndMicrosecond();
+		if (!idleSleeping)
+			pi1551.EndMicrosecond();
 
 		TCBM_Bus::OutputLED = pi1551.drive.IsLEDOn();
 //#if defined(RPI3)
@@ -2500,6 +2554,12 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 #if defined(PI1551_GPIO1_TIMING_PROBE)
 		RPI_SetGpioHi(RPI_GPIO1);
 #endif
+
+		if (idleSleeping)
+		{
+			ctBefore = read32(ARM_SYSTIMER_CLO);
+			continue;
+		}
 
 		do	// Sync to the 1MHz clock
 		{

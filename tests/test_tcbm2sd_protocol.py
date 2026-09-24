@@ -118,6 +118,30 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(status, "73,PI1551 V01.25 (TCBM2SD COMPAT),00,00\\r")
         self.assertIn("TCBM2SD", status)
 
+    def test_d64_idle_sleep_requires_stock_rom_wait_and_idle_drive(self):
+        [result] = run_cli("idle-sleep")
+        self.assertEqual(
+            result,
+            "ready=1 disabled=0 non-d64=0 wrong-pc=0 motor=0 swap=0 job=0 pending=0 channel=0 irq=0"
+            " wake-none=0 wake-data=1 wake-dav=1 wake-reset=1 wake-ui=1"
+            " cmd-idle=0 cmd-81=1",
+        )
+
+    def test_all_shipped_1551_roms_share_idle_tpi_wait_loop(self):
+        signature = bytes.fromhex(
+            "e661d00320dceaad004010032022c0ad5502f0ec"
+        )
+        roms = [
+            (ROOT / "sdcard" / "dos1551.bin", 0xC000),
+            (ROOT / "sdcard" / "super_dos_1551.rom", 0xC000),
+            (ROOT / "sdcard" / "dos1551-ram.bin", 0x8000),
+            (ROOT / "sdcard" / "super_dos_ram.bin", 0x8000),
+        ]
+        for path, load_address in roms:
+            data = path.read_bytes()
+            start = 0xEABD - load_address
+            self.assertEqual(data[start:start + len(signature)], signature, path.name)
+
     def test_reference_image_geometries_and_side_boundaries(self):
         results = run_cli(
             "geometry d71 36 0", "geometry d71 70 16",

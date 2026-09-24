@@ -1,6 +1,8 @@
 #include "tcbm2sd_protocol.h"
 #include "cbm_diskimage.h"
+#include "pi1551_idle_sleep.h"
 
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -174,6 +176,51 @@ int main()
 			for (const char* p = status; *p; ++p)
 				std::cout << (*p == '\r' ? "\\r" : std::string(1, *p));
 			std::cout << '\n';
+		}
+		else if (command == "idle-sleep")
+		{
+			u8 memory[Pi1551IdleSleep::COMMAND_PENDING + 1];
+			std::memset(memory, 0, sizeof(memory));
+			for (u16 address = Pi1551IdleSleep::JOB_CODE_FIRST;
+				address <= Pi1551IdleSleep::JOB_CODE_LAST; ++address)
+				memory[address] = 0x01;
+			for (u16 address = Pi1551IdleSleep::CHANNEL_FIRST;
+				address <= Pi1551IdleSleep::CHANNEL_LAST; ++address)
+				memory[address] = 0xFF;
+
+			const bool ready = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::JOB_CODE_FIRST + 4] = 0x80;
+			const bool activeJob = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::JOB_CODE_FIRST + 4] = 0x01;
+			memory[Pi1551IdleSleep::COMMAND_PENDING] = 1;
+			const bool commandPending = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::COMMAND_PENDING] = 0;
+			memory[Pi1551IdleSleep::CHANNEL_FIRST + 7] = 0x80;
+			const bool channelOpen = Pi1551IdleSleep::CanSleep(true, true,
+				Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory);
+			memory[Pi1551IdleSleep::CHANNEL_FIRST + 7] = 0xFF;
+
+			std::cout << "ready=" << ready
+				<< " disabled=" << Pi1551IdleSleep::CanSleep(false, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory)
+				<< " non-d64=" << Pi1551IdleSleep::CanSleep(true, false, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, false, memory)
+				<< " wrong-pc=" << Pi1551IdleSleep::CanSleep(true, true, 0xEAC5, false, false, false, false, false, memory)
+				<< " motor=" << Pi1551IdleSleep::CanSleep(true, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, true, false, false, false, false, memory)
+				<< " swap=" << Pi1551IdleSleep::CanSleep(true, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, true, false, false, memory)
+				<< " job=" << activeJob
+				<< " pending=" << commandPending
+				<< " channel=" << channelOpen
+				<< " irq=" << Pi1551IdleSleep::CanSleep(true, true, Pi1551IdleSleep::ROM_TPI_WAIT_PC, false, false, false, false, true, memory)
+				<< " wake-none=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, true, false, false)
+				<< " wake-data=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0x81, true, false, false)
+				<< " wake-dav=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, false, false, false)
+				<< " wake-reset=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, true, true, false)
+				<< " wake-ui=" << Pi1551IdleSleep::HostNeedsWake(0, true, 0, true, false, true)
+				<< " cmd-idle=" << Pi1551IdleSleep::HostCommandPending(0)
+				<< " cmd-81=" << Pi1551IdleSleep::HostCommandPending(0x81)
+				<< '\n';
 		}
 		else if (!command.empty())
 			std::cout << "error=unknown-command\n";

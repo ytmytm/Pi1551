@@ -146,6 +146,7 @@ public:
 
 	inline bool IsD81() const { return diskType == D81; }
 	inline bool IsD71() const { return diskType == D71; }
+	inline bool IsD64() const { return diskType == D64; }
 	inline unsigned char GetD81Byte(unsigned track, unsigned headIndex, unsigned headPos) const { return tracksD81[track][headIndex][headPos]; }
 	inline void SetD81Byte(unsigned track, unsigned headIndex, unsigned headPos, unsigned char data)
 	{
