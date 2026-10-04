@@ -62,7 +62,8 @@
 - check if device change with U0> works
 - check if sd2iec commands listed in local documentation still work
 
-- U0 disabled by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
++ (obsolete, tcbm2sd protocol supported within browser mode and disk images except D64)
+  U0 disabled by changing status from 'TCBM2SD' into 'TCBM3SD' COMPAT in reset msg
   so that it's not recognized by BOOT.T2SD directory browser
   this doesn't prevent fastloaders from working from D81 images (Alpharay, Price of Persia)
   from games patched for TCBM2SD
@@ -79,6 +80,8 @@
       to decouple it from legacy IEC code
     - block read doesn't work (block-rw prg with d64 mounted)
 
+- tcbm2sd fastloader still not supported within D64 disk images
+    - breaks D64 games patched for tcbm2sd
 - write support for D64/D71/D81 from original diskimage-0.95 (restore di_write, BAM updates).
     - D80/D82 write per VICE disk image reference — read-only for now.
     - werify read/write/allocate/bam against vice doc
