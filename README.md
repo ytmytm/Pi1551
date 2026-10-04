@@ -32,6 +32,8 @@ player through the tape port only, without the TCBM ribbon cable.
 
 ## Required Hardware
 
+![Pi1551 hardware architecture](docs/tcbm2sd-pi1551-system.png)
+
 Pi1551 needs an interface between the Raspberry Pi and the Commodore TCBM/tape
 signals. Use one of the Pi1551 interface projects:
 
