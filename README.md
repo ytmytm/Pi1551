@@ -47,7 +47,7 @@ the Raspberry Pi.
 That interface connects by ribbon cable to the C16/C116/Plus/4 expansion-port
 TCBM cartridge, also known as the paddle:
 
-- [tcbm2sd](https://github.com/ytmytm/tcbm2sd)
+- [tcbm2sd](https://github.com/ytmytm/plus4-tcbm2sd)
 
 tcbm2sd board revision 1.3 or newer is required because Pi1551 uses the ribbon
 cable connector added on those boards. For full compatibility, update the
