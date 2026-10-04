@@ -172,7 +172,7 @@ int main()
 		else if (command == "status73")
 		{
 			char status[96];
-			FormatDosVersionStatus(status, sizeof(status), "PI1551", 1, 25, 0, 0);
+			FormatDosVersionStatus(status, sizeof(status), "PI1551", 1, 26, 0, 0);
 			for (const char* p = status; *p; ++p)
 				std::cout << (*p == '\r' ? "\\r" : std::string(1, *p));
 			std::cout << '\n';

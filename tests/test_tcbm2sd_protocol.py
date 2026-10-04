@@ -115,7 +115,7 @@ class ProtocolTests(unittest.TestCase):
 
     def test_ui_uj_status_identifies_tcbm2sd_fast_protocol(self):
         [status] = run_cli("status73")
-        self.assertEqual(status, "73,PI1551 V01.25 (TCBM2SD COMPAT),00,00\\r")
+        self.assertEqual(status, "73,PI1551 V01.26 (TCBM2SD COMPAT),00,00\\r")
         self.assertIn("TCBM2SD", status)
 
     def test_d64_idle_sleep_requires_stock_rom_wait_and_idle_drive(self):
