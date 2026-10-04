@@ -30,6 +30,15 @@ player through the tape port only, without the TCBM ribbon cable.
 - 1551 RAM expansion ([1551-RAMBOard](https://github.com/ytmytm/1551-RAMBOard))
   supported.
 
+## Media
+
+### Commodore Users Europe presentation
+
+<a href="https://www.youtube.com/watch?v=4uN6pWvh76o" target="_blank">
+ <img src="https://img.youtube.com/vi/4uN6pWvh76o/mqdefault.jpg" alt="Commodore Users Europe presentation about Pi1551" />
+ <p><small>Click for video</small></p>
+</a>
+
 ## Required Hardware
 
 ![Pi1551 hardware architecture](docs/tcbm2sd-pi1551-system.png)
