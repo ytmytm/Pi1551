@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install ARM toolchain
         run: |
@@ -56,14 +56,14 @@ jobs:
           test -f dist/pi1551-sdcard-root.zip
 
       - name: Upload kernel.img package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pi1551-kernel-rpi3
           path: dist/pi1551-kernel-rpi3.zip
           if-no-files-found: error
 
       - name: Upload SD card root package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pi1551-sdcard-root
           path: dist/pi1551-sdcard-root.zip
