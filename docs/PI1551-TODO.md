@@ -89,7 +89,7 @@
 
 # Tests
 
-- test if h/w reset doesn't end emulation, should just reset drive
+- (done) test if h/w reset doesn't end emulation, should just reset drive
 - (done) test if `CD:<diskimage>` works now
 - (done) test if `DLOAD"*` works right after reset
 - (done) test if `StarFileName` works from any subfolder
