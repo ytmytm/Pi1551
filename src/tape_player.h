@@ -92,6 +92,9 @@ public:
 
 	// Reset playback (start from beginning)
 	void Reset();
+	void Eject();
+	bool SeekCounter(unsigned counter);
+	void SetMotorAlwaysOn(bool value);
 
 	// Initialize GPIO pins
 	void InitializeGPIO();
@@ -113,6 +116,9 @@ public:
 	void CoreLoop();
 
 private:
+	static volatile bool editingPulses, corePulseActive;
+	static void PausePlayback();
+	static void ResumePlayback();
 	// Parse TAP file and build half-wave timing array
 	bool ParseTAP(FIL& fp, u32 fileSize);
 	void FreePulseBuffer();
@@ -121,10 +127,10 @@ private:
     static u64* pulseTimings;
     static size_t pulseCount;
     static size_t currentPulseIndex;
-	static bool loaded;
-	static bool motorActive;
-	static bool motorAlwaysOn;
-	static bool atEnd;
+	static volatile bool loaded;
+	static volatile bool motorActive;
+	static volatile bool motorAlwaysOn;
+	static volatile bool atEnd;
 	static bool readLineState;  // Current state of READ line (true = CBM high, false = CBM low)
 	// SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
 	// When true: GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active

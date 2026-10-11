@@ -21,6 +21,7 @@
 #include "options.h"
 #include <string.h>
 #include <malloc.h>
+#include "Pi1551Platform.h"
 #include <limits>
 #include <cmath>
 
@@ -36,10 +37,10 @@ extern Options options;
 u64* TapePlayer::pulseTimings = nullptr;
 size_t TapePlayer::pulseCount = 0;
 size_t TapePlayer::currentPulseIndex = 0;
-bool TapePlayer::loaded = false;
-bool TapePlayer::motorActive = true;
-bool TapePlayer::motorAlwaysOn = true;
-bool TapePlayer::atEnd = false;
+volatile bool TapePlayer::loaded = false;
+volatile bool TapePlayer::motorActive = true;
+volatile bool TapePlayer::motorAlwaysOn = true;
+volatile bool TapePlayer::atEnd = false;
 bool TapePlayer::readLineState = true;  // Start with READ line high (hardware inverts GPIO signal) - matches cbmtapepi initial state, first transfer_pulse will start with LOW
 // SENSE line state: true = PLAY pressed (active), false = PLAY released (inactive)
 // When true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
@@ -48,6 +49,54 @@ bool TapePlayer::senseLineState = false;  // Start with PLAY released (inactive)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
 char TapePlayer::tapFilename[256] = {0};
+volatile bool TapePlayer::editingPulses = false;
+volatile bool TapePlayer::corePulseActive = false;
+
+void TapePlayer::PausePlayback()
+{
+	editingPulses = true;
+	Pi1551Barrier();
+	Pi1551Wake();
+	while (corePulseActive) Pi1551Barrier();
+}
+void TapePlayer::ResumePlayback()
+{
+	Pi1551Barrier();
+	editingPulses = false;
+	Pi1551Wake();
+}
+void TapePlayer::SetMotorAlwaysOn(bool value)
+{
+	motorAlwaysOn = value;
+	RPI_SetGpioInputPullUp((rpi_gpio_pin_t)TAPE_MOTOR_GPIO);
+	Tick10ms();
+}
+void TapePlayer::Eject()
+{
+	PausePlayback(); loaded = false; atEnd = false; senseLineState = false;
+	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0;
+	totalPlaybackTimeUs = 0; FreePulseBuffer();
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO); readLineState = true;
+	ResumePlayback();
+}
+bool TapePlayer::SeekCounter(unsigned counter)
+{
+	if (!loaded || counter > 999) return false;
+	// Inverse of the VICE spool formula used by GetUIState().
+	const double d = 1.27e-5, r = 1.07e-2, v = 4.76e-2, g = 0.525, pi = 3.1415926535;
+	double turns = counter / g + r / d;
+	u64 target = (u64)(((turns * turns - (r / d) * (r / d)) * d * pi / v) * 1000000.0);
+	PausePlayback();
+	u64 elapsed = 0; size_t index = 0;
+	while (index < pulseCount && elapsed + pulseTimings[index] <= target) elapsed += pulseTimings[index++];
+	currentPulseIndex = index; cumulativePulseTimeUs = elapsed; atEnd = index == pulseCount;
+	readLineState = (index & 1) == 0;
+	if (readLineState) RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	else RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	senseLineState = true; RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	ResumePlayback(); return true;
+}
 static u32 tapeLoadGeneration = 0;
 
 // TAP file header structure
@@ -77,7 +126,7 @@ TapePlayer::TapePlayer()
 
 TapePlayer::~TapePlayer()
 {
-    FreePulseBuffer();
+    Eject();
 }
 
 void TapePlayer::InitializeGPIO()
@@ -112,15 +161,19 @@ void TapePlayer::InitializeGPIO()
 
 bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 {
+	PausePlayback();
+	struct Resume { ~Resume() { TapePlayer::ResumePlayback(); } } resume;
 	// Refresh configuration each load (option is set once at boot)
 	motorAlwaysOn = options.TapeMotorAlwaysOn() != 0;
 
 	// Close any existing tape
 	loaded = false;
+	senseLineState = false;
+	tapFilename[0] = 0;
 	currentPulseIndex = 0;
 	atEnd = false;
 	// Respect configured motor behaviour (always on vs GPIO-driven)
-	motorActive = motorAlwaysOn;
+	Tick10ms();
 	totalPlaybackTimeUs = 0;
 	cumulativePulseTimeUs = 0;
 	FreePulseBuffer();
@@ -129,7 +182,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
 		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 		// Wake core 2 so it can detect tape unloaded and go back to sleep
-		__asm("SEV");
+		Pi1551Wake();
 
 	if (!fileInfo || !fileInfo->fname)
 		return false;
@@ -162,10 +215,10 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 		senseLineState = true;  // PLAY pressed (active)
 		
 		// Motor behaviour from options: when always on, start immediately; otherwise wait for GPIO poll
-		motorActive = motorAlwaysOn;
+		Tick10ms();
 		
 		// Wake core 2 AFTER setting all state (loaded, motorActive) so it can start generating pulses
-		__asm("SEV");
+		Pi1551Wake();
 		// Core 2 playback loop will see loaded/motorActive and start generating pulses.
 	}
 
@@ -433,7 +486,7 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 	// Motor state gates playback separately; stopping the motor should not
 	// auto-release PLAY, because the C16 controls motor but expects PLAY to
 	// stay engaged until the tape finishes or is unloaded.
-	if (loaded && !atEnd)
+	if (loaded)
 	{
 		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
@@ -447,7 +500,7 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 	}
 
 	// Wake core 2 so it can react to the new motor/SENSE state
-	__asm("SEV");
+	Pi1551Wake();
 	// CoreLoop() uses motorActive to gate playback.
 }
 
@@ -537,32 +590,7 @@ void TapePlayer::Tick10ms()
 
 void TapePlayer::Reset()
 {
-	// Stop playback and reset tape state
-	if (loaded)
-	{
-		currentPulseIndex = 0;
-		atEnd = false;  // Reset atEnd to allow playback to continue
-		cumulativePulseTimeUs = 0;  // Reset counter
-		// Reset READ to initial state
-		readLineState = true;  // Reset to HIGH (output) like initial state
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
-		// TAPE_SENSE: Keep PLAY button state - don't change it on reset
-		// This allows tape to continue playing after C16 reset
-	}
-	else
-	{
-		// No tape loaded - set to inactive state
-		readLineState = true;  // Reset to HIGH (output) like initial state
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
-		// TAPE_SENSE: PLAY button released (inactive state)
-		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
-		senseLineState = false;  // PLAY released (inactive)
-	}
-	
-	// Wake core 2 so it can detect the reset state
-	__asm("SEV");
-	// If tape is loaded and motor is active, playback will continue from the beginning
+	if (loaded) SeekCounter(0);
 }
 
 void TapePlayer::CoreLoop()
@@ -577,12 +605,19 @@ void TapePlayer::CoreLoop()
 
 	while (1)
 	{
+		corePulseActive = false;
+		Pi1551Barrier();
+		if (editingPulses) { Pi1551Wait(); continue; }
+		corePulseActive = true;
+		Pi1551Barrier();
+		if (editingPulses) continue;
 		// Wait until we have a valid tape loaded
 		if (!loaded || pulseTimings == nullptr || pulseCount == 0)
 		{
 			// Put core into low-power mode until tape is loaded
 			// Core will be woken by SEV when LoadTap() is called
-			__asm("WFE");
+			corePulseActive = false;
+			Pi1551Wait();
 			continue;
 		}
 
@@ -591,7 +626,8 @@ void TapePlayer::CoreLoop()
 		{
 			// Put core into low-power mode until motor becomes active
 			// Core will be woken by SEV when OnMotorChange() is called
-			__asm("WFE");
+			corePulseActive = false;
+			Pi1551Wait();
 			continue;
 		}
 
@@ -603,13 +639,12 @@ void TapePlayer::CoreLoop()
 				atEnd = true;
 				readLineState = true;  // HIGH output
 				RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high -> output high
-				// Release PLAY (inactive)
-				RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
-				senseLineState = false;
+				// PLAY stays pressed until the loaded TAP is explicitly ejected.
 			}
 			// Put core into low-power mode (tape finished)
 			// Core will be woken by SEV if tape is reset or new tape loaded
-			__asm("WFE");
+			corePulseActive = false;
+			Pi1551Wait();
 			continue;
 		}
 
@@ -627,7 +662,7 @@ void TapePlayer::CoreLoop()
 		while ((u32)(read32(ARM_SYSTIMER_CLO) - start) < (u32)intervalUs)
 		{
 			// If tape is unloaded or motor stopped during wait, abort this pulse
-			if (!loaded || !motorActive || atEnd)
+			if (editingPulses || !loaded || !motorActive || atEnd)
 				break;
 			
 			// For long pulses, update cumulative time periodically to keep counter accurate
@@ -639,6 +674,7 @@ void TapePlayer::CoreLoop()
 			}
 		}
 
+		if (editingPulses) continue;
 		if (!loaded || !motorActive || atEnd)
 		{
 			// State changed while waiting; update time for elapsed portion
