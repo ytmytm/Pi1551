@@ -21,9 +21,28 @@ INCLUDE  = -Iuspi/include/
 
 TARGET  ?= kernel
 
-.PHONY: all test-tcbm2sd-native tui $(LIBS)
+.PHONY: all help test-tcbm2sd-native tui $(LIBS)
 
 all: $(TARGET)
+
+help:
+	@printf '%s\n' \
+		'Pi1551 targets:' \
+		'  make / make all          Build Raspberry Pi 3 firmware ($(TARGET).img).' \
+		'  make tui                 Start the interactive OLED TUI simulator.' \
+		'  make test-oled-native    Run native menu, media, tape and OLED tests with ASan/UBSan.' \
+		'  make test-tcbm2sd-native Run native TCBM protocol regression tests.' \
+		'  make clean               Remove firmware and USB-library build artifacts.' \
+		'  make help                Show this help.' \
+		'' \
+		'Build options:' \
+		'  -j4                      Compile with four parallel jobs.' \
+		'  V=1                      Show full build commands.' \
+		'  PREFIX=arm-none-eabi-    Select the cross-compiler prefix (default shown).' \
+		'  TARGET=kernel            Select the firmware output basename (default shown).' \
+		'  RASPPI=3                 Raspberry Pi 3 is the only supported hardware target.' \
+		'' \
+		'TUI requires Python 3; native tests require Python 3 and host GCC/G++.'
 
 test-tcbm2sd-native:
 	python3 tests/test_tcbm2sd_protocol.py
