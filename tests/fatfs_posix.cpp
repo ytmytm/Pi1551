@@ -3,13 +3,37 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <string>
+#include <sys/stat.h>
+#include <unistd.h>
+#define DIR PosixDIR
+#include <dirent.h>
+#undef DIR
+
+static std::string cardRoot, cardCwd = "/", failNext;
+static unsigned failureCountdown = 0;
+void NativeFatFSRoot(const std::string& root) { cardRoot = root; cardCwd = "/"; }
+void NativeFatFSFail(const std::string& operation) { failNext = operation; failureCountdown = 1; }
+void NativeFatFSFailNth(const std::string& operation, unsigned n) { failNext = operation; failureCountdown = n; }
+static bool Fail(const char* operation) {
+    if (failNext != operation) return false;
+    if (--failureCountdown) return false;
+    failNext.clear(); return true;
+}
+static std::string Resolve(const char* path) {
+    if (cardRoot.empty()) return path;
+    return cardRoot + (path[0] == '/' ? "" : cardCwd + (cardCwd == "/" ? "" : "/")) + path;
+}
 
 static std::map<FIL*, std::FILE*> files;
 
 extern "C" FRESULT f_open(FIL* fp, const TCHAR* path, BYTE mode)
 {
-	const char* openMode = (mode & FA_WRITE) ? "r+b" : "rb";
-	std::FILE* file = std::fopen(path, openMode);
+	if (Fail("open")) return FR_DISK_ERR;
+	std::string resolved = Resolve(path);
+	if ((mode & FA_CREATE_NEW) && access(resolved.c_str(), F_OK) == 0) return FR_EXIST;
+	const char* openMode = (mode & (FA_CREATE_NEW | FA_CREATE_ALWAYS)) ? "w+b" : (mode & FA_WRITE) ? "r+b" : "rb";
+	std::FILE* file = std::fopen(resolved.c_str(), openMode);
 	if (!file)
 		return FR_NO_FILE;
 	std::memset(fp, 0, sizeof(*fp));
@@ -42,6 +66,7 @@ extern "C" FRESULT f_read(FIL* fp, void* buffer, UINT requested, UINT* read)
 
 extern "C" FRESULT f_write(FIL* fp, const void* buffer, UINT requested, UINT* written)
 {
+	if (Fail("write")) { *written = 0; return FR_DISK_ERR; }
 	std::map<FIL*, std::FILE*>::iterator it = files.find(fp);
 	if (it == files.end())
 		return FR_INVALID_OBJECT;
@@ -65,8 +90,53 @@ extern "C" FRESULT f_lseek(FIL* fp, FSIZE_t offset)
 
 extern "C" FRESULT f_sync(FIL* fp)
 {
+	if (Fail("sync")) return FR_DISK_ERR;
 	std::map<FIL*, std::FILE*>::iterator it = files.find(fp);
 	if (it == files.end())
 		return FR_INVALID_OBJECT;
 	return std::fflush(it->second) == 0 ? FR_OK : FR_DISK_ERR;
+}
+
+extern "C" FRESULT f_stat(const TCHAR* path, FILINFO* info) {
+    struct stat st; if (stat(Resolve(path).c_str(), &st)) return FR_NO_FILE;
+    if (info) {
+        memset(info, 0, sizeof(*info)); info->fsize = st.st_size;
+        info->fattrib = S_ISDIR(st.st_mode) ? AM_DIR : 0;
+        const char* base = strrchr(path, '/'); base = base ? base + 1 : path;
+        strncpy(info->fname, base, sizeof(info->fname) - 1);
+    }
+    return FR_OK;
+}
+extern "C" FRESULT f_chdir(const TCHAR* path) {
+    FILINFO info;
+    if (f_stat(path, &info) != FR_OK || !(info.fattrib & AM_DIR)) return FR_NO_PATH;
+    cardCwd = path; return FR_OK;
+}
+extern "C" FRESULT f_getcwd(TCHAR* buffer, UINT length) {
+    if (cardCwd.size() >= length) return FR_INVALID_PARAMETER;
+    strcpy(buffer, cardCwd.c_str()); return FR_OK;
+}
+struct NativeDirectory { PosixDIR* directory; std::string path; };
+static std::map<DIR*, NativeDirectory> directories;
+extern "C" FRESULT f_opendir(DIR* dir, const TCHAR* path) {
+    PosixDIR* p = opendir(Resolve(path).c_str()); if (!p) return FR_NO_PATH;
+    directories[dir] = NativeDirectory{p, path}; return FR_OK;
+}
+extern "C" FRESULT f_readdir(DIR* dir, FILINFO* info) {
+    if (!directories.count(dir)) return FR_INVALID_OBJECT;
+    NativeDirectory& d = directories[dir];
+    if (!info) { rewinddir(d.directory); return FR_OK; }
+    struct dirent* entry = readdir(d.directory);
+    if (!entry) { memset(info,0,sizeof(*info)); return FR_OK; }
+    return f_stat((d.path + "/" + entry->d_name).c_str(), info);
+}
+extern "C" FRESULT f_closedir(DIR* dir) {
+    if (!directories.count(dir)) return FR_INVALID_OBJECT;
+    closedir(directories[dir].directory); directories.erase(dir); return FR_OK;
+}
+extern "C" FRESULT f_unlink(const TCHAR* path) { return unlink(Resolve(path).c_str()) == 0 ? FR_OK : FR_DISK_ERR; }
+extern "C" FRESULT f_rename(const TCHAR* from, const TCHAR* to) {
+    if (Fail("rename")) return FR_DISK_ERR;
+    if (access(Resolve(to).c_str(),F_OK) == 0) return FR_EXIST;
+    return rename(Resolve(from).c_str(), Resolve(to).c_str()) == 0 ? FR_OK : FR_DISK_ERR;
 }

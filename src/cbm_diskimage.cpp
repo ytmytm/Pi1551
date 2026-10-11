@@ -14,7 +14,7 @@ static CbmImageFile s_imgfile;
 static struct CbmImageSession {
 	bool active;
 	bool filOpen;
-	FIL fil;
+	FIL* fil;
 	CbmFsImage fs;
 	CbmImageFile channelFile[16];
 	bool channelOpen[16];
@@ -409,9 +409,11 @@ void cbm_image_unmount()
 	cbm_image_close_all_channels();
 	if (s_mount.filOpen)
 	{
-		f_close(&s_mount.fil);
+		f_close(s_mount.fil);
 		s_mount.filOpen = false;
 	}
+	delete s_mount.fil;
+	s_mount.fil = 0;
 	if (s_mount.active)
 		cbm_di_unload_image(&s_mount.fs);
 	s_mount.active = false;
@@ -419,31 +421,30 @@ void cbm_image_unmount()
 	s_mount.dirEntrySerial = 0;
 }
 
+bool cbm_image_sync()
+{
+	return !s_mount.filOpen || f_sync(s_mount.fil) == FR_OK;
+}
+
 bool cbm_image_mount(const char* path)
 {
-	if (!path || path[0] == '\0')
-		return false;
-
-	if (s_mount.active && strcasecmp(path, s_mount.path) == 0)
-		return true;
-
-	cbm_image_unmount();
-
-	if (f_open(&s_mount.fil, path, FA_READ) != FR_OK)
-		return false;
-
-	if (!cbm_di_load_image(&s_mount.fil))
-	{
-		f_close(&s_mount.fil);
-		return false;
-	}
-
-	s_mount.fs = s_di;
-	s_mount.filOpen = true;
-	s_mount.active = true;
-	strncpy(s_mount.path, path, sizeof(s_mount.path) - 1);
-	s_mount.path[sizeof(s_mount.path) - 1] = '\0';
-	return true;
+    if (!path || !path[0]) return false;
+    if (s_mount.active && strcasecmp(path, s_mount.path) == 0) return true;
+    // Prepare a stable file handle before releasing the old mounted source.
+    FIL* file = new FIL;
+    if (f_open(file, path, FA_READ) != FR_OK) { delete file; return false; }
+    CbmFsImage* loaded = cbm_di_load_image(file);
+    if (!loaded) { f_close(file); delete file; return false; }
+    CbmFsImage candidate = *loaded;
+    if (!cbm_image_sync()) { f_close(file); delete file; return false; }
+    cbm_image_unmount();
+    s_mount.fil = file;
+    s_mount.fs = candidate;
+    s_mount.filOpen = true;
+    s_mount.active = true;
+    strncpy(s_mount.path, path, sizeof(s_mount.path) - 1);
+    s_mount.path[sizeof(s_mount.path) - 1] = '\0';
+    return true;
 }
 
 bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader, void* context)
@@ -884,16 +885,16 @@ bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut,
 
 	if (write)
 	{
-		f_close(&s_mount.fil);
-		if (f_open(&s_mount.fil, s_mount.path, FA_READ | FA_WRITE) != FR_OK)
+		f_close(s_mount.fil);
+		if (f_open(s_mount.fil, s_mount.path, FA_READ | FA_WRITE) != FR_OK)
 		{
 			s_mount.filOpen = false;
 			return false;
 		}
-		s_mount.fs.file = &s_mount.fil;
+		s_mount.fs.file = s_mount.fil;
 	}
 
-	if (f_lseek(&s_mount.fil, offset) != FR_OK)
+	if (f_lseek(s_mount.fil, offset) != FR_OK)
 		return false;
 
 	s_blockIo.active = true;
@@ -907,7 +908,7 @@ bool cbm_image_block_io_read_byte(u8& data)
 		return false;
 
 	UINT br = 0;
-	if (f_read(&s_mount.fil, &data, 1, &br) != FR_OK || br != 1)
+	if (f_read(s_mount.fil, &data, 1, &br) != FR_OK || br != 1)
 		return false;
 	return true;
 }
@@ -918,7 +919,7 @@ bool cbm_image_block_io_write_byte(u8 data)
 		return false;
 
 	UINT bw = 0;
-	if (f_write(&s_mount.fil, &data, 1, &bw) != FR_OK || bw != 1)
+	if (f_write(s_mount.fil, &data, 1, &bw) != FR_OK || bw != 1)
 		return false;
 	return true;
 }
@@ -927,11 +928,11 @@ void cbm_image_block_io_end()
 {
 	if (s_blockIo.writeMode && s_mount.filOpen)
 	{
-		f_sync(&s_mount.fil);
-		f_close(&s_mount.fil);
-		if (f_open(&s_mount.fil, s_mount.path, FA_READ) == FR_OK)
+		f_sync(s_mount.fil);
+		f_close(s_mount.fil);
+		if (f_open(s_mount.fil, s_mount.path, FA_READ) == FR_OK)
 		{
-			s_mount.fs.file = &s_mount.fil;
+			s_mount.fs.file = s_mount.fil;
 			s_mount.filOpen = true;
 		}
 		else

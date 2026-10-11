@@ -180,11 +180,12 @@ public:
 	static bool IsTAPExtention(const char* filename);
 
 	bool GetReadOnly() const { return readOnly; }
-	void SetReadOnly(bool readOnly) { this->readOnly = readOnly; }
+	void SetReadOnly(bool readOnly) { this->readOnly = readOnly || (fileInfo && (fileInfo->fattrib & AM_RDO)); }
 
 	unsigned LastTrackUsed();
 
 	bool IsDirty() const { return dirty; }
+	bool Flush(); // retain dirty state on a failed write; never release the image
 	bool HasD64IncompatibleFormat() const { return d64IncompatibleFormat; }
 	bool PrepareTrackForWrite(u32 track, u32 density, u32& bitOffset);
 

@@ -46,6 +46,7 @@ public:
 	}
 
 	bool Empty();
+	void Swap(DiskCaddy& other) { disks.swap(other.disks); std::swap(selectedIndex, other.selectedIndex); }
 
 	bool Insert(const FILINFO* fileInfo, bool readOnly);
 

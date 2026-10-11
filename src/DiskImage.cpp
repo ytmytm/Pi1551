@@ -145,9 +145,10 @@ DiskImage::DiskImage()
 	, dirty(false)
 	, d64IncompatibleFormat(false)
 	, attachedImageSize(0)
+	, diskType(RAW)
 	, fileInfo(&fileInfoStorage)
 {
-	fileInfoStorage.fname[0] = 0;
+	memset(&fileInfoStorage, 0, sizeof(fileInfoStorage));
 	memset(tracks, 0x55, sizeof(tracks));
 	memset(trackUsed, 0, sizeof(trackUsed));
 }
@@ -431,7 +432,9 @@ bool DiskImage::WriteD64(char* name)
 			return false;
 		}
 
-		f_close(&fp);
+		bool synced = f_sync(&fp) == FR_OK;
+		if (f_close(&fp) != FR_OK) synced = false;
+		if (!synced) { SetACTLed(false); return false; }
 
 		//f_utime(fileInfo->fname, fileInfo);
 		SetACTLed(false);
@@ -458,6 +461,19 @@ void DiskImage::CloseD64()
 		dirty = false;
 	}
 	attachedImageSize = 0;
+}
+
+bool DiskImage::Flush()
+{
+	if (!dirty) return true;
+	if (fileInfo && (fileInfo->fattrib & AM_RDO)) return false;
+	bool protection = readOnly;
+	readOnly = false; // runtime WProt gates new writes, not already-dirty data
+	DiskType type = GetDiskImageTypeViaExtention(GetName());
+	bool ok = type == D64 ? WriteD64() : type == G64 ? WriteG64() : false;
+	readOnly = protection;
+	if (ok) { dirty = false; memset(trackDirty, 0, sizeof(trackDirty)); }
+	return ok;
 }
 
 bool DiskImage::OpenD71(const FILINFO* fileInfo, unsigned char* diskImage, unsigned size)
@@ -1069,8 +1085,10 @@ bool DiskImage::WriteG64(char* name)
 		}
 
 		SetACTLed(true);
-		WriteDwords(&fp, (u32*)gcr_track_p, MAX_HALFTRACKS_1541);
-		WriteDwords(&fp, (u32*)gcr_speed_p, MAX_HALFTRACKS_1541);
+		if (!WriteDwords(&fp, (u32*)gcr_track_p, MAX_HALFTRACKS_1541) ||
+			!WriteDwords(&fp, (u32*)gcr_speed_p, MAX_HALFTRACKS_1541)) {
+			SetACTLed(false); f_close(&fp); return false;
+		}
 		SetACTLed(false);
 
 		for (track = 0; track < MAX_HALFTRACKS_1541; track += track_inc)
@@ -1105,7 +1123,9 @@ bool DiskImage::WriteG64(char* name)
 			SetACTLed(false);
 		}
 
-		f_close(&fp);
+		bool synced = f_sync(&fp) == FR_OK;
+		if (f_close(&fp) != FR_OK) synced = false;
+		if (!synced) return false;
 		DEBUG_LOG("nSuccessfully saved G64\r\n");
 
 		return true;
@@ -1448,11 +1468,13 @@ bool DiskImage::OpenPRG(const FILINFO* fileInfo, unsigned char* diskImage, unsig
 
 	if (newDiskImage)
 	{
-		unsigned length = DiskImage::CreateNewDiskInRAM(fileInfo->fname, "00", newDiskImage);
+		const char* name = strrchr(fileInfo->fname, '/');
+		name = name ? name + 1 : fileInfo->fname;
+		unsigned length = DiskImage::CreateNewDiskInRAM(name, "00", newDiskImage);
 
 		if (length)
 		{
-			bool addFileSuccess = AddFileToRAMD64(newDiskImage, fileInfo->fname, diskImage, size);
+			bool addFileSuccess = AddFileToRAMD64(newDiskImage, name, diskImage, size);
 
 			if (addFileSuccess && OpenD64(fileInfo, newDiskImage, length))
 			{
@@ -1640,7 +1662,7 @@ void DiskImage::DecodeBlock(unsigned track, int bitIndex, unsigned char* buf, in
 
 int DiskImage::FindSync(unsigned track, int bitIndex, int maxBits, int* syncStartIndex)
 {
-	int readShiftRegister = 0;
+	unsigned readShiftRegister = 0;
 #if defined(EXPERIMENTALZERO)
 	unsigned char byte = tracks[(track << 13) + (bitIndex >> 3)] << (bitIndex & 7);
 #else
@@ -1763,11 +1785,15 @@ unsigned DiskImage::CreateNewDiskInRAM(const char* filenameNew, const char* ID, 
 			*dest++ = buffer[i];
 		}
 	}
-	ptr = (unsigned char*)&blankD64DIRBAM[DISKNAME_OFFSET_IN_DIR_BLOCK];
-	int len = strlen(filenameNew);
+	unsigned char bam[256];
+	memcpy(bam, blankD64DIRBAM, sizeof(bam));
+	ptr = bam + DISKNAME_OFFSET_IN_DIR_BLOCK;
+	const char* base = strrchr(filenameNew, '/');
+	base = base ? base + 1 : filenameNew;
+	int len = Min(16, strlen(base));
 	for (i = 0; i < len; ++i)
 	{
-		*ptr++ = ascii2petscii(filenameNew[i]);
+		*ptr++ = ascii2petscii(base[i]);
 	}
 	for (; i < 18; ++i)
 	{
@@ -1779,7 +1805,7 @@ unsigned DiskImage::CreateNewDiskInRAM(const char* filenameNew, const char* ID, 
 	}
 	for (i = 0; i < 256; ++i)
 	{
-		*dest++ = blankD64DIRBAM[i];
+		*dest++ = bam[i];
 	}
 	buffer[1] = 0xff;
 	for (i = 0; i < 256; ++i)
