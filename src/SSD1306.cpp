@@ -40,6 +40,8 @@ SSD1306::SSD1306(int BSCMaster, u8 address, unsigned width, unsigned height, int
 	sizeof_frame = width*height/8;
 	frame = (unsigned char *)malloc(sizeof_frame);
 	oldFrame = (unsigned char *)malloc(sizeof_frame);
+	memset(frame, 0, sizeof_frame);
+	memset(oldFrame, 0xff, sizeof_frame);
 	RPI_I2CInit(BSCMaster, 1);
 	InitHardware();
 }
@@ -121,7 +123,7 @@ void SSD1306::SendData(u8 data)
 //We can send up to 16 bytes to the i2c bus
 void SSD1306::SendDataLong(void* data, u8 length)
 {
-	char buffer[15];
+	char buffer[16];
 
 	buffer[0] = SSD1306_DATA_REG;
 	memcpy(&buffer[1], data, length);
@@ -265,6 +267,38 @@ void SSD1306::PlotText(bool useCBMFont, bool petscii, int x, int y, char* str, b
 	{
 		PlotCharacter(useCBMFont, petscii, x++, y, str[i++], inverse);
 	}
+}
+
+void SSD1306::SetOrientation(int value)
+{
+	if (flip == value) return;
+	flip = value;
+	SendCommand(flip ? 0xA0 : 0xA1);
+	SendCommand(flip ? 0xC0 : 0xC8);
+}
+
+void transpose8(unsigned char* B, const unsigned char* A, bool inverse);
+
+void SSD1306::PlotMenu(const oled::Frame& text, bool cbmFont)
+{
+	memset(frame, 0, sizeof_frame); // publish one complete frame, without a blank I2C refresh
+	for (unsigned row = 0; row < height / 8 && row < 8; ++row)
+		for (unsigned col = 0; col < 16; ++col) {
+			unsigned char raster[8], columns[8];
+			unsigned char c = text.rows[row][col];
+			if (col == 0 && text.active[row]) {
+				const unsigned char triangle[8] = {0x00,0x40,0x60,0x70,0x78,0x70,0x60,0x40};
+				memcpy(raster, triangle, 8);
+			} else if (cbmFont && CBMFont) {
+				c = petscii2screen(ascii2petscii(c));
+				memcpy(raster, CBMFont + (c + 256) * 8, 8);
+			} else {
+				// Fixed 8x8 geometry even without an SD chargen file.
+				for (unsigned y = 0; y < 8; ++y) raster[y] = avpriv_vga16_font[c * 16 + y * 2];
+			}
+			transpose8(columns, raster, text.inverse[row]);
+			memcpy(frame + row * 128 + col * 8, columns, 8);
+		}
 }
 
 // Pg 143 - 145. Transposing an 8x8 bit matrix. Hacker's Delight

@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include "types.h"
+#include "OledMenu.h"
 extern "C"
 {
 #include "rpi-i2c.h"
@@ -76,9 +77,12 @@ public:
 	// 128x32 0x3C
 	// 128x64 0x3D or 0x3C (if SA0 is grounded)
 	SSD1306(int BSCMaster = 1, u8 address = 0x3C, unsigned width = 128, unsigned height = 64, int flip = 0, LCD_MODEL type=LCD_UNKNOWN);
+	~SSD1306() { free(frame); free(oldFrame); }
 
 	void PlotCharacter(bool useCBMFont, bool petscii, int x, int y, char ascii, bool inverse);
 	void PlotText(bool useCBMFont, bool petscii, int x, int y, char* str, bool inverse);
+	void PlotMenu(const oled::Frame& text, bool cbmFont);
+	void SetOrientation(int value);
 
 	void InitHardware();
 	void DisplayOn();

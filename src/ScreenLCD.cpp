@@ -77,6 +77,13 @@ void ScreenLCD::SetContrast(u8 value)
 	ssd1306->SetContrast(value);
 }
 
+void ScreenLCD::DrawMenu(const oled::Frame& frame, bool cbmFont, int orientation)
+{
+	ssd1306->SetOrientation(orientation);
+	ssd1306->PlotMenu(frame, cbmFont);
+	ssd1306->RefreshScreen();
+}
+
 void ScreenLCD::WriteChar(bool petscii, u32 x, u32 y, unsigned char c, RGBA colour)
 {
 	if (opened)

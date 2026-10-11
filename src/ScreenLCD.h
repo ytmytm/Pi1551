@@ -22,6 +22,7 @@
 #include "ScreenBase.h"
 #include "SSD1306.h"
 #include "options.h"
+#include "OledMenu.h"
 
 class ScreenLCD : public ScreenBase
 {
@@ -40,6 +41,7 @@ public:
 	void ClearInit(RGBA colour);
 
 	void SetContrast(u8 value);
+	void DrawMenu(const oled::Frame& frame, bool cbmFont, int orientation);
 
 	void ScrollArea(u32 x1, u32 y1, u32 x2, u32 y2);
 
