@@ -140,6 +140,7 @@ protected:
 		u32 open : 1;
 		u32 writing : 1;
 		u32 fileSize;
+		bool imageFile = false;
 
 		void Close();
 		bool Finish();

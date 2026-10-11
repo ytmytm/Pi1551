@@ -123,6 +123,7 @@ void Menu::Back() {
     } else if (view == View::Fliplist) Browse();
     else if (!history.empty()) {
         Position p = history.back(); history.pop_back();
+        if (p.view == View::Fliplist && flip.empty()) p = Position{View::Browser, 1, 0};
         view = p.view; cursor = p.cursor; offset = p.offset; Clamp(); scrollReset = true;
     }
 }

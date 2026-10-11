@@ -138,7 +138,7 @@ static inline bool IsDirectory(FILINFO& filInfo)
 
 void Commands_Base::Channel::Close()
 {
-	if (open)
+	if (open && !imageFile)
 	{
 		if (writing)
 		{
@@ -150,6 +150,8 @@ void Commands_Base::Channel::Close()
 		f_close(&file);
 		open = false;
 	}
+	open = false;
+	imageFile = false;
 	cursor = 0;
 	bytesSent = 0;
 }
@@ -174,6 +176,7 @@ void Commands_Base::ClearPendingImageSelection()
 bool Commands_Base::Channel::Finish()
 {
 	if (!open) return true;
+	if (imageFile) { open = false; imageFile = false; cursor = 0; return true; }
 	if (writing && cursor) {
 		UINT written = 0;
 		FRESULT result = f_write(&file, buffer, cursor, &written);
@@ -188,7 +191,10 @@ bool Commands_Base::Channel::Finish()
 }
 bool Commands_Base::FinishFiles()
 {
-	for (unsigned i = 0; i < 15; ++i) if (!channels[i].Finish()) return false;
+	for (unsigned i = 0; i < 15; ++i) {
+		if (channels[i].imageFile) cbm_image_close_channel(i);
+		if (!channels[i].Finish()) return false;
+	}
 	return true;
 }
 
@@ -2084,6 +2090,8 @@ void Commands_Base::OpenCbmImageFile(u8 secondary)
 	}
 
 	ch.open = true;
+	ch.imageFile = true;
+	ch.writing = false;
 	ch.cursor = 0;
 	ch.bytesSent = 0;
 	ch.fileSize = fileSize;

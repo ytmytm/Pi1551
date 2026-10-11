@@ -16,6 +16,9 @@ int main(int argc,char** argv) {
     CHECK(c.Finish()); CHECK(!c.open);
     std::ifstream f(argv[1]); std::ostringstream s; s << f.rdbuf(); CHECK(s.str() == "abcdefghi");
     CHECK(c.Finish());
+    Access::Channel virtualFile = {};
+    virtualFile.open = true; virtualFile.imageFile = true;
+    CHECK(virtualFile.Finish()); CHECK(!virtualFile.open); // no FatFS handle exists
     puts("PASS actual host write buffer: partial write retry, sync failure and close before reboot");
     return 0;
 }

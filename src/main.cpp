@@ -2910,7 +2910,7 @@ bool OledKernelPrepareReboot()
 bool OledKernelUnmount()
 {
     DiskImage* image = diskCaddy.GetCurrentDisk();
-    if ((image && !image->Flush()) || !cbm_image_sync()) return false;
+    if (!m_TCBM_Commands.FinishFiles() || (image && !image->Flush()) || !cbm_image_sync()) return false;
     pi1551.drive.Eject();
     diskCaddy.Empty();
     m_TCBM_Commands.DeactivateCbmImageMode();
@@ -2932,7 +2932,7 @@ bool OledKernelMount(const char* path)
         DiskCaddy candidate;
         if (!candidate.Insert(&f, g_oledWriteProtect || (f.fattrib & AM_RDO) != 0)) return false;
         if (!prg && emulating == EMULATING_1551 && diskCaddy.GetCurrentDisk()) {
-            if (!diskCaddy.GetCurrentDisk()->Flush() || !cbm_image_sync()) { candidate.Empty(); return false; }
+            if (!m_TCBM_Commands.FinishFiles() || !diskCaddy.GetCurrentDisk()->Flush() || !cbm_image_sync()) { candidate.Empty(); return false; }
             diskCaddy.Swap(candidate);
             pi1551.drive.Insert(diskCaddy.GetCurrentDisk());
             m_TCBM_Commands.DeactivateCbmImageMode();
@@ -2954,7 +2954,7 @@ bool OledKernelMount(const char* path)
         return true;
     }
     DiskImage* old = diskCaddy.GetCurrentDisk();
-    if ((old && !old->Flush()) || !cbm_image_sync() || !cbm_image_mount(path)) return false;
+    if (!m_TCBM_Commands.FinishFiles() || (old && !old->Flush()) || !cbm_image_sync() || !cbm_image_mount(path)) return false;
     pi1551.drive.Eject(); diskCaddy.Empty();
     cbm_image_set_write_protected(g_oledWriteProtect || (f.fattrib & AM_RDO) != 0);
     m_TCBM_Commands.SetMountedDiskImagePath(path);
