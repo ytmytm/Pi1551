@@ -21,3 +21,5 @@ graphify-out/
 .claude/
 CLAUDE.md
 tests/.build/
+src/*.d
+uspi/**/*.d

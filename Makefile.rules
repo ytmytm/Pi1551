@@ -35,8 +35,8 @@ CFLAGS	 += -fno-delete-null-pointer-checks -fdata-sections -ffunction-sections -
 
 %.o: %.c
 	@echo "  CC   $@"
-	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -c -o $@ $<
+	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<
 
 %.o: %.cpp
 	@echo "  CPP  $@"
-	$(Q)$(CPP) $(CPPFLAGS) $(INCLUDE) -c -o $@ $<
+	$(Q)$(CPP) $(CPPFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<

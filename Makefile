@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := all
+
 OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 	exception.o main.o rpi-aux.o rpi-i2c.o rpi-mailbox-interface.o rpi-mailbox.o \
 	rpi-gpio.o rpi-interrupts.o dmRotary.o cache.o ff.o interrupt.o Keyboard.o performance.o \
@@ -11,6 +13,8 @@ OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 
 SRCDIR   = src
 OBJS    := $(addprefix $(SRCDIR)/, $(OBJS_BASE))
+
+-include $(OBJS:.o=.d)
 
 LIBS     = uspi/libuspi.a
 INCLUDE  = -Iuspi/include/
