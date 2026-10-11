@@ -314,7 +314,12 @@ void Menu::Input(Key key) {
     if (key == Key::Insert) {
         if (view == View::Browser) {
             if (cursor == 0) Open(View::Device);
-            else { Entry e = files[cursor - 1]; if (IsMedia(e.path)) Toggle(e); else if (e.directory) ChangeDirectory(e.path); else OpenMedia(e); }
+            else {
+                Entry e = files[cursor - 1];
+                if (IsMedia(e.path)) Toggle(e);
+                else if (e.directory) ChangeDirectory(e.path);
+                else if (Extension(e.path) == "TAP") OpenMedia(e);
+            }
         } else if (view == View::Fliplist) { listMode = true; Browse(); }
         Clamp(); return;
     }

@@ -212,6 +212,7 @@ public:
 static KernelBackend backend;
 bool Enabled() { return menu != 0; }
 void Initialize() {
+    lastAction = Pi1551Clock();
     menu = new oled::Menu(backend, DEFAULT_BROWSE_DIR);
     OledKernelApplySettings();
     if (backend.Get(oled::Setting::AutoMount) && backend.AutoMountAvailable())
