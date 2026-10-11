@@ -42,6 +42,7 @@ extern "C"
 #include "tcbm_commands.h"
 #include "Pi1551.h"
 #include "Pi1551Oled.h"
+#include "pi1551_sound.h"
 #include "cbm_diskimage.h"
 #include "pi1551_idle_sleep.h"
 #else
@@ -1802,6 +1803,7 @@ DMA_ControlBlock dmaSoundCB =
 #if not defined(EXPERIMENTALZERO)
 static void PlaySoundDMA()
 {
+	if (!dmaSound) return;
 	RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_ALT0);
 	write32(PWM_CTL, PWM_USEF2 + PWM_PWEN2 + PWM_USEF1 + PWM_PWEN1 + PWM_CLRF1);
 	write32(PWM_DMAC, PWM_ENAB + 0x0001);
@@ -1809,6 +1811,12 @@ static void PlaySoundDMA()
 	write32(DMA0_BASE + DMA_CONBLK_AD, (u32)&dmaSoundCB);
 	write32(DMA0_BASE + DMA_CS, DMA_ACTIVE);
 }
+static void StopSoundDMA()
+{
+	write32(DMA0_BASE + DMA_CS, 1u << 31); // reset channel 0
+	write32(PWM_CTL, PWM_CLRF1); // stop PWM and discard queued samples
+}
+bool OledKernelSampleAvailable() { return dmaSound != 0; }
 #endif
 
 void GlobalSetDeviceID(u8 id)
@@ -2314,8 +2322,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	unsigned ctBefore = 0;
 	unsigned ctAfter = 0;
 	unsigned caddyIndex;
-	int headSoundCounter = 0;
-	int headSoundFreqCounter = 0;
+	Pi1551HeadSound headSound;
 	unsigned char oldHeadDir = 0;
 	int resetCount = 0;
 	int uiPollCountdown = 0;
@@ -2460,7 +2467,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 				DiskImage* image = pi1551.drive.GetDiskImage();
 				if (!exitEmulation && !exitDoAutoLoad && !nextDisk && !prevDisk
-					&& headSoundCounter <= 0
+					&& headSound.remainingUs == 0
 					&& directDiskSwapRequest == 0
 					&& Pi1551IdleSleep::CanSleep(options.IdleSleep(),
 					image && image->IsD64(), pc, pi1551.drive.IsMotorOn(),
@@ -2508,15 +2515,10 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (headDir != oldHeadDir)	// Need to start a new sound?
 		{
 			oldHeadDir = headDir;
-			if (options.Runtime(oled::Setting::Sound))
-			{
-				headSoundCounter = headSoundCounterDuration;
-				headSoundFreqCounter = headSoundFreq;
-			}
-			else
-			{
+			if (headSound.Trigger(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(),
+				options.SoundOnGPIODuration(), options.SoundOnGPIOFreq())) {
 #if not defined(EXPERIMENTALZERO)
-				/* SOUND OFF: no DMA or GPIO output. */
+				PlaySoundDMA();
 #endif
 			}
 		}
@@ -2593,25 +2595,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
 
-		if (options.Runtime(oled::Setting::Sound) && headSoundCounter > 0)
-		{
-			headSoundFreqCounter--;
-			if (headSoundFreqCounter <= 0)
-			{
-				headSoundFreqCounter = headSoundFreq;
-				headSoundCounter -= headSoundFreq * 8;
-				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
-			}
-		}
-		else if (options.Runtime(oled::Setting::Sound) && headSoundCounter <= 0)
-		{
-			TCBM_Bus::OutputSound = false;
-		}
-		else if (!options.Runtime(oled::Setting::Sound))
-		{
-			headSoundCounter = 0;
-			TCBM_Bus::OutputSound = false;
-		}
+		headSound.Step(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(), options.SoundOnGPIOFreq());
+		TCBM_Bus::OutputSound = headSound.output;
 
 		TCBM_Bus::RefreshOuts1551();
 	}
@@ -2976,17 +2961,23 @@ void OledKernelSelectROM(unsigned index) {
 }
 void OledKernelApplySettings()
 {
+    static int previousMode = -1, previousEnabled = -1;
     GlobalSetDeviceID(options.GetDeviceID());
     m_TCBM_Commands.SetDeviceId(deviceID);
     m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
+    m_TCBM_Commands.SetNewDiskType(options.GetNewDiskType());
     TCBM_Bus::SetIgnoreReset(options.IgnoreReset());
     TCBM_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
     if (g_tapePlayer) g_tapePlayer->SetMotorAlwaysOn(options.TapeMotorAlwaysOn());
     headSoundFreq = 1000000 / (2 * std::max(100u, options.SoundOnGPIOFreq()));
-    // The board's buzzer is permanently wired to SOUND (GPIO13).
-    RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
-    RPI_SetGpioLo((rpi_gpio_pin_t)PIGPIO_OUT_SOUND);
-    TCBM_Bus::OutputSound = false;
+    int mode = options.SoundOnGPIO(), enabled = options.Runtime(oled::Setting::Sound);
+    if (mode != previousMode || enabled != previousEnabled) {
+        StopSoundDMA();
+        RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, enabled && !mode ? FS_ALT0 : FS_OUTPUT);
+        if (!enabled || mode) RPI_SetGpioLo((rpi_gpio_pin_t)PIGPIO_OUT_SOUND);
+        TCBM_Bus::OutputSound = false;
+        previousMode = mode; previousEnabled = enabled;
+    }
 }
 bool OledKernelWriteProtected()
 {
@@ -3007,16 +2998,10 @@ bool OledKernelNewImage(const char* directory)
 {
     char name[256]; FILINFO f;
     for (unsigned i = 1; i < 10000; ++i) {
-        snprintf(name, sizeof(name), "%s/NEWIMAGE%u.d64", directory, i);
+        snprintf(name, sizeof(name), "%s/NEWIMAGE%u.%s", directory, i, options.GetNewDiskType() == DiskImage::G64 ? "g64" : "d64");
         FRESULT res = f_stat(name, &f);
         if (res == FR_NO_FILE) {
-            unsigned size = DiskImage::CreateNewDiskInRAM(name, "00");
-            FIL file; if (!size || f_open(&file, name, FA_WRITE | FA_CREATE_NEW) != FR_OK) return false;
-            UINT written;
-            bool ok = f_write(&file, DiskImage::readBuffer, size, &written) == FR_OK && written == size;
-            if (ok) ok = f_sync(&file) == FR_OK;
-            if (f_close(&file) != FR_OK) ok = false;
-            return ok;
+            return DiskImage::CreateNewImageFile(name, "00", options.GetNewDiskType());
         }
         if (res != FR_OK) return false;
     }
@@ -4030,10 +4015,10 @@ extern "C"
 		CheckOptions();
 
 #if not defined(EXPERIMENTALZERO)
-		if (!options.SoundOnGPIO())
+		// Reserve the sample at boot so switching SAMPLE/BUZZER needs no allocation in emulation.
 		{
 			dmaSound = (u32*)malloc(Sample_bin_size * 4);
-			for (int i = 0; i < Sample_bin_size; ++i)
+			for (int i = 0; dmaSound && i < Sample_bin_size; ++i)
 			{
 				dmaSound[i] = Sample_bin[i];
 			}
