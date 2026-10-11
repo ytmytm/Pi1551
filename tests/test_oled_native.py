@@ -51,7 +51,8 @@ def run():
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder",
                                "-fno-sanitize=vptr", "tests/oled_kernel_native.cpp", "tests/fatfs_posix.cpp",
                                "src/OledMenu.cpp", "src/OledSettings.cpp", "src/Pi1551Oled.cpp",
-                               "src/tape_player.cpp", "src/options.cpp", "-Wl,--gc-sections",
+                               "src/tape_player.cpp", "src/options.cpp", "src/ScreenLCD.cpp", "src/SSD1306.cpp",
+                               str(build / "font.o"), "-Wl,--gc-sections",
                                "-o", str(build / "bridge")], cwd=ROOT, check=True)
         card = build / "sd"
         (card / "1551").mkdir(parents=True)

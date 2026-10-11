@@ -85,7 +85,7 @@ Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `rotaryEncoderInvert`, `soundOnGPIOFreq`). SD2IEC ON is stored as
 `disableSD2IECCommands = 0`.
 
-Display also uses `displayTemperature`, `i2cLcdDimTime` and
+Settings/OLED also uses `displayTemperature`, `i2cLcdDimTime` and
 `i2cLcdDimContrast`. Font maps directly to `i2cLcdUseCBMChar`; Scroll maps to
 `scrollHighlightRate` (seconds, represented internally in milliseconds).
 `oledFont` and `oledScroll` are obsolete and ignored, not rewritten as active
@@ -149,3 +149,8 @@ The suite runs production components, not a Python reimplementation:
 The native suite does not emulate complete 6502 instruction execution, a
 physical encoder, hardware I2C/GPIO latency, SD-card power-loss behavior or
 actual watchdog restart. Those require a focused final hardware smoke test.
+
+OLED contrast changes send only command 0x81 and its brightness byte for both
+SSD1306 and SH1106; VCOMH remains as initialized by the driver. Native I2C tests
+check this separation and the actual firmware dimming path at the configured
+timeout, waking on UI input, plus Dimming OFF and Dim time 0/OFF.

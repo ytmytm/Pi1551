@@ -13,7 +13,9 @@ class TuiControls(unittest.TestCase):
         sim.activate()
 
     def test_display_shared_options(self):
-        s = Simulator(); s.set_screen("display",True)
+        s = Simulator(); s.set_screen("settings",True); self.click(s,"OLED")
+        self.assertEqual(s.screen,"display")
+        self.assertNotIn("Display",s.GROUPS["settings"])
         for label in ("Temp","Dim time","Dim level","Font","Scroll"): self.click(s,label)
         self.assertFalse(s.options["Temp"])
         self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],16)

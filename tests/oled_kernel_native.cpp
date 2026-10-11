@@ -14,6 +14,19 @@ Options options;
 ROMs roms;
 TapePlayer* g_tapePlayer = 0;
 ScreenLCD* screenLCD = 0;
+unsigned char* CBMFont = 0;
+static std::vector<unsigned char> oledCommands;
+extern "C" void RPI_I2CInit(int,int) {}
+extern "C" int RPI_I2CWrite(int,unsigned char,void* buffer,unsigned length) {
+    unsigned char* bytes = static_cast<unsigned char*>(buffer);
+    if (length == 2 && bytes[0] == 0) oledCommands.push_back(bytes[1]);
+    return length;
+}
+static int LastContrast() {
+    for (size_t i = oledCommands.size(); i > 1; --i)
+        if (oledCommands[i-2] == 0x81) return oledCommands[i-1];
+    return -1;
+}
 InputMappings* inputMappings = 0;
 static unsigned now = 0, resetCount = 0, rebootCount = 0, applies = 0;
 static std::string medium;
@@ -76,7 +89,20 @@ int main(int argc, char** argv) {
     roms.ROMValid[0] = true; roms.ROMValid[2] = true;
     strcpy(roms.ROMNames[0],"dos1551.bin"); strcpy(roms.ROMNames[2],"other.bin");
     options.SetRuntime(Setting::AutoMount,0); g_tapePlayer = new TapePlayer(); g_tapePlayer->InitializeGPIO();
+    ScreenLCD panel; screenLCD = &panel;
+    screenLCD->Open(128,64,1,1,0x3c,0,LCD_1306_128x64,false);
     Pi1551Oled::Initialize(); CHECK(Pi1551Oled::TestMenu().Path() == "/1551");
+    oledCommands.clear(); now = 29900000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
+    oledCommands.clear(); now = 30000000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 10);
+    for (unsigned char command : oledCommands) CHECK(command != 0xDB);
+    Press(Key::Right); oledCommands.clear(); Pi1551Oled::Draw(); CHECK(LastContrast() == 127); // input wakes panel
+    options.SetRuntime(Setting::DimTime,0); now += 40000000;
+    oledCommands.clear(); Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
+    options.SetRuntime(Setting::DimTime,30); now += 200000;
+    oledCommands.clear(); Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 10);
+    options.SetRuntime(Setting::Dimming,0); now += 200000;
+    oledCommands.clear(); Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
+    options.SetRuntime(Setting::Dimming,1);
     { char config[] = "AutoMountImage = bad.d64\n"; options.Process(config); }
     options.SetRuntime(Setting::AutoMount,1); Pi1551Oled::HostReset(); CHECK(medium.empty());
     Enter("Menu..."); Enter("Settings"); Enter("Browser");
@@ -139,6 +165,7 @@ int main(int argc, char** argv) {
     Choose("ROM"); Press(Key::Back); Enter("Reboot Pi1551"); CHECK(rebootCount == 0);
     Press(Key::Enter); CHECK(rebootCount == 0); Enter("Reboot Pi1551"); Press(Key::Right); Press(Key::Enter); CHECK(rebootCount == 1);
     Pi1551Oled::TestShutdown(); delete g_tapePlayer; g_tapePlayer = 0;
+    screenLCD = 0;
     std::string templateText = Read("sdcard/options.txt"); CHECK(!templateText.empty());
     Options templateOptions; std::vector<char> bootText(templateText.begin(),templateText.end()); bootText.push_back(0);
     templateOptions.Process(bootText.data());

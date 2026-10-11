@@ -56,7 +56,7 @@ class Simulator:
     GROUPS = {
         "menu": ["..", "Browser", "Tape", "Disk", "Settings", "Status", "Reboot Pi1551"],
         "reboot_confirm": ["..", "Cancel", "Reboot Pi1551?"],
-        "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
+        "settings": ["..", "ROM", "Drive", "Tape", "Browser", "OLED", "Encoder", "Sound", "Load settings", "Save settings"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
         "tape_settings": ["..", "Motor ON"],
@@ -353,7 +353,7 @@ class Simulator:
         elif self.screen == "settings":
             if item == "Load settings": self.message = "Settings loaded from options-pi1551.txt (simulated)"
             elif item == "Save settings": self.message = "Settings saved to options-pi1551.txt (simulated)"
-            else: self.set_screen({"ROM": "rom", "Drive": "drive", "Tape": "tape_settings", "Browser": "browser_settings", "Display": "display", "Encoder": "encoder", "Sound": "sound"}[item], True)
+            else: self.set_screen({"ROM": "rom", "Drive": "drive", "Tape": "tape_settings", "Browser": "browser_settings", "OLED": "display", "Encoder": "encoder", "Sound": "sound"}[item], True)
         elif self.screen == "tape":
             if item == "Load TAP...":
                 self.unmount_for_browser()
@@ -575,7 +575,7 @@ class UI:
         value = clip(left, self.width - len(right))
         self.text(self.oy + row, self.ox, (value + " " * max(1, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
-        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
+        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ OLED", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
         active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_seek": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)
         if self.sim.fliplist:
             lines.insert(4, "│  ├─ Clear list")
@@ -629,7 +629,7 @@ class UI:
             values = sim.items()
             for row, index in enumerate(range(sim.offset, min(len(values), sim.offset + 6))):
                 item = values[index]
-                submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound"}
+                submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "OLED", "Encoder", "Sound"}
                 suffix = " " + sim.display_value(item) if sim.display_value(item) and not submenu else ""
                 self.line(2 + row, item + suffix, index == sim.cursor)
         h = self.s.getmaxyx()[0]; self.text(h - 3, 2, "Message: " + sim.message, curses.color_pair(3)); self.text(h - 2, 2, "←→ encoder   Enter select   i Insert   b Back   r RESET   m MOTOR   q quit")

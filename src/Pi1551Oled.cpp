@@ -278,7 +278,7 @@ void Draw() {
     oled::Frame fresh; frameLock.Acquire(); fresh = frame; frameReady = false; frameLock.Release();
     bool dim = options.Runtime(oled::Setting::Dimming) &&
         options.I2CLcdDimTime() != 0 &&
-        (uint32_t)(Pi1551Clock() - lastAction) / 1000000 > options.I2CLcdDimTime();
+        (uint32_t)(Pi1551Clock() - lastAction) / 1000000 >= options.I2CLcdDimTime();
     screenLCD->SetContrast(dim ? options.I2CLcdDimContrast() : options.I2CLcdOnContrast());
     screenLCD->DrawMenu(fresh, options.Runtime(oled::Setting::Font), options.I2CLcdFlip());
 }
