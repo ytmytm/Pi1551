@@ -70,6 +70,7 @@ public:
     bool OpenMedia(const Entry& entry); // host selection and automount use same rules
     void HostReset();
     void SetHostDirectory(const std::string& next) { ChangeDirectory(next); }
+    void ShowHostBrowser(const std::string& next) { if (Browse()) ChangeDirectory(next); }
     View CurrentView() const { return view; }
     unsigned Cursor() const { return cursor; }
     const std::vector<Entry>& List() const { return flip; }

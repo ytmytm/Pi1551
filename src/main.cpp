@@ -41,6 +41,7 @@ extern "C"
 #if defined(PI1551SUPPORT)
 #include "tcbm_commands.h"
 #include "Pi1551.h"
+#include "Pi1551Oled.h"
 #include "cbm_diskimage.h"
 #include "pi1551_idle_sleep.h"
 #else
@@ -214,6 +215,9 @@ struct Pi1551UiSnapshot
 
 static volatile unsigned g_pi1551UiSnapshotSequence = 0;
 static volatile Pi1551UiSnapshot g_pi1551UiSnapshot = {};
+static bool g_oledResumeCpu = false;
+static bool g_oledWakeCpu = false;
+static bool g_oledWriteProtect = false;
 
 struct Pi1551EmulationCommands
 {
@@ -248,7 +252,7 @@ static volatile Pi1551EmulationCommands g_pi1551Commands = {};
 
 static bool Pi1551UiCommandPending()
 {
-	return g_pi1551CommandGeneration != g_pi1551CommandGenerationAck;
+	return Pi1551Oled::InputPending() || Pi1551Oled::TransitionPending() || g_pi1551CommandGeneration != g_pi1551CommandGenerationAck;
 }
 
 static inline void Pi1551DataBarrier()
@@ -466,6 +470,7 @@ static bool Pi1551ROMSelectBrowseUpdate(FileBrowser* fileBrowser)
 
 static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfImagesMax)
 {
+	if (Pi1551Oled::Enabled()) { Pi1551Oled::PollInput(); return; }
 	TCBM_Bus::PollGPIOUserInput1551();
 
 	Pi1551EmulationCommands cmd = {};
@@ -1030,6 +1035,12 @@ void UpdateScreen()
 	{
 		bool value;
 #if defined(PI1551SUPPORT)
+		if (Pi1551Oled::Enabled())
+		{
+			Pi1551Oled::PollInput();
+			Pi1551Oled::Draw();
+			continue;
+		}
 		if (emulating == IEC_COMMANDS)
 		{
 			u32 now = read32(ARM_SYSTIMER_CLO);
@@ -2343,11 +2354,11 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 	TCBM_Bus::TPI = &pi1551.TPI;
 	TCBM_Bus::port = pi1551.TPI.GetPortA();
-	pi1551.Reset();	// will call TCBM_Bus::Reset();
+	bool resumeCpu = g_oledResumeCpu;
+	g_oledResumeCpu = false;
+	if (!resumeCpu) pi1551.Reset(); // an emulated-to-emulated flip retains CPU/TPI state
 	TCBM_Bus::RefreshOuts1551();	// sync GPIO to TPI initial state (DDRA=0 -> input+pull-up) before any cycles
-	// Reset tape player on C16 reset
-	if (g_tapePlayer)
-		g_tapePlayer->Reset();
+	// Mounting a disk does not rewind the independent tape.
 
 	//resetWhileEmulating = false;
 	selectedViaIECCommands = false;
@@ -2368,7 +2379,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	// During this time we don't need to set outputs.
 	// Boot ends when PC reaches mainloop at $eabd or after FAST_BOOT_CYCLES_1551 cycles.
 
-	Pi1551RunFastBoot();
+	if (!resumeCpu) Pi1551RunFastBoot();
 
 	// Self test code done. Begin realtime emulation.
 	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
@@ -2391,14 +2402,17 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			if ((int)(now - nextIdleSleepPollUs) < 0)
 				continue;
 			nextIdleSleepPollUs = now + PI1551_IDLE_SLEEP_POLL_US;
+			Pi1551Oled::Service(true);
+			if (Pi1551Oled::TransitionPending()) { exitReason = EXIT_KEYBOARD; break; }
 
 			TCBM_Bus::ReadEmulationMode1551();
-			if (!Pi1551IdleSleep::HostNeedsWake(idleSleepingData, idleSleepingDav,
+			if (options.IdleSleep() && !g_oledWakeCpu && !Pi1551IdleSleep::HostNeedsWake(idleSleepingData, idleSleepingDav,
 				TCBM_Bus::GetPI_Data(), TCBM_Bus::GetPI_DAV(), TCBM_Bus::IsReset(),
 				Pi1551UiCommandPending()))
 				continue;
 
 			idleSleeping = false;
+			g_oledWakeCpu = false;
 			PublishPi1551UiSnapshot(options.DisplayPC(), false);
 			uiPollCountdown = 0;
 			ctBefore = now;
@@ -2418,6 +2432,8 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (slowUiTick)
 		{
 			uiPollCountdown = PI1551_UI_POLL_CYCLES;
+			Pi1551Oled::Service(true);
+			if (Pi1551Oled::TransitionPending()) { exitReason = EXIT_KEYBOARD; break; }
 			Pi1551EmulationCommands commands;
 			TakePi1551Commands(commands);
 			exitEmulation = commands.exitEmulation;
@@ -2492,7 +2508,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (headDir != oldHeadDir)	// Need to start a new sound?
 		{
 			oldHeadDir = headDir;
-			if (options.SoundOnGPIO())
+			if (options.Runtime(oled::Setting::Sound))
 			{
 				headSoundCounter = headSoundCounterDuration;
 				headSoundFreqCounter = headSoundFreq;
@@ -2500,7 +2516,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			else
 			{
 #if not defined(EXPERIMENTALZERO)
-				PlaySoundDMA();
+				/* SOUND OFF: no DMA or GPIO output. */
 #endif
 			}
 		}
@@ -2529,7 +2545,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (slowUiTick)
 			PublishPi1551UiSnapshot(options.DisplayPC(), idleSleeping);
 
-		if (slowUiTick && diskCaddy.GetNumberOfImages() > 1)
+		if (slowUiTick && !Pi1551Oled::Enabled() && diskCaddy.GetNumberOfImages() > 1)
 		{
 			if (nextDisk)
 				pi1551.drive.Insert(diskCaddy.PrevDisk());
@@ -2577,7 +2593,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
 
-		if (options.SoundOnGPIO() && headSoundCounter > 0)
+		if (options.Runtime(oled::Setting::Sound) && headSoundCounter > 0)
 		{
 			headSoundFreqCounter--;
 			if (headSoundFreqCounter <= 0)
@@ -2587,8 +2603,13 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 				TCBM_Bus::OutputSound = !TCBM_Bus::OutputSound;
 			}
 		}
-		else if (options.SoundOnGPIO() && headSoundCounter <= 0)
+		else if (options.Runtime(oled::Setting::Sound) && headSoundCounter <= 0)
 		{
+			TCBM_Bus::OutputSound = false;
+		}
+		else if (!options.Runtime(oled::Setting::Sound))
+		{
+			headSoundCounter = 0;
 			TCBM_Bus::OutputSound = false;
 		}
 
@@ -2874,241 +2895,258 @@ EXIT_TYPE Emulate1581(FileBrowser* fileBrowser)
 #endif
 
 #if defined(PI1551SUPPORT)
+bool OledKernelWriteImage()
+{
+    DiskImage* image = diskCaddy.GetCurrentDisk();
+    return image ? image->Flush() : cbm_image_is_mounted() && cbm_image_sync();
+}
+bool OledKernelPrepareReboot()
+{
+    DiskImage* image = diskCaddy.GetCurrentDisk();
+    if (!m_TCBM_Commands.FinishFiles() || (image && !image->Flush()) || !cbm_image_sync()
+        || disk_ioctl(0, CTRL_SYNC, 0) != RES_OK) return false;
+    return OledKernelUnmount();
+}
+bool OledKernelUnmount()
+{
+    DiskImage* image = diskCaddy.GetCurrentDisk();
+    if ((image && !image->Flush()) || !cbm_image_sync()) return false;
+    pi1551.drive.Eject();
+    diskCaddy.Empty();
+    m_TCBM_Commands.DeactivateCbmImageMode();
+    m_TCBM_Commands.SetMountedDiskImagePath(0);
+    emulating = IEC_COMMANDS;
+    TCBM_Bus::TPI = 0; TCBM_Bus::port = 0;
+    TCBM_Bus::Reset();
+    m_TCBM_Commands.SimulateIECBegin();
+    return true;
+}
+bool OledKernelMount(const char* path)
+{
+    FILINFO f;
+    if (f_stat(path, &f) != FR_OK || strlen(path) >= sizeof(f.fname)) return false;
+    strcpy(f.fname, path);
+    bool prg = oled::Extension(path) == "PRG";
+    if (oled::IsEmulated(path) || prg)
+    {
+        DiskCaddy candidate;
+        if (!candidate.Insert(&f, g_oledWriteProtect || (f.fattrib & AM_RDO) != 0)) return false;
+        if (!prg && emulating == EMULATING_1551 && diskCaddy.GetCurrentDisk()) {
+            if (!diskCaddy.GetCurrentDisk()->Flush() || !cbm_image_sync()) { candidate.Empty(); return false; }
+            diskCaddy.Swap(candidate);
+            pi1551.drive.Insert(diskCaddy.GetCurrentDisk());
+            m_TCBM_Commands.DeactivateCbmImageMode();
+            candidate.Empty();
+            m_TCBM_Commands.SetMountedDiskImagePath(path);
+            g_oledResumeCpu = true;
+            return true;
+        }
+        if (!OledKernelUnmount()) { candidate.Empty(); return false; }
+        diskCaddy.Swap(candidate);
+        m_TCBM_Commands.SetMountedDiskImagePath(path);
+        if (prg) {
+            DiskImage* image = diskCaddy.SelectFirstImage();
+            image->SetReadOnly(true);
+            return cbm_image_mount_d64_sector_reader(path, Pi1551DecodedSectorReader, image);
+        }
+        pi1551.drive.Insert(diskCaddy.SelectFirstImage());
+        emulating = EMULATING_1551;
+        return true;
+    }
+    DiskImage* old = diskCaddy.GetCurrentDisk();
+    if ((old && !old->Flush()) || !cbm_image_sync() || !cbm_image_mount(path)) return false;
+    pi1551.drive.Eject(); diskCaddy.Empty();
+    cbm_image_set_write_protected(g_oledWriteProtect || (f.fattrib & AM_RDO) != 0);
+    m_TCBM_Commands.SetMountedDiskImagePath(path);
+    emulating = IEC_COMMANDS;
+    TCBM_Bus::TPI = 0; TCBM_Bus::port = 0;
+    TCBM_Bus::Reset(); m_TCBM_Commands.SimulateIECBegin();
+    return true;
+}
+void OledKernelReset()
+{
+    if (emulating == EMULATING_1551) {
+        pi1551.m6502.Reset(); pi1551.Reset(); Pi1551RunFastBoot();
+        g_oledWakeCpu = true;
+    }
+}
+void OledKernelSelectROM(unsigned index) {
+    ApplyPi1551ROMSwitch(index, emulating == EMULATING_1551);
+    g_oledWakeCpu = true;
+}
+void OledKernelApplySettings()
+{
+    static unsigned oldSoundPin = 18;
+    GlobalSetDeviceID(options.GetDeviceID());
+    m_TCBM_Commands.SetDeviceId(deviceID);
+    m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
+    TCBM_Bus::SetIgnoreReset(options.IgnoreReset());
+    TCBM_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
+    if (g_tapePlayer) g_tapePlayer->SetMotorAlwaysOn(options.TapeMotorAlwaysOn());
+    headSoundFreq = 1000000 / (2 * std::max(100u, options.SoundOnGPIOFreq()));
+    // Runtime SOUND uses a square-wave output on the selected pin.
+    unsigned pin = options.Runtime(oled::Setting::GPIO);
+    if (oldSoundPin != TAPE_READ_GPIO || !g_tapePlayer || !g_tapePlayer->IsLoaded())
+        RPI_SetGpioLo((rpi_gpio_pin_t)oldSoundPin);
+    if (pin != TAPE_READ_GPIO || !g_tapePlayer || !g_tapePlayer->IsLoaded()) {
+        RPI_SetGpioPinFunction((rpi_gpio_pin_t)pin, FS_OUTPUT);
+        RPI_SetGpioLo((rpi_gpio_pin_t)pin);
+    }
+    TCBM_Bus::OutputSound = false; oldSoundPin = pin;
+}
+bool OledKernelWriteProtected()
+{
+    DiskImage* image = diskCaddy.GetCurrentDisk();
+    return g_oledWriteProtect || (image && image->GetReadOnly()) ||
+        (cbm_image_is_mounted() && cbm_image_is_write_protected());
+}
+void OledKernelWriteProtect(bool value)
+{
+    g_oledWriteProtect = value;
+    DiskImage* image = diskCaddy.GetCurrentDisk(); if (image) image->SetReadOnly(value);
+    FILINFO file;
+    const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
+    bool physical = path[0] && f_stat(path, &file) == FR_OK && (file.fattrib & AM_RDO);
+    cbm_image_set_write_protected(value || physical);
+}
+bool OledKernelNewImage(const char* directory)
+{
+    char name[256]; FILINFO f;
+    for (unsigned i = 1; i < 10000; ++i) {
+        snprintf(name, sizeof(name), "%s/NEWIMAGE%u.d64", directory, i);
+        FRESULT res = f_stat(name, &f);
+        if (res == FR_NO_FILE) {
+            unsigned size = DiskImage::CreateNewDiskInRAM(name, "00");
+            FIL file; if (!size || f_open(&file, name, FA_WRITE | FA_CREATE_NEW) != FR_OK) return false;
+            UINT written;
+            bool ok = f_write(&file, DiskImage::readBuffer, size, &written) == FR_OK && written == size;
+            if (ok) ok = f_sync(&file) == FR_OK;
+            if (f_close(&file) != FR_OK) ok = false;
+            return ok;
+        }
+        if (res != FR_OK) return false;
+    }
+    return false;
+}
+oled::Status OledKernelStatus()
+{
+    static unsigned temperature = 0;
+    static u32 nextTemperature = 0, nextSpace = 0;
+    static std::string size, free;
+    u32 now = read32(ARM_SYSTIMER_CLO);
+    if ((int)(now - nextTemperature) >= 0) {
+        unsigned value; if (GetTemperature(value)) temperature = value / 1000;
+        nextTemperature = now + 1000000;
+    }
+    if ((int)(now - nextSpace) >= 0) {
+        FATFS* fs; DWORD clusters;
+        if (f_getfree("0:", &clusters, &fs) == FR_OK) {
+            char b[32];
+            unsigned long long total = (unsigned long long)(fs->n_fatent - 2) * fs->csize * 512;
+            unsigned long long available = (unsigned long long)clusters * fs->csize * 512;
+            snprintf(b, sizeof(b), "%lluMB", total / (1024 * 1024)); size = b;
+            snprintf(b, sizeof(b), "%lluMB", available / (1024 * 1024)); free = b;
+        } else { size = "---"; free = "---"; }
+        nextSpace = now + 5000000;
+    }
+    oled::Status s;
+    s.emulating = emulating == EMULATING_1551;
+    s.halfTrack = pi1551.drive.Track(); s.idle = s.emulating && g_pi1551UiSnapshot.idleSleeping;
+    s.led = s.emulating && pi1551.drive.IsLEDOn(); s.temperature = temperature;
+    s.sdSize = size; s.sdFree = free; s.rom = roms.GetSelectedROMName();
+    char version[24]; snprintf(version, sizeof(version), "%u.%02u", versionMajor, versionMinor); s.firmware = version;
+    if (g_tapePlayer) {
+        g_tapePlayer->Tick10ms(); TapeUIState tape; g_tapePlayer->GetUIState(tape);
+        s.tape = tape.isLoaded ? tape.filename : ""; s.motor = tape.motorActive;
+        s.play = tape.isLoaded; s.counter = tape.tapeCounter; s.percent = tape.percentage;
+    }
+    return s;
+}
+
 void emulator()
 {
-#if not defined(EXPERIMENTALZERO)
-	Keyboard* keyboard = Keyboard::Instance();
-#endif
-	FileBrowser* fileBrowser;
-	EXIT_TYPE exitReason = EXIT_UNKNOWN;
-
-	roms.lastManualSelectedROMIndex = 0;
-
-	diskCaddy.SetScreen(&screen, screenLCD, &roms);
-	fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms, &deviceID, options.DisplayPNGIcons(), &screen, screenLCD, options.ScrollHighlightRate());
-	g_pi1551FileBrowser = fileBrowser;
-
-	// Initialize tape player
-	g_tapePlayer = new TapePlayer();
-	g_tapePlayer->InitializeGPIO();
-
-	pi1551.Initialise();
-
-	m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
-	m_TCBM_Commands.SetNewDiskType(options.GetNewDiskType());
-
-	emulating = IEC_COMMANDS;
-	while (1)
-	{
-		if (emulating == IEC_COMMANDS)
-		{
-			TCBM_Bus::TPI = 0;
-			TCBM_Bus::port = 0;
-			TCBM_Bus::Reset();
-			// Don't reset tape player when exiting emulation - let it continue playing
-
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Acquire();
-#endif
-			roms.ResetCurrentROMIndex();
-			fileBrowser->ClearScreen();
-
-			fileBrowserSelectedName = 0;
-			fileBrowser->ClearSelections();
-
-			fileBrowser->RefeshDisplay(); // Just redisplay the current folder.
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Release();
-#endif
-			selectedViaIECCommands = false;
-
-			inputMappings->Reset();
-#if not defined(EXPERIMENTALZERO)
-			inputMappings->SetKeyboardBrowseLCDScreen(screenLCD && options.KeyboardBrowseLCDScreen());
-#endif
-			fileBrowser->ShowDeviceAndROM();
-
-			if (!options.GetDisableSD2IECCommands())
-			{
-				m_TCBM_Commands.SimulateIECBegin();
-
-				CheckAutoMountImage(exitReason, fileBrowser);
-				u32 nextBrowsePollTime = 0;
-
-				while (emulating == IEC_COMMANDS)
-				{
-					u32 now = read32(ARM_SYSTIMER_CLO);
-					if (!m_TCBM_Commands.IsTransferActive() && (int)(now - nextBrowsePollTime) < 0)
-					{
-						__asm ("WFE");
-						continue;
-					}
-					nextBrowsePollTime = now + PI1551_BROWSE_POLL_US;
-					// Handle tape control keys in browse mode
-					if (inputMappings->TapeReadToggle() && g_tapePlayer)
-					{
-						g_tapePlayer->ToggleTapeRead();
-					}
-					if (inputMappings->TapeSenseToggle() && g_tapePlayer)
-					{
-						g_tapePlayer->ToggleTapeSense();
-					}
-					
-					TCBM_Commands::UpdateAction updateAction = m_TCBM_Commands.SimulateIECUpdate();
-
-					switch (updateAction)
-					{
-					case TCBM_Commands::RESET:
-						if (options.GetOnResetChangeToStartingFolder())
-							fileBrowser->DisplayRoot();
-						else
-							fileBrowser->FolderChanged();
-						TCBM_Bus::Reset();
-						// Reset tape player on C16 reset command
-						if (g_tapePlayer)
-							g_tapePlayer->Reset();
-						m_TCBM_Commands.SimulateIECBegin();
-							CheckAutoMountImage(EXIT_UNKNOWN, fileBrowser);
-							break;
-						case TCBM_Commands::NONE:
-							if (!Pi1551ROMSelectBrowseUpdate(fileBrowser))
-								fileBrowser->Update();
-							// Check selections made via FileBrowser
-							if (fileBrowser->SelectionsMade())
-								emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
-							break;
-						case TCBM_Commands::IMAGE_SELECTED:
-							// Check selections made via IEC commands (like fb64)
-
-							fileBrowserSelectedName = m_TCBM_Commands.GetNameOfImageSelected();
-
-							if (DiskImage::IsTAPExtention(fileBrowserSelectedName))
-							{
-								// TAP files don't enter emulation, just load into tape player
-								const FILINFO* filInfoSelected = m_TCBM_Commands.GetImageSelected();
-								if (filInfoSelected && g_tapePlayer)
-								{
-									g_tapePlayer->LoadTap(filInfoSelected);
-								}
-							}
-							else if (DiskImage::IsLSTExtention(fileBrowserSelectedName))
-							{
-								if (fileBrowser->SelectLST(fileBrowserSelectedName))
-									emulating = BeginEmulating(fileBrowser, fileBrowserSelectedName);
-							}
-							else if (Commands_Base::IsCdMountableImage(fileBrowserSelectedName))
-							{
-								const FILINFO* filInfoSelected = m_TCBM_Commands.GetImageSelected();
-								if (Commands_Base::PathUsesQuasiMountOnly(filInfoSelected->fname))
-								{
-									m_TCBM_Commands.SetMountedDiskImagePath(filInfoSelected->fname);
-									if (!m_TCBM_Commands.ActivateCbmImageMode(m_TCBM_Commands.GetMountedDiskImagePath()))
-										DEBUG_LOG("Quasi mount failed %s\r\n", filInfoSelected->fname);
-									else
-										fileBrowser->FolderChanged();
-								}
-								else
-								{
-									DEBUG_LOG("IEC mounting %s\r\n", filInfoSelected->fname);
-									bool readOnly = (filInfoSelected->fattrib & AM_RDO) != 0;
-
-									if (diskCaddy.Insert(filInfoSelected, readOnly))
-										emulating = BeginEmulating(fileBrowser, filInfoSelected->fname);
-								}
-							}
-
-							m_TCBM_Commands.ClearPendingImageSelection();
-							selectedViaIECCommands = true;
-							break;
-						case TCBM_Commands::DIR_PUSHED:
-							fileBrowser->FolderChanged();
-							break;
-						case TCBM_Commands::POP_DIR:
-							fileBrowser->PopFolder();
-							break;
-						case TCBM_Commands::POP_TO_ROOT:
-							fileBrowser->DisplayRoot();
-							break;
-						case TCBM_Commands::REFRESH:
-							fileBrowser->FolderChanged();
-							break;
-						case TCBM_Commands::DEVICEID_CHANGED:
-							GlobalSetDeviceID( m_TCBM_Commands.GetDeviceId() );
-							fileBrowser->ShowDeviceAndROM();
-							break;
-						case TCBM_Commands::DEVICE_SWITCHED:
-							DEBUG_LOG("DECIVE_SWITCHED\r\n");
-							fileBrowser->DeviceSwitched();
-							break;
-						default:
-							break;
-					}
-					if (m_TCBM_Commands.IsTransferActive())
-						usDelay(1);
-				}
-			}
-			else
-			{
-				u32 nextBrowsePollTime = 0;
-				while (emulating == IEC_COMMANDS)
-				{
-					u32 now = read32(ARM_SYSTIMER_CLO);
-					if ((int)(now - nextBrowsePollTime) < 0)
-					{
-						__asm ("WFE");
-						continue;
-					}
-					nextBrowsePollTime = now + PI1551_BROWSE_POLL_US;
-					// Handle tape control keys in browse mode
-					if (inputMappings->TapeReadToggle() && g_tapePlayer)
-					{
-						g_tapePlayer->ToggleTapeRead();
-					}
-					if (inputMappings->TapeSenseToggle() && g_tapePlayer)
-					{
-						g_tapePlayer->ToggleTapeSense();
-					}
-					
-					if (!Pi1551ROMSelectBrowseUpdate(fileBrowser))
-						fileBrowser->Update();
-					if (fileBrowser->SelectionsMade())
-						emulating = BeginEmulating(fileBrowser, fileBrowser->LastSelectionName());
-				}
-			}
-		}
-		else
-		{
-			if (emulating == EMULATING_1551)
-				exitReason = Emulate1551(fileBrowser);
-
-			DEBUG_LOG("Exited emulation\r\n");
-
-			// Clearing the caddy now
-			//	- will write back all changed/dirty/written to disk images now
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Acquire();
-#endif
-			if (diskCaddy.Empty())
-				TCBM_Bus::WaitMicroSeconds(2 * 1000000);
-
-			m_TCBM_Commands.DeactivateCbmImageMode();
-			m_TCBM_Commands.SetMountedDiskImagePath(0);
-			TCBM_Bus::WaitUntilReset();
-			m_TCBM_Commands.ClearPendingImageSelection();
-			emulating = IEC_COMMANDS;
-	
-			if ((exitReason == EXIT_RESET) && (options.GetOnResetChangeToStartingFolder() || selectedViaIECCommands))
-				fileBrowser->DisplayRoot(); // TO CHECK
-
-			ResetPi1551UserInput();
-			inputMappings->WaitForClearButtons();
-
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Release();
-#endif
-		}
-	}
-	delete fileBrowser;
+    // UI media list is independent of DiskCaddy; the caddy holds only the
+    // presently emulated D64/G64. Core0 owns input sampling and OLED I2C.
+    diskCaddy.SetScreen(0, 0, &roms);
+    FileBrowser* fileBrowser = new FileBrowser(inputMappings, &diskCaddy, &roms,
+        &deviceID, false, &screen, 0, options.ScrollHighlightRate());
+    g_pi1551FileBrowser = fileBrowser; // legacy trap handoff uses it
+    g_tapePlayer = new TapePlayer();
+    g_tapePlayer->InitializeGPIO();
+    pi1551.Initialise();
+    emulating = IEC_COMMANDS;
+    m_TCBM_Commands.SimulateIECBegin();
+    Pi1551Oled::Initialize();
+    for (;;)
+    {
+        if (emulating == EMULATING_1551)
+        {
+            EXIT_TYPE reason = Emulate1551(fileBrowser);
+            // Do not clear media/list or rewind the independent tape on a UI
+            // transition. Flush/mount happens outside the microsecond loop.
+            if (Pi1551Oled::TransitionPending())
+            {
+                Pi1551Oled::CompleteTransition();
+                if (emulating == EMULATING_1551) g_oledResumeCpu = true;
+            }
+            else if (reason == EXIT_RESET)
+            {
+                Pi1551Oled::HostReset();
+                if (emulating == EMULATING_1551) g_oledResumeCpu = true;
+            }
+            else
+            {
+                // Firmware trap handoff may have changed the physical mode.
+                emulating = IEC_COMMANDS;
+            }
+            if (emulating == IEC_COMMANDS)
+            {
+                TCBM_Bus::TPI = 0; TCBM_Bus::port = 0;
+                TCBM_Bus::Reset();
+                m_TCBM_Commands.SimulateIECBegin();
+            }
+        }
+        else
+        {
+            Pi1551Oled::Service(false);
+            if (Pi1551Oled::TransitionPending()) Pi1551Oled::CompleteTransition();
+            if (emulating != IEC_COMMANDS) continue;
+            TCBM_Bus::ReadBrowseMode();
+            if (options.GetDisableSD2IECCommands() && TCBM_Bus::IsReset()) {
+                TCBM_Bus::WaitUntilReset(); Pi1551Oled::HostReset(); continue;
+            }
+            TCBM_Commands::UpdateAction action = options.GetDisableSD2IECCommands()
+                ? TCBM_Commands::NONE : m_TCBM_Commands.SimulateIECUpdate();
+            switch (action) {
+            case TCBM_Commands::RESET:
+                Pi1551Oled::HostReset();
+                m_TCBM_Commands.SimulateIECBegin();
+                break;
+            case TCBM_Commands::IMAGE_SELECTED:
+                Pi1551Oled::HostSelection(m_TCBM_Commands.GetNameOfImageSelected());
+                m_TCBM_Commands.ClearPendingImageSelection();
+                break;
+            case TCBM_Commands::DIR_PUSHED:
+            case TCBM_Commands::POP_DIR:
+            case TCBM_Commands::POP_TO_ROOT:
+            case TCBM_Commands::REFRESH:
+                if (m_TCBM_Commands.IsCbmImageModeActive()) {
+                    const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
+                    if (path[0] && Pi1551Oled::MountedPath() != path) Pi1551Oled::HostSelection(path);
+                    break;
+                }
+                Pi1551Oled::HostDirectory();
+                break;
+            case TCBM_Commands::DEVICEID_CHANGED:
+                options.SetRuntime(oled::Setting::Device, m_TCBM_Commands.GetDeviceId());
+                GlobalSetDeviceID(m_TCBM_Commands.GetDeviceId());
+                break;
+            default: break;
+            }
+            // Active transfers retain the original fast poll cadence.
+            if (!m_TCBM_Commands.IsTransferActive()) asm volatile("WFE");
+        }
+    }
 }
 #else
 void emulator()
@@ -3749,7 +3787,11 @@ static void CheckOptions()
 
 void Reboot_Pi()
 {
-	if (screenLCD)
+	if (screenLCD
+#if defined(PI1551SUPPORT)
+		&& !Pi1551Oled::Enabled()
+#endif
+	)
 		screenLCD->ClearInit(0);
 	reboot_now();
 }
@@ -3866,6 +3908,9 @@ void UpdateFirmwareToSD()
 
 void DisplayMessage(int x, int y, bool LCD, const char* message, u32 textColour, u32 backgroundColour)
 {
+#if defined(PI1551SUPPORT)
+	if (LCD && Pi1551Oled::Enabled()) return;
+#endif
 #if not defined(EXPERIMENTALZERO)
 	char buffer[256] = { 0 };
 
@@ -3948,7 +3993,7 @@ extern "C"
 			y_pos = DisplayOptions(y_pos+=32);
 
 #endif
-		headSoundFreq = 1000000 / options.SoundOnGPIOFreq();	// 1200Hz = 1/1200 * 10^6;
+		headSoundFreq = 1000000 / std::max(100u, options.SoundOnGPIOFreq());
 		headSoundCounterDuration = 1000 * options.SoundOnGPIODuration();
 
 		//if (!options.QuickBoot())

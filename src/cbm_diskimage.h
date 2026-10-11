@@ -82,6 +82,8 @@ bool cbm_image_mount(const char* path);
 bool cbm_image_mount_d64_sector_reader(const char* path, CbmImageSectorReader reader, void* context);
 void cbm_image_unmount();
 bool cbm_image_sync();
+void cbm_image_set_write_protected(bool value);
+bool cbm_image_is_write_protected();
 bool cbm_image_is_mounted();
 CbmFsImage* cbm_image_get_fs();
 u8 cbm_image_dir_entry_serial();

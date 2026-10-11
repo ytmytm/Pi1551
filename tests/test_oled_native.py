@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Compile production OLED/TAP components and run them without Raspberry Pi."""
+from pathlib import Path
+import os
+import struct
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def run():
+    os.environ["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
+    with tempfile.TemporaryDirectory(prefix="pi1551-oled-") as directory:
+        build = Path(directory)
+        flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
+                 "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+                 "-ffunction-sections", "-fdata-sections", "-Isrc", "-Iuspi/include"]
+        subprocess.run(flags + ["-Werror", "tests/oled_menu_native.cpp", "src/OledMenu.cpp",
+                               "src/OledSettings.cpp", "-o", str(build / "menu")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "menu")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+                               "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
+                               "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp",
+                               "-Wl,--gc-sections", "-o", str(build / "tape")], cwd=ROOT, check=True)
+        payload = (b"\0" + (11084).to_bytes(3,"little")) * 10000
+        fixture = build / "seek.tap"
+        fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(payload)) + payload)
+        subprocess.run([str(build / "tape"), str(fixture)], cwd=ROOT, check=True)
+        subprocess.run(["gcc", "-O1", "-g", "-fsanitize=address,undefined", "-ffunction-sections",
+                        "-fdata-sections", "-c", "src/lz.c", "-o", str(build / "lz.o")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",
+                               "-Wno-unused-parameter", "-Wno-unused-variable",
+                               "tests/disk_native.cpp", "tests/fatfs_posix.cpp", "src/DiskImage.cpp",
+                               "src/gcr.cpp", "src/prot.cpp", "src/cbm_diskimage.cpp", str(build / "lz.o"), "-Wl,--gc-sections",
+                               "-o", str(build / "disk")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "disk"), str(build / "write.d64")], cwd=ROOT, check=True)
+        subprocess.run(["gcc", "-c", "src/xga_font_data.c", "-o", str(build / "font.o")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "tests/oled_display_native.cpp",
+                               "src/SSD1306.cpp", str(build / "font.o"), "-o", str(build / "display")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "display")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",
+                               "-Wno-unused-parameter", "-Wno-reorder", "-Wno-unused-variable",
+                               "-fno-sanitize=vptr", "tests/host_files_native.cpp", "tests/fatfs_posix.cpp",
+                               "src/commands_base.cpp", "-Wl,--gc-sections", "-o", str(build / "host-files")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "host-files"), str(build / "host-save.prg")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+                               "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder",
+                               "-fno-sanitize=vptr", "tests/oled_kernel_native.cpp", "tests/fatfs_posix.cpp",
+                               "src/OledMenu.cpp", "src/OledSettings.cpp", "src/Pi1551Oled.cpp",
+                               "src/tape_player.cpp", "src/options.cpp", "-Wl,--gc-sections",
+                               "-o", str(build / "bridge")], cwd=ROOT, check=True)
+        card = build / "sd"
+        (card / "1551").mkdir(parents=True)
+        (card / "1551" / "a.d64").write_bytes(bytes(174848))
+        (card / "1551" / "bad.d64").write_bytes(b"broken")
+        (card / "1551" / "a.d81").write_bytes(bytes(819200))
+        (card / "1551" / "a.prg").write_bytes(b"\x01\x10hello")
+        (card / "1551" / "a.tap").write_bytes(fixture.read_bytes())
+        (card / "1551" / "list.lst").write_text("a.d64\na.d81\na.prg\na.d64\n")
+        (card / "options.txt").write_text("deviceID = 8\nROM2 = do-not-touch.bin\nunknown = keep\n")
+        subprocess.run([str(build / "bridge"), str(card)], cwd=ROOT, check=True)
+
+if __name__ == "__main__":
+    run()

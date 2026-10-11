@@ -50,7 +50,7 @@ bool Menu::Browse(bool fresh, bool tape) {
     if (view == View::Fliplist || tape) {
         browserReturn = Position{view, cursor, offset}; hasBrowserReturn = true;
     }
-    std::string next = fresh || tape ? start : path;
+    std::string next = tape ? "/" : fresh ? start : path;
     if (!fresh && !tape && !lastMounted.empty() && !IsEmulated(lastMounted)) next = Parent(lastMounted);
     tapeFilter = tape; view = View::Browser; cursor = 1; offset = 0; editing = false;
     if (fresh) { history.clear(); hasBrowserReturn = false; }
@@ -137,7 +137,7 @@ std::vector<Menu::Row> Menu::Rows() {
     std::vector<Row> r;
     if (view == View::Browser || view == View::Fliplist) {
         std::string label = listMode ? "Menu... LIST" : "Menu...";
-        if (view == View::Fliplist && listMode) label += " " + (flip.size() > 99 ? std::string("99+") : Number(flip.size()));
+        if (view == View::Fliplist && listMode) label += flip.size() > 99 ? "99+" : " " + Number(flip.size());
         r.push_back(Row(label));
         const std::vector<Entry>& entries = view == View::Browser ? files : flip;
         for (unsigned i = 0; i < entries.size(); ++i) {
@@ -334,7 +334,7 @@ Frame Menu::Render(uint32_t ms) {
     memcpy(f.rows[0], b, std::min((size_t)12, strlen(b)));
     snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
     if (s.tape.empty()) snprintf(b, sizeof(b), "TAPE --- --%% %c-", s.motor ? 'M' : '-');
-    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %cP", s.counter % 1000, std::min(99u, s.percent), s.motor ? 'M' : '-');
+    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %cP", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-');
     memcpy(f.rows[1], b, std::min((size_t)16, strlen(b)));
     std::vector<Row> rows = Rows();
     for (unsigned y = 2; y < 8; ++y) {

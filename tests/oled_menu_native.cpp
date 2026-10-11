@@ -141,7 +141,7 @@ static void tape_independent_and_seek() {
     Enter(m,"Rewind"); CHECK(k.status.counter == 0);
     Enter(m,"Eject TAP"); CHECK(k.status.tape.empty()); CHECK(!k.status.play); CHECK(k.status.motor);
     Enter(m,"Load TAP..."); CHECK(k.medium.empty()); CHECK(m.CurrentView() == View::Browser);
-    Enter(m,"[tapes]"); Enter(m,"boulder dash"); CHECK(m.CurrentView() == View::Tape);
+    Enter(m,"[1551]"); Enter(m,"[tapes]"); Enter(m,"boulder dash"); CHECK(m.CurrentView() == View::Tape);
 }
 static void rom_markers_and_scrolling() {
     KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"ROM");

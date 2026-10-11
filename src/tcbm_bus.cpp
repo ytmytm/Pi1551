@@ -239,6 +239,8 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs)
 void TCBM_Bus::ReadBrowseMode(void)
 {
 	ReadEmulationMode1551(false);
+	// Pi1551 OLED input is sampled exclusively on core0 in both modes.
+	return;
 	// Button debounce/repeat thresholds are in microseconds. Sample them once
 	// per idle bus poll, even though the protocol parser may read GPIO again.
 	static u32 lastButtonSampleUs = 0;
@@ -417,10 +419,11 @@ push_led_sound:
 	if (OutputLED) ledSoundSet |= 1u << PIGPIO_OUT_LED;
 	else ledSoundClear |= 1u << PIGPIO_OUT_LED;
 	// SoundOnGPIO=1: square-wave buzzer on GPIO13.  SoundOnGPIO=0: PWM sample via ALT0 — do not drive digitally.
-	if (options.SoundOnGPIO())
+	if (options.Runtime(oled::Setting::Sound))
 	{
-		if (OutputSound) ledSoundSet |= 1u << PIGPIO_OUT_SOUND;
-		else ledSoundClear |= 1u << PIGPIO_OUT_SOUND;
+		unsigned pin = options.Runtime(oled::Setting::GPIO);
+		if (OutputSound) ledSoundSet |= 1u << pin;
+		else ledSoundClear |= 1u << pin;
 	}
 	write32(ARM_GPIO_GPCLR0, ledSoundClear);
 	write32(ARM_GPIO_GPSET0, ledSoundSet);

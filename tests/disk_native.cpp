@@ -26,6 +26,10 @@ int main(int argc,char** argv) {
     disk->SetBit(0,10,7,(original & 0x80) != 0); CHECK(disk->IsDirty());
     CHECK(disk->Flush()); CHECK(!disk->IsDirty());
     CHECK(cbm_image_mount(argv[1])); FIL* originalFile = cbm_image_get_fs()->file;
+    cbm_image_set_write_protected(true); u32 bytes = 0;
+    CHECK(!cbm_image_block_io_begin(1,0,1,bytes,true)); CHECK(bytes == 0);
+    CHECK(cbm_image_block_io_begin(1,0,1,bytes,false)); CHECK(bytes == 256); cbm_image_block_io_end();
+    cbm_image_set_write_protected(false);
     CHECK(!cbm_image_mount("/no-such-file.d81")); CHECK(cbm_image_is_mounted()); CHECK(cbm_image_get_fs()->file == originalFile);
     NativeFatFSFail("sync"); CHECK(!cbm_image_sync()); CHECK(cbm_image_is_mounted()); CHECK(cbm_image_sync());
     cbm_image_unmount(); CHECK(!cbm_image_is_mounted());

@@ -1,0 +1,30 @@
+#ifndef PI1551_OLED_H
+#define PI1551_OLED_H
+#include "OledMenu.h"
+namespace Pi1551Oled {
+void Initialize();
+bool Enabled();
+void PollInput(); // core 0 only
+void Draw(); // core 0 only, including all I2C traffic
+void Service(bool emulating); // core 1 only
+bool TransitionPending();
+bool InputPending();
+void CompleteTransition(); // core 1, after leaving the real-time loop
+void HostReset();
+void HostSelection(const char* path);
+void HostDirectory();
+std::string MountedPath();
+#ifdef PI1551_NATIVE_TEST
+void TestInput(oled::Key key);
+oled::Menu& TestMenu();
+void TestShutdown();
+#endif
+}
+// Kernel hooks: called only by core 1.
+bool OledKernelMount(const char* path);
+bool OledKernelUnmount();
+void OledKernelReset();
+void OledKernelSelectROM(unsigned index);
+void OledKernelApplySettings();
+oled::Status OledKernelStatus();
+#endif

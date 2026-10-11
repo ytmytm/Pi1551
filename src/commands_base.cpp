@@ -94,7 +94,7 @@ void Commands_Base::SetHeaderVersion()
 
 void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 {
-	char* msg = "UNKNOWN";
+	const char* msg = "UNKNOWN";
 	switch (errorCode)
 	{
 		case ERROR_00_OK:
@@ -728,7 +728,7 @@ bool Commands_Base::FindFirst(DIR& dir, const char* matchstr, FILINFO& filInfo)
 	strcpy(pattern, matchstr);
 	if (strlen(pattern) > CBM_NAME_LENGTH_MINUS_D64)
 	{
-		char* ext = strrchr(matchstr, '.');
+		const char* ext = strrchr(matchstr, '.');
 		if (ext && diskImage)
 		{
 			char* ptr = strrchr(pattern, '.');

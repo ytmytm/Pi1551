@@ -27,6 +27,9 @@ static struct {
 	bool active;
 	bool writeMode;
 } s_blockIo = {};
+static bool s_writeProtected = false;
+void cbm_image_set_write_protected(bool value) { s_writeProtected = value; }
+bool cbm_image_is_write_protected() { return s_writeProtected; }
 
 static int set_status(CbmFsImage* di, int status, int track, int sector)
 {
@@ -868,6 +871,7 @@ u32 cbm_image_ts_byte_offset(u8 track, u8 sector)
 bool cbm_image_block_io_begin(u8 track, u8 sector, u8 blockCount, u32& bytesOut, bool write)
 {
 	bytesOut = 0;
+	if (write && s_writeProtected) return false;
 	if (!s_mount.active || !s_mount.filOpen || blockCount == 0
 		|| !cbm_di_valid_ts(s_mount.fs.type, track, sector))
 		return false;

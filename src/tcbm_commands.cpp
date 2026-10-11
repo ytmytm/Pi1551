@@ -17,6 +17,7 @@
 // along with Pi1551. If not, see <http://www.gnu.org/licenses/>.
 
 #include "tcbm_commands.h"
+#include "Pi1551Oled.h"
 
 #include "cbm_diskimage.h"
 #include "tcbm_bus.h"
@@ -114,7 +115,7 @@ Commands_Base::UpdateAction TCBM_Commands::SimulateIECUpdate(void)
         TCBM_Bus::WaitMicroSeconds(20);
         ResetStateMachine();
         PrepareBrowseIdleBus();
-        ExitQuasiMountIfActive();
+        if (!Pi1551Oled::Enabled()) ExitQuasiMountIfActive();
         return RESET;
     }
 
