@@ -64,6 +64,7 @@ public:
 	DiskImage();
 
 	static unsigned CreateNewDiskInRAM(const char* filenameNew, const char* ID, unsigned char* destBuffer = 0);
+	static bool CreateNewImageFile(const char* filename, const char* ID, DiskType type);
 
 	bool OpenD64(const FILINFO* fileInfo, unsigned char* diskImage, unsigned size);
 	bool OpenG64(const FILINFO* fileInfo, unsigned char* diskImage, unsigned size);

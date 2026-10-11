@@ -47,6 +47,14 @@ int main(int argc,char** argv) {
         cbm_image_unmount(); disk->Close();
     }
     delete disk;
+    std::string d64 = std::string(argv[1]) + ".new.d64", g64 = std::string(argv[1]) + ".new.g64";
+    CHECK(DiskImage::CreateNewImageFile(d64.c_str(),"00",DiskImage::D64));
+    CHECK(DiskImage::CreateNewImageFile(g64.c_str(),"00",DiskImage::G64));
+    CHECK(!DiskImage::CreateNewImageFile(g64.c_str(),"00",DiskImage::G64)); // never overwrite
+    FILINFO created = {}; CHECK(f_stat(d64.c_str(),&created) == FR_OK); CHECK(created.fsize == 174848);
+    FILE* exported = fopen(g64.c_str(),"rb"); CHECK(exported != 0);
+    char header[12]; CHECK(fread(header,1,12,exported) == 12); fclose(exported);
+    CHECK(memcmp(header,"GCR-1541",8) == 0); CHECK((unsigned char)header[9] == 84);
     puts("PASS actual D64 encoder, dirty retention, write/sync failures and runtime protection");
     return 0;
 }

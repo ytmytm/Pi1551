@@ -1824,6 +1824,21 @@ unsigned DiskImage::CreateNewDiskInRAM(const char* filenameNew, const char* ID, 
 	return (unsigned)(dest - destBuffer);
 }
 
+bool DiskImage::CreateNewImageFile(const char* filename, const char* ID, DiskType type)
+{
+	if (type != D64 && type != G64) return false;
+	FILINFO info = {};
+	if (!filename || strlen(filename) >= sizeof(info.fname) || f_stat(filename, &info) != FR_NO_FILE) return false;
+	strcpy(info.fname, filename);
+	unsigned size = CreateNewDiskInRAM(filename, ID);
+	info.fsize = size;
+	DiskImage* image = new DiskImage();
+	bool ok = image->OpenD64(&info, readBuffer, size);
+	if (ok) ok = type == G64 ? image->WriteG64() : image->WriteD64();
+	image->Close(); delete image;
+	return ok;
+}
+
 int DiskImage::RAMD64GetSectorOffset(int track, int sector)
 {
 	int index;
