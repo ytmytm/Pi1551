@@ -241,8 +241,6 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(idleSleep)
 		ELSE_CHECK_DECIMAL_OPTION(autoMountEnabled)
 		ELSE_CHECK_DECIMAL_OPTION(oledDimming)
-		ELSE_CHECK_DECIMAL_OPTION(oledFont)
-		ELSE_CHECK_DECIMAL_OPTION(oledScroll)
 		ELSE_CHECK_DECIMAL_OPTION(oledSound)
 		ELSE_CHECK_DECIMAL_OPTION(lowercaseBrowseModeFilenames)
 		ELSE_CHECK_DECIMAL_OPTION(displayTemperature)
@@ -319,7 +317,7 @@ void Options::Process(char* buffer)
 		}
 	}
 
-	// Pi1551 hat: OLED is always on I2C bus 1 (GPIO3/GPIO5). Bus 0 is reserved for tape sense.
+	// Pi1551 hat: OLED is on I2C bus 1 (GPIO2/SDA, GPIO3/SCL). GPIO0 is tape sense.
 	i2cBusMaster = 1;
 }
 
@@ -415,11 +413,17 @@ int Options::Runtime(oled::Setting id) const
     case Setting::Contrast: return i2cLcdOnContrast;
     case Setting::Dimming: return oledDimming;
     case Setting::Orient: return i2cLcdFlip;
-    case Setting::Font: return oledFont;
-    case Setting::Scroll: return oledScroll;
+    case Setting::Font: return i2cLcdUseCBMChar;
+    case Setting::Scroll: return scrollHighlightRate > 0 ? (int)(scrollHighlightRate * 1000 + 0.5f) : 100;
     case Setting::Reverse: return rotaryEncoderInvert;
     case Setting::Sound: return oledSound;
     case Setting::Freq: return soundOnGPIOFreq;
+    case Setting::Temp: return displayTemperature;
+    case Setting::DimTime: return i2cLcdDimTime;
+    case Setting::DimLevel: return i2cLcdDimContrast;
+    case Setting::Duration: return soundOnGPIODuration;
+    case Setting::SoundMode: return soundOnGPIO;
+    case Setting::NewType: return GetNewDiskType() == DiskImage::G64;
     default: return 0;
     }
 }
@@ -440,11 +444,17 @@ void Options::SetRuntime(oled::Setting id, int value)
     case Setting::Contrast: i2cLcdOnContrast = value; break;
     case Setting::Dimming: oledDimming = value; break;
     case Setting::Orient: i2cLcdFlip = value; break;
-    case Setting::Font: oledFont = value; break;
-    case Setting::Scroll: oledScroll = value; break;
+    case Setting::Font: i2cLcdUseCBMChar = value; break;
+    case Setting::Scroll: scrollHighlightRate = value / 1000.0f; break;
     case Setting::Reverse: rotaryEncoderInvert = value; break;
     case Setting::Sound: oledSound = value; break;
     case Setting::Freq: soundOnGPIOFreq = value; break;
+    case Setting::Temp: displayTemperature = value; break;
+    case Setting::DimTime: i2cLcdDimTime = value; break;
+    case Setting::DimLevel: i2cLcdDimContrast = value; break;
+    case Setting::Duration: soundOnGPIODuration = value; break;
+    case Setting::SoundMode: soundOnGPIO = value; break;
+    case Setting::NewType: strcpy(newDiskType, value ? "g64" : "d64"); break;
     default: break;
     }
 }

@@ -132,7 +132,7 @@ public:
 
 private:
 	unsigned autoMountEnabled = 1;
-	unsigned oledDimming = 1, oledFont = 1, oledScroll = 1;
+	unsigned oledDimming = 1;
 	unsigned oledSound = 1;
 	unsigned int deviceID;
 	unsigned int onResetChangeToStartingFolder;

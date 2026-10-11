@@ -24,7 +24,9 @@ struct KernelStub : Backend {
         sd["/1551/tapes"] = {Entry("/1551/tapes/boulder dash.tap","boulder dash.tap"),Entry("/1551/tapes/info.txt","info.txt")};
         sd["/1551/roms"] = {Entry("/1551/roms/ignored.bin","ignored.bin")};
         settings[Setting::Device] = 8; settings[Setting::Freq] = 1200;
-        settings[Setting::ResetPath] = 1; settings[Setting::Contrast] = 255; settings[Setting::Scroll] = 1;
+        settings[Setting::ResetPath] = 1; settings[Setting::Contrast] = 255; settings[Setting::Scroll] = 100;
+        settings[Setting::Temp] = 1; settings[Setting::SoundMode] = 1; settings[Setting::Duration] = 500;
+        settings[Setting::DimTime] = 30; settings[Setting::DimLevel] = 10;
         status.rom = "dos1551.bin"; status.firmware = "1.26"; status.temperature = 38;
         status.sdSize = "8192MB"; status.sdFree = "6400MB";
     }
@@ -48,7 +50,10 @@ struct KernelStub : Backend {
     bool LoadSettings() override { effects.push_back("load-settings"); return true; }
     bool SaveSettings() override { effects.push_back("save-settings"); return true; }
     bool WriteImage() override { effects.push_back("write:"+medium); return !medium.empty(); }
-    bool NewImage(const std::string& p) override { sd[p].push_back(Entry(p+"/NEWIMAGE1.d64","NEWIMAGE1.d64")); return true; }
+    bool NewImage(const std::string& p) override {
+        std::string name = std::string("NEWIMAGE1.") + (Get(Setting::NewType) ? "g64" : "d64");
+        sd[p].push_back(Entry(p+"/"+name,name)); effects.push_back("create:"+name); return true;
+    }
     void ResetDrive() override { ++resets; effects.push_back("reset-drive"); }
     bool WriteProtected() override { return wp; }
     void WriteProtect(bool b) override { wp = b; }
@@ -174,8 +179,9 @@ static void reset_and_settings() {
     Press(m,Key::Back); Enter(m,"Sound");
     Frame sound = m.Render(0);
     CHECK(std::string(sound.rows[3]).find("Sound OFF") != std::string::npos);
-    CHECK(std::string(sound.rows[4]).find("Freq 1200 Hz") != std::string::npos);
-    CHECK(std::string(sound.rows[5]) == std::string(16,' '));
+    CHECK(std::string(sound.rows[4]).find("Mode BUZZER") != std::string::npos);
+    CHECK(std::string(sound.rows[5]).find("Freq 1200 Hz") != std::string::npos);
+    CHECK(std::string(sound.rows[6]).find("Duration 500ms") != std::string::npos);
     Enter(m,"Sound"); CHECK(k.settings[Setting::Sound] == 1);
     Enter(m,"Freq"); CHECK(k.settings[Setting::Freq] == 2000);
     Press(m,Key::Back); Enter(m,"Save settings"); CHECK(k.effects.back() == "save-settings");
@@ -247,7 +253,40 @@ static void long_fliplist_window() {
     Press(m,Key::Left); CHECK(m.Cursor() == 0);
     Device(m); Press(m,Key::Back); CHECK(m.Cursor() == 0); CHECK(m.CurrentView() == View::Fliplist);
 }
+static void new_runtime_controls() {
+    KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Display");
+    Enter(m,"Temp"); CHECK(k.Get(Setting::Temp) == 0); CHECK(std::string(m.Render(0).rows[0]).substr(13) == "   ");
+    Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 60);
+    Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 16);
+    Enter(m,"Scroll"); CHECK(k.Get(Setting::Scroll) == 200);
+    Press(m,Key::Back); Enter(m,"Sound"); Enter(m,"Duration"); CHECK(k.Get(Setting::Duration) == 1000);
+    Enter(m,"Mode"); CHECK(k.Get(Setting::SoundMode) == 0);
+    Frame sample = m.Render(0); CHECK(std::string(sample.rows[4]).find("Mode SAMPLE") != std::string::npos);
+    CHECK(std::string(sample.rows[5]) == std::string(16,' '));
+    Enter(m,"Mode"); CHECK(k.Get(Setting::SoundMode) == 1);
+    Press(m,Key::Back,2); Enter(m,"Disk"); Enter(m,"New image");
+    CHECK(m.CurrentView() == View::NewImage); CHECK(m.Cursor() == 1); CHECK(k.sd["/1551"].size() == 4);
+    Enter(m,"Type"); CHECK(k.Get(Setting::NewType) == 1);
+    Enter(m,"Create image"); CHECK(k.effects.back() == "create:NEWIMAGE1.g64"); CHECK(m.Mounted().empty());
+    m.Render(0); Press(m,Key::Back); Press(m,Key::Back); CHECK(m.CurrentView() == View::Disk);
+    Press(m,Key::Back); Enter(m,"Status"); CHECK(std::string(m.Render(0).rows[3]).find("TEMP 38C") != std::string::npos);
+}
+static void canonical_setting_formats() {
+    std::map<Setting,int> parsed;
+    CHECK(ParseRuntimeSettings("scrollHighlightRate = 0.10\ni2cLcdUseCBMChar = 1\nNewDiskType = G64\ndisplayTemperature = 0\nsoundOnGPIO = 1\nsoundOnGPIODuration = 500\ni2cLcdDimTime = 60\ni2cLcdDimContrast = 8\n",parsed));
+    CHECK(parsed[Setting::Scroll] == 100); CHECK(parsed[Setting::Font] == 1); CHECK(parsed[Setting::NewType] == 1);
+    CHECK(parsed[Setting::Duration] == 500); CHECK(parsed[Setting::DimTime] == 60);
+    CHECK(OptionName(Setting::Font) == std::string("i2cLcdUseCBMChar")); CHECK(OptionName(Setting::Scroll) == std::string("scrollHighlightRate"));
+    std::map<Setting,int> changes; changes[Setting::Scroll] = 200; changes[Setting::NewType] = 1;
+    CHECK(MergeRuntimeSettings("scrollHighlightRate = 0.10 // seconds\nNewDiskType = d64",changes) ==
+        "scrollHighlightRate = 0.20 // seconds\nNewDiskType = g64");
+    CHECK(!ParseRuntimeSettings("scrollHighlightRate = nan",parsed)); CHECK(!ParseRuntimeSettings("NewDiskType = d81",parsed));
+    CHECK(!ParseRuntimeSettings("i2cLcdDimContrast = 999",parsed)); CHECK(!ParseRuntimeSettings("soundOnGPIODuration = -1",parsed));
+    CHECK(ParseRuntimeSettings("oledScroll = 1\noledFont = 1",parsed)); CHECK(parsed.empty());
+}
 int main() {
+    try { new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS runtime display/sound/image controls and canonical settings\n"; }
+    catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     struct Test { const char* name; void (*run)(); };

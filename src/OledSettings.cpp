@@ -4,7 +4,7 @@
 #include <stdio.h>
 namespace oled {
 const char* OptionName(Setting id) {
-    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "oledFont", "oledScroll", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq"};
+    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
     return names[(unsigned)id];
 }
 static std::string Lower(std::string s) { for (size_t i = 0; i < s.size(); ++i) s[i] = tolower((unsigned char)s[i]); return s; }
@@ -39,9 +39,38 @@ static bool MaskComments(const std::string& text, std::string& visible) {
 static bool Valid(Setting id, int v) {
     if (id == Setting::Device) return v == 8 || v == 9;
     if (id == Setting::Freq) return v >= 100 && v <= 10000;
-    if (id == Setting::Contrast) return v >= 0 && v <= 255;
-    if (id == Setting::Scroll) return v >= 0 && v <= 2;
+    if (id == Setting::Contrast || id == Setting::DimLevel) return v >= 0 && v <= 255;
+    if (id == Setting::Scroll) return v >= 10 && v <= 5000;
+    if (id == Setting::DimTime) return v >= 0 && v <= 3600;
+    if (id == Setting::Duration) return v >= 0 && v <= 5000;
     return v == 0 || v == 1;
+}
+static bool DecodeValue(Setting id, const std::string& token, int& value) {
+    if (id == Setting::NewType) {
+        std::string lower = Lower(token);
+        if (lower != "d64" && lower != "g64") return false;
+        value = lower == "g64"; return true;
+    }
+    char* tail = 0;
+    if (id == Setting::Scroll) {
+        if (token.empty() || token.find_first_not_of("0123456789.eE+-") != std::string::npos) return false;
+        double seconds = strtod(token.c_str(), &tail);
+        if (*tail || !(seconds >= 0.01 && seconds <= 5.0)) return false;
+        value = (int)(seconds * 1000 + 0.5); return true;
+    }
+    long number = strtol(token.c_str(), &tail, 0);
+    if (token.empty() || *tail || number < 0 || number > 10000 || !Valid(id, number)) return false;
+    value = id == Setting::SD2IEC ? !number : number; return true;
+}
+static std::string EncodeValue(Setting id, int value) {
+    if (id == Setting::NewType) return value ? "g64" : "d64";
+    char b[32];
+    if (id == Setting::Scroll) {
+        snprintf(b, sizeof(b), "%.3f", value / 1000.0);
+        std::string s = b; while (s.size() > s.find('.') + 3 && s.back() == '0') s.pop_back();
+        return s;
+    }
+    snprintf(b, sizeof(b), "%d", id == Setting::SD2IEC ? !value : value); return b;
 }
 bool ParseRuntimeSettings(const std::string& text, std::map<Setting, int>& values) {
     std::map<Setting, int> parsed;
@@ -55,9 +84,8 @@ bool ParseRuntimeSettings(const std::string& text, std::map<Setting, int>& value
             std::string value = Trim(line.substr(line.find('=') + 1));
             size_t comment = value.find_first_of(";#"); if (comment != std::string::npos) value.erase(comment);
             comment = value.find("//"); if (comment != std::string::npos) value.erase(comment);
-            value = Trim(value); char* tail = 0; long v = strtol(value.c_str(), &tail, 0);
-            if (value.empty() || *tail || v < 0 || v > 10000 || !Valid(id, v)) return false;
-            if (id == Setting::SD2IEC) v = !v;
+            value = Trim(value); int v;
+            if (!DecodeValue(id, value, v)) return false;
             parsed[id] = v;
         }
         start = end + 1;
@@ -93,12 +121,9 @@ std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting
         while (a < masked.size() && isspace((unsigned char)masked[a])) ++a;
         size_t b = a;
         while (b < masked.size() && !isspace((unsigned char)masked[b])) ++b;
-        int value = it->first == Setting::SD2IEC ? !it->second : it->second;
-        std::string token = line.substr(a, b - a); char* tail = 0;
-        long original = strtol(token.c_str(), &tail, 0);
-        if (!token.empty() && !*tail && original == value) continue;
-        char number[32]; snprintf(number, sizeof(number), "%d", value);
-        line.replace(a, b - a, number); // only the value; preserve case, spacing, comments and line number
+        std::string token = line.substr(a, b - a); int original;
+        if (DecodeValue(it->first, token, original) && original == it->second) continue;
+        line.replace(a, b - a, EncodeValue(it->first, it->second));
     }
     std::string result;
     for (size_t i = 0; i < lines.size(); ++i) result += lines[i].body + lines[i].ending;
@@ -107,8 +132,7 @@ std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting
         std::map<Setting,int>::const_iterator def = defaults.find(it->first);
         if (def != defaults.end() && def->second == it->second) continue;
         if (!result.empty() && result.back() != '\n') result += newline;
-        char number[32]; snprintf(number, sizeof(number), "%d", it->first == Setting::SD2IEC ? !it->second : it->second);
-        result += std::string(OptionName(it->first)) + " = " + number + newline;
+        result += std::string(OptionName(it->first)) + " = " + EncodeValue(it->first, it->second) + newline;
     }
     return result;
 }

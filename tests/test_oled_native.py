@@ -3,6 +3,7 @@
 from pathlib import Path
 import os
 import struct
+import sys
 import subprocess
 import tempfile
 
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def run():
     os.environ["UBSAN_OPTIONS"] = "halt_on_error=1:print_stacktrace=1"
+    subprocess.run([sys.executable, "-B", "tests/test_oled_tui.py"], cwd=ROOT, check=True)
     with tempfile.TemporaryDirectory(prefix="pi1551-oled-") as directory:
         build = Path(directory)
         flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
@@ -18,6 +20,8 @@ def run():
         subprocess.run(flags + ["-Werror", "tests/oled_menu_native.cpp", "src/OledMenu.cpp",
                                "src/OledSettings.cpp", "-o", str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run([str(build / "menu")], cwd=ROOT, check=True)
+        subprocess.run(flags + ["tests/sound_native.cpp", "-o", str(build / "sound")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
                                "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp",

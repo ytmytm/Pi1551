@@ -23,6 +23,7 @@ extern bool OledKernelNewImage(const char* path);
 extern bool OledKernelWriteProtected();
 extern void OledKernelWriteProtect(bool value);
 extern bool OledKernelPrepareReboot();
+extern bool OledKernelSampleAvailable();
 
 namespace Pi1551Oled {
 static oled::Menu* menu = 0;
@@ -147,6 +148,10 @@ public:
     int Get(oled::Setting id) override { return options.Runtime(id); }
     bool Set(oled::Setting id, int v) override {
         error.clear();
+        if (((id == oled::Setting::SoundMode && !v) ||
+             (id == oled::Setting::Sound && v && !Get(oled::Setting::SoundMode))) && !OledKernelSampleAvailable()) {
+            error = "Sample unavailable"; return false;
+        }
         options.SetRuntime(id, v); OledKernelApplySettings(); return true;
     }
     std::string Error() override { return error.empty() ? "Operation failed" : error; }
@@ -159,7 +164,11 @@ public:
     }
     bool LoadSettings() override {
         std::string text;
-        if (!ReadText("/options.txt", text) || !options.LoadRuntimeText(text)) return false;
+        Options candidate = options;
+        if (!ReadText("/options.txt", text) || !candidate.LoadRuntimeText(text)) return false;
+        if (candidate.Runtime(oled::Setting::Sound) && !candidate.SoundOnGPIO() && !OledKernelSampleAvailable()) return false;
+        for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i)
+            options.SetRuntime((oled::Setting)i, candidate.Runtime((oled::Setting)i));
         OledKernelApplySettings(); CaptureBaseline(); return true;
     }
     bool SaveSettings() override {
@@ -268,6 +277,7 @@ void Draw() {
     if (!menu || !screenLCD || !frameReady) return;
     oled::Frame fresh; frameLock.Acquire(); fresh = frame; frameReady = false; frameLock.Release();
     bool dim = options.Runtime(oled::Setting::Dimming) &&
+        options.I2CLcdDimTime() != 0 &&
         (uint32_t)(Pi1551Clock() - lastAction) / 1000000 > options.I2CLcdDimTime();
     screenLCD->SetContrast(dim ? options.I2CLcdDimContrast() : options.I2CLcdOnContrast());
     screenLCD->DrawMenu(fresh, options.Runtime(oled::Setting::Font), options.I2CLcdFlip());

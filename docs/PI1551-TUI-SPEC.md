@@ -292,8 +292,13 @@ Reset drive
 `WProt` is abbreviated so its ON/OFF value fits the OLED. `Write image` and
 `Reset drive` are simulated actions. `Reset drive` is a local action and still
 works when host RESET is set to `IGNORE`; it does not change the Browser path.
-`New image` creates an empty D64 in the
-current Browser directory, using names `NEWIMAGE1.d64`, `NEWIMAGE2.d64`, etc.
+`New image` opens a submenu with `..`, `Type D64/G64` and `Create image`.
+Focus starts on Type. Clicking Type toggles the format using `NewDiskType`;
+no file is created until Create image is selected. Creation uses the current
+Browser directory and the next unused `NEWIMAGE1.d64`, `NEWIMAGE2.d64`, etc.
+(or `.g64`). It does not mount the new medium or alter the fliplist. Back and
+`..` return to Disk without creating anything. The format remains the current
+default and is persisted only when Save settings is used.
 
 ## Settings
 
@@ -325,12 +330,16 @@ Submenus:
   be an image or an `.LST`), while `OFF` disables automatic mounting;
   `Reset path ON` returns Browser to the `/1551` starting folder after a
   computer reset; `OFF` preserves the current Browser folder;
-- Display: visible items are `Contrast`, `Dimming`, `Orient`, `Font` and
-  `Scroll`;
+- Display: `Temp`, `Contrast`, `Dimming`, `Dim time`, `Dim level`, `Orient`,
+  `Font` and `Scroll`. Temp controls only the header; Status still shows TEMP.
+  Dim time is in seconds (0/OFF disables automatic dimming), Dim level is
+  absolute OLED contrast 0..255;
 - Encoder: the only runtime item is `Reverse ON/OFF`; encoder presence/enabling is a
   hardware/startup option and is not exposed in the runtime menu;
-- Sound: visible items are `Sound` ON/OFF and `Freq`; frequency is selected
-  from a list. The buzzer is permanently wired to GPIO13 (SOUND);
+- Sound: `Sound` ON/OFF and `Mode SAMPLE/BUZZER`. Mode maps to `SoundOnGPIO`:
+  0/SAMPLE plays the embedded click using PWM/DMA; 1/BUZZER generates a square
+  wave. Both use fixed GPIO13 (SOUND). Only BUZZER displays `Freq` in Hz and
+  `Duration` in milliseconds; SAMPLE has a fixed clip length;
 - ROM: separate ROM selector.
 
 Settings cycle on encoder click, as in the mock; rotation continues navigating
@@ -339,6 +348,14 @@ one, Enter seeks and Back cancels. Firmware Font selects C64/ASCII, both 8x8;
 ASCII is the fallback when no valid chargen was loaded. Errors and completed
 load/save/write actions use a dismissible message menu with `..` first. Enter
 on the message or Back returns to the previous screen; long messages scroll.
+
+Font uses the existing `i2cLcdUseCBMChar` (0 ASCII, 1 C64), and Scroll uses
+`scrollHighlightRate` in seconds per character step. There are no independent
+`oledFont` or `oledScroll` values; obsolete entries are ignored and preserved
+as unrelated settings. Scroll cycles 0.05/0.10/0.20/0.35/0.50/1.00 seconds.
+Dim time cycles 0/5/10/30/60/120/300 seconds, Dim level cycles
+0/8/16/32/64/127/255, and Duration cycles 0/50/100/250/500/1000/2000/5000 ms.
+Custom file values within supported ranges remain valid until changed.
 
 The buzzer uses the board's fixed SOUND output, GPIO13 (physical pin 33).
 GPIO18 belongs to the TCBM data bus and GPIO19 is cassette READ. Neither is

@@ -18,6 +18,7 @@ InputMappings* inputMappings = 0;
 static unsigned now = 0, resetCount = 0, rebootCount = 0, applies = 0;
 static std::string medium;
 static bool failUnmount = false, failMount = false, wp = false;
+static bool sampleAvailable = true;
 static bool pins[54];
 unsigned Pi1551NativeClock() { return now; }
 extern void NativeFatFSRoot(const std::string& root);
@@ -35,6 +36,7 @@ void SpinLock::Release() {}
 bool OledKernelMount(const char* path) { if (failMount) return false; medium = path; return true; }
 bool OledKernelUnmount() { if (failUnmount) return false; medium.clear(); return true; }
 bool OledKernelPrepareReboot() { return OledKernelUnmount(); }
+bool OledKernelSampleAvailable() { return sampleAvailable; }
 void OledKernelReset() { ++resetCount; }
 void OledKernelSelectROM(unsigned i) { roms.currentROMIndex = i; }
 void OledKernelApplySettings() { ++applies; if (g_tapePlayer) g_tapePlayer->SetMotorAlwaysOn(options.TapeMotorAlwaysOn()); }
@@ -118,11 +120,33 @@ int main(int argc, char** argv) {
     CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1600\r\n");
     options.SetRuntime(Setting::Freq,1200); Enter("Save settings");
     CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1200\r\n"); // existing key stays in place
+    options.SetRuntime(Setting::Scroll,200); options.SetRuntime(Setting::Font,1);
+    options.SetRuntime(Setting::Temp,1); options.SetRuntime(Setting::DimTime,60); options.SetRuntime(Setting::DimLevel,8);
+    options.SetRuntime(Setting::Duration,250); options.SetRuntime(Setting::SoundMode,1); options.SetRuntime(Setting::NewType,1);
+    Enter("Save settings"); std::string controls = Read(root+"/options.txt");
+    CHECK(controls.find("scrollHighlightRate = 0.20") != std::string::npos);
+    CHECK(controls.find("i2cLcdUseCBMChar = 1") != std::string::npos); CHECK(controls.find("NewDiskType = g64") != std::string::npos);
+    CHECK(controls.find("oledFont") == std::string::npos && controls.find("oledScroll") == std::string::npos);
+    options.SetRuntime(Setting::Scroll,100); options.SetRuntime(Setting::Font,0); options.SetRuntime(Setting::NewType,0);
+    Enter("Load settings"); CHECK(options.Runtime(Setting::Scroll) == 200); CHECK(options.Runtime(Setting::Font) == 1);
+    CHECK(options.GetNewDiskType() == DiskImage::G64); CHECK(options.DisplayTemperature() == 1);
+    CHECK(options.SoundOnGPIO() == 1); CHECK(options.SoundOnGPIODuration() == 250);
+    { std::ofstream f(root+"/options.txt"); f << "deviceID = 8\nsoundOnGPIO = 0\noledSound = 1\n"; }
+    sampleAvailable = false; Enter("Load settings"); CHECK(options.GetDeviceID() == 9); CHECK(options.SoundOnGPIO() == 1);
+    sampleAvailable = true;
     { std::ofstream f(root+"/options.txt"); f << "deviceID = wrong\n"; }
     Enter("Load settings"); CHECK(options.GetDeviceID() == 9);
     Choose("ROM"); Press(Key::Back); Enter("Reboot Pi1551"); CHECK(rebootCount == 0);
     Press(Key::Enter); CHECK(rebootCount == 0); Enter("Reboot Pi1551"); Press(Key::Right); Press(Key::Enter); CHECK(rebootCount == 1);
     Pi1551Oled::TestShutdown(); delete g_tapePlayer; g_tapePlayer = 0;
+    std::string templateText = Read("sdcard/options.txt"); CHECK(!templateText.empty());
+    Options templateOptions; std::vector<char> bootText(templateText.begin(),templateText.end()); bootText.push_back(0);
+    templateOptions.Process(bootText.data());
+    CHECK(templateOptions.Runtime(Setting::Scroll) == 100); CHECK(templateOptions.Runtime(Setting::Font) == 1);
+    CHECK(templateOptions.DisplayTemperature() == 1); CHECK(templateOptions.SoundOnGPIO() == 1);
+    CHECK(templateOptions.SoundOnGPIODuration() == 500); CHECK(templateOptions.GetNewDiskType() == DiskImage::D64);
+    CHECK(templateOptions.LoadRuntimeText(templateText)); CHECK(templateOptions.Runtime(Setting::Scroll) == 100);
+    CHECK(templateOptions.Runtime(Setting::Font) == 1); CHECK(templateOptions.SoundOnGPIO() == 1);
     std::cout << "PASS firmware bridge: deferred effects, ROM slots, options save/load failures, reboot\n";
     return 0;
 }

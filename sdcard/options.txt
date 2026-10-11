@@ -1,142 +1,89 @@
-// Pi1551 options.txt — copy this file to the SD card root (alongside kernel.img).
-// Template in repo: sdcard/options.txt
-// Options not listed here use built-in defaults (see Options constructor in src/options.cpp).
+// Pi1551 options.txt — copy to the SD root next to kernel.img.
+// Settings -> Load settings reloads runtime values; Save settings writes only
+// changed values, preserving existing lines, comments and unrelated options.
+// Hardware, ROM filenames and other startup-only fields require a reboot.
 
+// Drive: values editable under Settings -> Drive.
+deviceID = 8
+RAMBOard = 1
+IgnoreReset = 0 // 0 = REACT to computer RESET; 1 = IGNORE
+OnResetChangeToStartingFolder = 1 // RESET returns the SD path to /1551
+skipMotorSpinUpDelay = 1
+IdleSleep = 1 // Pause D64 emulation only when the ROM and host bus are idle.
+// S after the track number (e.g. 18.0S) means the drive is actually sleeping.
+// G64, active transfers and unsupported/custom ROM idle loops do not sleep.
 
-// If you would like to change the drive number then specify it here (8 is the default)
-//deviceID = 9
-
-// 1551 DOS ROM slots (ROM1-ROM7). Files are searched in SD root and /roms.
-// Switch ROMs: hold rotary SW1 for 2s (selector opens), release, turn to pick, press+release SW1 to apply.
+// Configured DOS slots: Settings -> ROM selects a loaded slot immediately.
+// There is no longpress ROM selector and no ROM switching through the Browser.
+// ROM files are searched in the SD root and /roms; missing/invalid slots are omitted.
 ROM1 = dos1551.bin
 ROM2 = dos1551-ram.bin
 ROM3 = super_dos_1551.rom
 ROM4 = super_dos_ram.bin
-// Legacy single-ROM option (use ROM1 instead):
-//ROM1551 = dos1551.bin
+//ROM5 = custom_dos.bin
+// Legacy ROM1551 is not the source of the menu's slot list.
 
-// The rate (in seconds) a long selection is scrolled in browse mode
-scrollHighlightRate = 0.10
-
-// Enable RAMBoard emulation — 8k drive RAM expansion at $8000
-RAMBOard = 1
-
-// 8-bit CBM charset for HDMI text (file in SD root or /roms). Default: chargen
-ChargenFont = chargen
-
-// When the computer resets, return browse folder to /1551 (recommended for Plus/4 file browsers)
-OnResetChangeToStartingFolder = 1
-
-// Automatically mount a disk image in /1551 after reset or boot.
-// Filename only (no path). Also accepts .lst flip lists.
+// Browser.
+LowercaseBrowseModeFilenames = 0
+DisableSD2IECCommands = 0 // 0 = SD2IEC ON; 1 = SD2IEC OFF
+autoMountEnabled = 1
+// AutoMountImage is resolved under /1551 unless given an absolute path.
+// It accepts a supported disk/container/PRG or a nonempty .lst fliplist.
+// Empty, missing or invalid media behaves as auto mount OFF and hides the toggle.
 //AutoMountImage = mygame.d64
+//AutoMountImage = lists/favorites.lst
+StarFileName = boot.t2sd // DLOAD"*" target; edited in this file, not on OLED.
 
-// If you use a file browser and want Pi1551 to send all file names as lower case.
-//LowercaseBrowseModeFilenames = 1
+// Disk -> New image opens a format selector and an explicit Create image action.
+// New images are NEWIMAGE1.d64/g64, NEWIMAGE2.d64/g64, etc. in the current folder.
+// Creation never mounts the new image or changes the fliplist automatically.
+NewDiskType = d64 // d64 or g64; the selector starts with this value.
 
-// If you would ever like to disable browse mode SD2IEC-style commands completely:
-//DisableSD2IECCommands = 1
-
-// This option displays TCBM bus activity on the bottom of the HDMI screen
-GraphIEC = 0
-
-// Head-step sound on GPIO 13 (Pi1551 hat SOUND pin). NOT HDMI audio.
-//   SoundOnGPIO = 0 (default): legacy Pi1541 — short PWM/DMA sample (PlaySoundDMA) on GPIO13 in ALT0 mode.
-//   SoundOnGPIO = 1: square-wave buzzer on GPIO13 (for piezo without built-in generator). Uses Duration/Freq below.
-// On Pi1551 hardware with a buzzer on GPIO13, use SoundOnGPIO = 1.
-SoundOnGPIO = 1
-SoundOnGPIODuration = 500 // Buzz length in milliseconds (only when SoundOnGPIO = 1)
-SoundOnGPIOFreq = 1200 // Buzz frequency in Hz (only when SoundOnGPIO = 1)
-
-// You can create 320x200 PNG files with the same name as your disk images.
-// With this option turned on they will be displayed on the HDMI screen.
-//DisplayPNGIcons = 1
-
-// File loaded by DLOAD"*" / LOAD"*". Filename only (boot.t2sd), not the DOS form (0:boot.t2sd).
-StarFileName = boot.t2sd
-
-// Alt-N creates a new disk image in the current browse folder.
-// Names are formed automatically as autoname001.d64, autoname002.d64 etc...
-//AutoBaseName = autoname
-// By default Alt-N creates a new D64 disk image. Use g64 for G64 instead:
-//NewDiskType = g64
-
-// OLED display type (Pi1551 hat: SSD1306 128x64 is typical)
-LCDName = ssd1306_128x64
-//LCDName = ssd1306_128x32
-//LCDName = sh1106_128x64
-
-// If you are using a LCD screen and you would like PageUp and PageDown keys to work with it
-// (rather than the HDMI screen) then specify this option:
-//KeyboardBrowseLCDScreen = 1
-
-// Startup logo on OLED — built-in: 1541ii or 1541classic, or a custom .raw file on SD card
-//LcdLogoName = 1541ii
-LcdLogoName = 1541classic
-//LcdLogoName = customfile.raw
-
-// Pi1551 hat: OLED is always on I2C bus 1 (GPIO3/GPIO5)
-//i2cLcdAddress = 60	// I2C display address in decimal and shifted. 60 == 0x78, 61 == 0x7A
-//i2cLcdFlip = 1 // Rotate i2c LCD screen 180 degrees
-//i2cLcdOnContrast = 127 // Allows you to adjust the contrast on your i2c LCD screen
-i2cScan = 1 // Scan i2c bus and display addresses on HDMI at startup
-//i2cLcdUseCBMChar = 0 // Set to 1 to use CBM font on LCD. Small but fun!
-
-QuickBoot = 1		// Skip 5 second pause after startup logo
-ShowOptions = 1	// Display parsed options on HDMI startup screen
-
-// Ignore host RESET line: 0 = honour reset (default), 1 = ignore reset pulses
-IgnoreReset = 0
-
-//ROTARY:
-//
-// KY-040 Rotary Encoder Support
-//
-//    If you would like to use a KY-040 Rotary Encoder for browse menu up/down
-//    and select, you can enable it here.  On Pi1551 hat, wiring is fixed:
-//
-//       GPIO 17  -  Encoder pin A (CLK)  -  hat SW3
-//       GPIO 22  -  Encoder pin B (DT)   -  hat SW2
-//       GPIO 27  -  Encoder pushbutton   -  hat SW1
-//
-//    RotaryEncoderInvert flips direction for encoders that turn the wrong way.
-//
-//    Hold rotary SW1 for 2s to open the ROM selector (browse or emulation).
-//    Release, turn to highlight a ROM, then press and release SW1 to apply (emulation: CPU reset + fast boot).
-//
-RotaryEncoderEnable = 1
-//RotaryEncoderInvert = 1
-
-// Display the temperature of the Pi's CPU on HDMI/OLED.
-// Should be about 52 C; above 65 C suggests a cooling or power problem.
-DisplayTemperature = 1
-
-// Display emulated 6502 program counter on HDMI (debug)
-DisplayPC = 0
-
-// Show TCBM protocol diagnostics on HDMI (debug; 0 = off, 1 = on)
-DisplayTCBMDebug = 0
-
-// Tape motor control option
-// If tapeMotorAlwaysOn = 1 (default), motor is always active and tape playback starts immediately
-//   this is meant for computers with 6510 CPU replacement, which can't control MOTOR line directly
-// If tapeMotorAlwaysOn = 0, motor state is read from TAPE_MOTOR_GPIO pin (GPIO6, physical pin 31)
-//   GPIO logic: 0 (LOW) = motor running, 1 (HIGH) = motor stopped
+// Tape: Settings -> Tape -> Motor ON.
+// 1 = ALWAYS, useful for computers that cannot drive MOTOR directly.
+// 0 = COMP., follows GPIO6: LOW = running, HIGH = stopped.
+// PLAY is pressed while a TAP is loaded, including at EOF; Eject releases it.
 tapeMotorAlwaysOn = 1
 
-// Skip drive motor spin-up delay for 1551: 1 = skip delay, 0 = normal delay
-skipMotorSpinUpDelay = 1
+// Settings -> Sound. The SOUND wire is fixed to GPIO13 (physical pin 33).
+// GPIO18 is TCBM data; GPIO19 is tape READ. Neither is selectable for sound.
+oledSound = 1 // Sound ON/OFF, independent of the output method below.
+SoundOnGPIO = 1 // Mode: 1 = BUZZER (square wave), 0 = SAMPLE (embedded PWM/DMA click).
+SoundOnGPIODuration = 500 // Buzzer duration in milliseconds.
+SoundOnGPIOFreq = 1200 // Buzzer frequency in Hz.
+// Freq/Duration are shown only in BUZZER mode; SAMPLE has a fixed clip length.
+// Mode and enable can change runtime; both methods use the same GPIO13.
 
-// Reduce Raspberry Pi power use and temperature by pausing D64 emulation when
-// the 1551 DOS ROM is in its idle TCBM wait loop. Enabled by default even when
-// omitted. Sleep is entered only with the motor and LED off and with no active
-// jobs, no open file channels, no TALK/LISTEN transfer (including status channel
-// 15), and no IRQ, disk swap, head sound, or pending host request. The emulated
-// CPU, disk, and 100 Hz drive IRQ stop while asleep; TCBM GPIO, RESET and UI
-// requests are still checked at 100 Hz and wake the drive (up to about 10 ms
-// latency). On the OLED,
-// an S after the track number, for example "18.0S", indicates actual sleep.
-// This applies only to D64 emulation and the four supplied 1551 ROM variants;
-// G64, browser mode, active transfers and fastloader drive code never sleep.
-// Set to 0 for diagnostics or an unsupported/custom ROM.
-IdleSleep = 1
+// Settings -> Display. OLED layout is always 16 columns x 8 rows on 128x64.
+DisplayTemperature = 1 // Temp ON/OFF controls the header; Status always shows TEMP.
+i2cLcdOnContrast = 127
+oledDimming = 1
+i2cLcdDimTime = 30 // Seconds since last UI input; 0 disables automatic dimming.
+i2cLcdDimContrast = 10
+i2cLcdFlip = 0 // 0 = normal, 1 = rotate 180 degrees.
+i2cLcdUseCBMChar = 1 // Font: 1 = C64 chargen, 0 = ASCII; both use 8x8 cells.
+scrollHighlightRate = 0.10 // Seconds per scroll step; smaller is faster.
+// oledFont and oledScroll are obsolete and ignored; use the two keys above.
+
+// Hardware/startup-only settings: not available as runtime menu choices.
+LCDName = ssd1306_128x64
+//LCDName = sh1106_128x64
+// I2C bus 1: SDA = GPIO2 (physical pin 3), SCL = GPIO3 (physical pin 5).
+//i2cLcdAddress = 60 // 0x3c; use 61 for 0x3d
+i2cScan = 1 // Startup scan; results are printed on HDMI.
+ChargenFont = chargen // SD root or /roms; ASCII is used if no valid chargen loads.
+LcdLogoName = 1541classic // Startup logo: 1541classic, 1541ii or a .raw file.
+QuickBoot = 1 // Skip the startup pause.
+ShowOptions = 1 // Print parsed options on the HDMI startup screen.
+
+// Fixed encoder wiring: A = GPIO17/SW3, B = GPIO22/SW2, push = GPIO27/SW1.
+// Rotate to navigate; push to select; Insert adds/removes fliplist entries;
+// Back and ".." return to the parent. Settings -> Encoder changes Reverse.
+RotaryEncoderEnable = 1
+RotaryEncoderInvert = 0
+
+// Legacy HDMI/debug settings; they do not add OLED menu/status rows.
+GraphIEC = 0
+DisplayPC = 0
+DisplayTCBMDebug = 0
+//DisplayPNGIcons = 0

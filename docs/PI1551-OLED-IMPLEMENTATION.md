@@ -76,9 +76,7 @@ New runtime options written alongside the existing options are:
 | --- | --- |
 | `autoMountEnabled` | 0/1; default 1, applies the configured `AutoMountImage` only at boot/processed host reset |
 | `oledDimming` | 0/1; uses the existing dim contrast and timeout |
-| `oledFont` | 0 ASCII, 1 C64; both occupy 8x8 pixels |
-| `oledScroll` | 0 slow, 1 medium, 2 fast |
-| `oledSound` | 0/1; runtime square-wave sound |
+| `oledSound` | 0/1; enables head-step audio independently of its mode |
 
 Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `ignoreReset`, `tapeMotorAlwaysOn`, `onResetChangeToStartingFolder`,
@@ -87,8 +85,26 @@ Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `rotaryEncoderInvert`, `soundOnGPIOFreq`). SD2IEC ON is stored as
 `disableSD2IECCommands = 0`.
 
+Display also uses `displayTemperature`, `i2cLcdDimTime` and
+`i2cLcdDimContrast`. Font maps directly to `i2cLcdUseCBMChar`; Scroll maps to
+`scrollHighlightRate` (seconds, represented internally in milliseconds).
+`oledFont` and `oledScroll` are obsolete and ignored, not rewritten as active
+options. Numeric values and `NewDiskType = d64/g64` are preserved in their
+original lines by the settings merger; unchanged float formatting is retained.
+
+Disk/New image opens a format selector and explicit Create image action.
+It uses `NewDiskType` as the remembered format, creates a real empty D64 or
+G64 under a unique NEWIMAGE number, refuses to overwrite existing files and
+never mounts a new image automatically.
+
 The buzzer is fixed to `PIGPIO_OUT_SOUND` (GPIO13, physical pin 33). SOUND
-contains only enable/disable and frequency; it never changes TCBM GPIO18 or
+contains enable/disable and SAMPLE/BUZZER mode. `SoundOnGPIO = 0` requests a
+PWM/DMA sample, `1` a square-wave buzzer. Only BUZZER offers frequency and
+`SoundOnGPIODuration`; duration applies to subsequent head-step triggers.
+The production timing controller counts actual microseconds and mutes/cancels
+the buzzer on mode/enable changes. The sample buffer is reserved at boot so
+switching into SAMPLE does not allocate memory during emulation. Switching
+mode or disabling sound stops the existing DMA/PWM output. Audio never changes TCBM GPIO18 or
 cassette READ GPIO19. Legacy `oledSoundGPIO` entries are ignored and preserved
 as unrelated options when saving; they cannot redirect the output.
 
@@ -124,6 +140,10 @@ The suite runs production components, not a Python reimplementation:
 - The real OLED raster/transfer code runs against an I2C recorder, checking
   eight rows, row inversion, active triangles and orientation.
 - The real host-file buffer checks short-write retry and reboot flushing.
+- Headless TUI tests cover display settings, scroll timing, sound mode and
+  explicit D64/G64 creation. The production audio controller checks waveform
+  frequency, duration, sample requests and muting; DMA register timing itself
+  still requires hardware testing.
 - The existing 17 TCBM protocol tests remain a separate regression suite.
 
 The native suite does not emulate complete 6502 instruction execution, a

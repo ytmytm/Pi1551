@@ -8,10 +8,10 @@
 namespace oled {
 enum class Key { Left, Right, Enter, Insert, Back };
 enum class View { Browser, Fliplist, Device, Tape, Seek, Disk, Settings,
-    ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice };
+    ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
-    Scroll, Reverse, Sound, Freq, Count };
+    Scroll, Reverse, Sound, Freq, Temp, DimTime, DimLevel, Duration, SoundMode, NewType, Count };
 struct Entry {
     std::string path, name;
     bool directory;

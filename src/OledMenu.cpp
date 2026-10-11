@@ -182,6 +182,9 @@ std::vector<Menu::Row> Menu::Rows() {
     case View::Disk:
         r.push_back(Row(std::string("WProt ") + On(backend.WriteProtected())));
         r.push_back(Row("Write image")); r.push_back(Row("New image")); r.push_back(Row("Reset drive")); break;
+    case View::NewImage:
+        r.push_back(Row(std::string("Type ") + (backend.Get(Setting::NewType) ? "G64" : "D64")));
+        r.push_back(Row("Create image")); break;
     case View::Reboot: r.push_back(Row("Cancel")); r.push_back(Row("Reboot Pi1551?")); break;
     case View::Notice: r.push_back(Row("", message)); break;
     case View::Status: {
@@ -200,26 +203,29 @@ std::vector<Menu::Row> Menu::Rows() {
         static const Item drive[] = {{Setting::Device,"Device number"},{Setting::Idle,"Idle trap"},{Setting::RAM,"RAMBOard"},{Setting::Spinup,"Skip spinup"},{Setting::IgnoreReset,"Reset"}};
         static const Item tape[] = {{Setting::MotorAlways,"Motor ON"}};
         static const Item browser[] = {{Setting::AutoMount,"Auto mount"},{Setting::ResetPath,"Reset path"},{Setting::Lowercase,"Lowercase"},{Setting::SD2IEC,"SD2IEC"}};
-        static const Item display[] = {{Setting::Contrast,"Contrast"},{Setting::Dimming,"Dimming"},{Setting::Orient,"Orient"},{Setting::Font,"Font"},{Setting::Scroll,"Scroll"}};
+        static const Item display[] = {{Setting::Temp,"Temp"},{Setting::Contrast,"Contrast"},{Setting::Dimming,"Dimming"},{Setting::DimTime,"Dim time"},{Setting::DimLevel,"Dim level"},{Setting::Orient,"Orient"},{Setting::Font,"Font"},{Setting::Scroll,"Scroll"}};
         static const Item encoder[] = {{Setting::Reverse,"Reverse"}};
-        static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::Freq,"Freq"}};
+        static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::SoundMode,"Mode"},{Setting::Freq,"Freq"},{Setting::Duration,"Duration"}};
         const Item* items = drive; unsigned n = 5;
         if (view == View::TapeSettings) { items = tape; n = 1; }
         if (view == View::BrowserSettings) { items = browser; n = 4; }
-        if (view == View::Display) { items = display; n = 5; }
+        if (view == View::Display) { items = display; n = 8; }
         if (view == View::Encoder) { items = encoder; n = 1; }
-        if (view == View::Sound) { items = sound; n = 2; }
+        if (view == View::Sound) { items = sound; n = backend.Get(Setting::SoundMode) ? 4 : 2; }
         for (unsigned i = 0; i < n; ++i) {
             Setting id = items[i].id;
             if (id == Setting::AutoMount && !backend.AutoMountAvailable()) continue;
             int v = backend.Get(id); std::string value = On(v);
-            if (id == Setting::Device || id == Setting::Contrast || id == Setting::Freq) value = Number(v);
+            if (id == Setting::Device || id == Setting::Contrast || id == Setting::Freq || id == Setting::DimLevel) value = Number(v);
             if (id == Setting::Freq) value += " Hz";
             if (id == Setting::IgnoreReset) value = v ? "IGNORE" : "REACT";
             if (id == Setting::MotorAlways) value = v ? "ALWAYS" : "COMP.";
             if (id == Setting::Orient) value = v ? "flip" : "normal";
             if (id == Setting::Font) value = v ? "C64" : "ASCII";
-            if (id == Setting::Scroll) value = v == 0 ? "slow" : v == 1 ? "medium" : "fast";
+            if (id == Setting::SoundMode) value = v ? "BUZZER" : "SAMPLE";
+            if (id == Setting::Duration) value = Number(v) + "ms";
+            if (id == Setting::DimTime) value = v ? Number(v) + "s" : "OFF";
+            if (id == Setting::Scroll) { char b[20]; snprintf(b,sizeof(b),"%.2fs", v / 1000.0); value = b; }
             r.push_back(Row(std::string(items[i].label) + " " + value));
         }
         break;
@@ -239,8 +245,8 @@ void Menu::Clamp() {
 }
 Setting Menu::SelectedSetting() {
     static const Setting drive[] = {Setting::Device, Setting::Idle, Setting::RAM, Setting::Spinup, Setting::IgnoreReset};
-    static const Setting display[] = {Setting::Contrast, Setting::Dimming, Setting::Orient, Setting::Font, Setting::Scroll};
-    static const Setting sound[] = {Setting::Sound, Setting::Freq};
+    static const Setting display[] = {Setting::Temp, Setting::Contrast, Setting::Dimming, Setting::DimTime, Setting::DimLevel, Setting::Orient, Setting::Font, Setting::Scroll};
+    static const Setting sound[] = {Setting::Sound, Setting::SoundMode, Setting::Freq, Setting::Duration};
     unsigned i = cursor ? cursor - 1 : 0;
     if (view == View::Drive) return drive[i];
     if (view == View::Display) return display[i];
@@ -251,11 +257,18 @@ Setting Menu::SelectedSetting() {
     if (!backend.AutoMountAvailable()) ++i;
     return browser[i];
 }
-void Menu::ChangeValue(int delta) {
+static int NextChoice(int value, const int* choices, unsigned count) {
+    for (unsigned i = 0; i < count; ++i) if (choices[i] > value) return choices[i];
+    return choices[0];
+}
+void Menu::ChangeValue(int /*delta*/) {
     Setting id = SelectedSetting(); int v = backend.Get(id);
     if (id == Setting::Device) v = v == 8 ? 9 : 8;
     else if (id == Setting::Contrast) v = v == 255 ? 32 : 255;
-    else if (id == Setting::Scroll) v = (v + delta + 3) % 3;
+    else if (id == Setting::Scroll) { const int choices[] = {50,100,200,350,500,1000}; v = NextChoice(v,choices,6); }
+    else if (id == Setting::DimTime) { const int choices[] = {0,5,10,30,60,120,300}; v = NextChoice(v,choices,7); }
+    else if (id == Setting::DimLevel) { const int choices[] = {0,8,16,32,64,127,255}; v = NextChoice(v,choices,7); }
+    else if (id == Setting::Duration) { const int choices[] = {0,50,100,250,500,1000,2000,5000}; v = NextChoice(v,choices,8); }
     else if (id == Setting::Freq) {
         v = v == 1600 ? 1200 : v == 1200 ? 2000 : 1600;
     } else v = !v;
@@ -300,8 +313,11 @@ void Menu::Select() {
     else if (view == View::Disk) {
         if (cursor == 1) backend.WriteProtect(!backend.WriteProtected());
         if (cursor == 2) message = backend.WriteImage() ? "Image written" : "Write failed";
-        if (cursor == 3) { message = backend.NewImage(path) ? "Image created" : "Create failed"; Refresh(); }
+        if (cursor == 3) Open(View::NewImage);
         if (cursor == 4) backend.ResetDrive();
+    } else if (view == View::NewImage) {
+        if (cursor == 1) { if (!backend.Set(Setting::NewType,!backend.Get(Setting::NewType))) message = backend.Error(); }
+        else { message = backend.NewImage(path) ? "Image created" : "Create failed"; Refresh(); }
     } else if (view != View::Status) {
         ChangeValue(1);
     }
@@ -344,7 +360,9 @@ Frame Menu::Render(uint32_t ms) {
     if (s.emulating) snprintf(b, sizeof(b), "%u: %u.%u%s", backend.Get(Setting::Device), s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
     else snprintf(b, sizeof(b), "%u: BROWSER", backend.Get(Setting::Device));
     memcpy(f.rows[0], b, std::min((size_t)12, strlen(b)));
-    snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
+    if (backend.Get(Setting::Temp)) {
+        snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
+    }
     if (s.tape.empty()) snprintf(b, sizeof(b), "TAPE --- --%% %c-", s.motor ? 'M' : '-');
     else snprintf(b, sizeof(b), "TAPE %03u %02u%% %cP", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-');
     memcpy(f.rows[1], b, std::min((size_t)16, strlen(b)));
@@ -358,7 +376,7 @@ Frame Menu::Render(uint32_t ms) {
         unsigned pos = 0;
         if (i == cursor && row.name.size() > w) {
             unsigned max = row.name.size() - w;
-            unsigned ticks = (ms - selectionTime) / (backend.Get(Setting::Scroll) == 0 ? 350 : backend.Get(Setting::Scroll) == 1 ? 200 : 100);
+            unsigned ticks = (ms - selectionTime) / std::max(10, backend.Get(Setting::Scroll));
             unsigned cycle = max * 2 + 14; ticks %= cycle;
             if (ticks > 7 && ticks <= 7 + max) pos = ticks - 7;
             else if (ticks > 7 + max && ticks <= 14 + max) pos = max;

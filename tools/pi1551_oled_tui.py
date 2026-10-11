@@ -2,6 +2,7 @@
 """Independent keyboard TUI simulator for the proposed Pi1551 OLED UI."""
 from __future__ import annotations
 import curses
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -57,12 +58,13 @@ class Simulator:
         "reboot_confirm": ["..", "Cancel", "Reboot Pi1551?"],
         "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
-        "sound": ["..", "Sound", "Freq"],
+        "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
         "tape_settings": ["..", "Motor ON"],
         "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC"],
-        "display": ["..", "Contrast", "Dimming", "Orient", "Font", "Scroll"],
+        "display": ["..", "Temp", "Contrast", "Dimming", "Dim time", "Dim level", "Orient", "Font", "Scroll"],
         "encoder": ["..", "Reverse"],
         "disk": ["..", "WProt", "Write image", "New image", "Reset drive"],
+        "new_image": ["..", "Type", "Create image"],
         "status": ["..", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
         "tape": ["..", "TAP FILE", "Load TAP...", "Eject TAP", "Rewind", "Go to counter"],
         "tape_seek": ["..", "TARGET"],
@@ -84,14 +86,16 @@ class Simulator:
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
         self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True,
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
-                        "SD2IEC": True, "Contrast": 255, "Dimming": True, "Orientation": "normal", "Font": "C64",
-                        "Scroll rate": "medium", "Encoder enabled": True, "Encoder reverse": False,
+                        "SD2IEC": True, "Contrast": 255, "Dimming": True, "Orientation": "normal",
+                        "scrollHighlightRate": 0.10, "i2cLcdUseCBMChar": True, "Encoder enabled": True, "Encoder reverse": False,
+                        "Temp": True, "Dim time": 30, "Dim level": 10, "soundOnGPIO": True, "Duration": 500, "NewDiskType": "D64",
                         "Sound": True, "Freq": "1600 Hz", "Reset": "REACT"}
         self.reset_cursor()
     @property
     def current_dir(self) -> Node: return self.path[-1]
     def reset_cursor(self) -> None:
         self.cursor = 0; self.offset = 0; self.scroll_key = ""; self.scroll_pos = 0; self.scroll_dir = 1; self.scroll_pause = 7
+        self.scroll_clock = time.monotonic()
         # Keep Menu... visible, but focus the first actual Browser entry.
         # In a subdirectory this is normally the parent entry (..).
         if self.screen == "browser" and self.browser_items():
@@ -145,6 +149,7 @@ class Simulator:
         self.flip_mode = "list"
     def items(self) -> list[str]:
         items = self.GROUPS.get(self.screen, [])
+        if self.screen == "sound" and not self.options["soundOnGPIO"]: return items[:3]
         if self.screen == "menu" and self.fliplist:
             return ["..", "Clear list", *items[1:]]
         return items
@@ -152,13 +157,16 @@ class Simulator:
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
           "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC": self.on(self.options["SD2IEC"]),
-          "Freq": self.options["Freq"],
+          "Freq": self.options["Freq"], "Mode": "BUZZER" if self.options["soundOnGPIO"] else "SAMPLE",
+          "Duration": f'{self.options["Duration"]}ms', "Temp": self.on(self.options["Temp"]),
+          "Dim time": f'{self.options["Dim time"]}s' if self.options["Dim time"] else "OFF", "Dim level": str(self.options["Dim level"]),
+          "Type": self.options["NewDiskType"],
           "D64": self.active_media.name if self.active_media else "---", "TAP": self.tape.name if self.tape else "---",
           "LED": self.on(self.disk is not None and self.activity != "browser"), "MOTOR": self.on(self.motor_active()),
           "PLAY": self.on(self.tape is not None), "TRACK": f"{self.track:04.1f}{'S' if self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "---",
           "TARGET": f"{self.seek_target:03d}", "TAP FILE": self.tape.name if self.tape else "---",
           "Contrast": str(self.options["Contrast"]), "Dimming": self.on(self.options["Dimming"]), "Orient": self.options["Orientation"],
-          "Font": self.options["Font"], "Scroll": self.options["Scroll rate"],
+          "Font": "C64" if self.options["i2cLcdUseCBMChar"] else "ASCII", "Scroll": f'{self.options["scrollHighlightRate"]:.2f}s',
           "Reverse": self.on(self.options["Encoder reverse"]), "Write protect": self.on(self.write_protect), "WProt": self.on(self.write_protect),
           "TEMP": f"{self.temperature}C", "SD": self.sd_size, "FREE": self.sd_free,
           "FIRMWARE": self.firmware, "DOS": self.rom, "SIGNALS": self.signal_status()}
@@ -371,12 +379,17 @@ class Simulator:
             elif item == "Write image":
                 self.message = "Image written (simulated)" if self.disk else "No emulated image to write"
             elif item == "New image":
+                self.set_screen("new_image", True)
+            else: self.reset_drive()
+        elif self.screen == "new_image":
+            if item == "Type": self.options["NewDiskType"] = "G64" if self.options["NewDiskType"] == "D64" else "D64"
+            else:
                 existing = {node.name for node in self.current_dir.children}
                 number = 1
-                while f"NEWIMAGE{number}.d64" in existing: number += 1
-                node = Node(f"NEWIMAGE{number}.d64", "disk", detail="NEW D64 / EMPTY")
+                ext = self.options["NewDiskType"].lower()
+                while f"NEWIMAGE{number}.{ext}" in existing: number += 1
+                node = Node(f"NEWIMAGE{number}.{ext}", "disk", detail=f'NEW {self.options["NewDiskType"]} / EMPTY')
                 self.current_dir.children.append(node); self.message = f"Created {node.name}"
-            else: self.reset_drive()
         elif self.screen == "status":
             self.message = "Status is read-only"
         else: self.change_setting(item)
@@ -385,8 +398,12 @@ class Simulator:
         elif item in self.options and isinstance(self.options[item], bool): self.options[item] = not self.options[item]
         elif item == "Contrast": self.options[item] = 32 if self.options[item] == 255 else 255
         elif item == "Orient": self.options["Orientation"] = "rotated" if self.options["Orientation"] == "normal" else "normal"
-        elif item == "Font": self.options[item] = "custom" if self.options[item] == "C64" else "C64"
-        elif item == "Scroll": self.options["Scroll rate"] = {"slow": "medium", "medium": "fast", "fast": "slow"}.get(self.options["Scroll rate"], "medium")
+        elif item == "Font": self.options["i2cLcdUseCBMChar"] = not self.options["i2cLcdUseCBMChar"]
+        elif item == "Scroll": self.options["scrollHighlightRate"] = self.next_choice(self.options["scrollHighlightRate"], [0.05,0.10,0.20,0.35,0.50,1.00])
+        elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,30,60,120,300])
+        elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,8,16,32,64,127,255])
+        elif item == "Duration": self.options[item] = self.next_choice(self.options[item], [0,50,100,250,500,1000,2000,5000])
+        elif item == "Mode": self.options["soundOnGPIO"] = not self.options["soundOnGPIO"]
         elif item == "Reset": self.options[item] = "IGNORE" if self.options[item] == "REACT" else "REACT"
         elif item == "Auto mount": self.options[item] = not self.options[item]
         elif item == "Reset path": self.options[item] = not self.options[item]
@@ -395,6 +412,9 @@ class Simulator:
         elif item == "Freq": self.options[item] = {"1600 Hz": "1200 Hz", "1200 Hz": "2000 Hz", "2000 Hz": "1600 Hz"}.get(self.options[item], "1600 Hz")
         elif item == "Motor ON": self.options["Motor override"] = not self.options["Motor override"]
         self.message = f"{item}: {self.display_value(item)}"
+    @staticmethod
+    def next_choice(value, choices):
+        return next((choice for choice in choices if choice > value), choices[0])
     def insert(self) -> None:
         if self.screen == "flip":
             self.enable_list_mode(); self.open_browser("Insert: LIST mode, choose media"); return
@@ -512,11 +532,16 @@ class Simulator:
         width = 15 - len(self.scroll_prefix())
         if len(text) <= width: self.scroll_key = ""; self.scroll_pos = 0; return
         key = f"{self.screen}:{self.cursor}:{text}"
-        if key != self.scroll_key: self.scroll_key = key; self.scroll_pos = 0; self.scroll_dir = 1; self.scroll_pause = 7; return
-        if self.scroll_pause: self.scroll_pause -= 1; return
-        last = len(text) - width; self.scroll_pos += self.scroll_dir
-        if self.scroll_pos >= last: self.scroll_pos, self.scroll_dir, self.scroll_pause = last, -1, 7
-        elif self.scroll_pos <= 0: self.scroll_pos, self.scroll_dir, self.scroll_pause = 0, 1, 7
+        now = time.monotonic()
+        if key != self.scroll_key: self.scroll_key = key; self.scroll_pos = 0; self.scroll_dir = 1; self.scroll_pause = 7; self.scroll_clock = now; return
+        rate = max(0.01, self.options["scrollHighlightRate"])
+        steps = int((now - self.scroll_clock) / rate)
+        self.scroll_clock += steps * rate
+        for _ in range(min(steps, 1000)):
+            if self.scroll_pause: self.scroll_pause -= 1; continue
+            last = len(text) - width; self.scroll_pos += self.scroll_dir
+            if self.scroll_pos >= last: self.scroll_pos, self.scroll_dir, self.scroll_pause = last, -1, 7
+            elif self.scroll_pos <= 0: self.scroll_pos, self.scroll_dir, self.scroll_pause = 0, 1, 7
     def scrolling(self, text: str, selected: bool) -> str:
         width = 15 - len(self.scroll_prefix())
         return text[self.scroll_pos:self.scroll_pos + width] if selected and len(text) > width else clip(text, width)
@@ -550,15 +575,15 @@ class UI:
         value = clip(left, self.width - len(right))
         self.text(self.oy + row, self.ox, (value + " " * max(1, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
-        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
-        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_seek": 5, "disk": 6, "settings": 7, "rom": 8, "drive": 9, "tape_settings": 10, "browser_settings": 11, "display": 12, "encoder": 13, "sound": 14, "status": 15, "reboot_confirm": 17}.get(self.sim.screen)
+        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
+        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_seek": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)
         if self.sim.fliplist:
             lines.insert(4, "│  ├─ Clear list")
             if active is not None and active >= 4: active += 1
         for i, value in enumerate(lines): self.text(self.box_y + i, x, ("▶ " if i == active else "  ") + value, curses.color_pair(2) if i == active else 0)
     def draw(self) -> None:
         if not self.frame(): return
-        sim = self.sim; drive, tape = sim.status(); self.status_line(0, drive, f"{sim.temperature:02d}C"); self.line(1, tape); self.tree()
+        sim = self.sim; drive, tape = sim.status(); self.status_line(0, drive, f"{sim.temperature:02d}C" if sim.options["Temp"] else ""); self.line(1, tape); self.tree()
         if sim.screen == "flip":
             self.line(2, sim.main_menu_label(), sim.cursor == 0, "▶" if sim.cursor == 0 else " ")
             for row in range(5):
