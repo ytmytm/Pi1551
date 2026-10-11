@@ -171,6 +171,27 @@ void Commands_Base::ClearPendingImageSelection()
 	filInfoSelectedImage.fname[0] = 0;
 }
 
+bool Commands_Base::Channel::Finish()
+{
+	if (!open) return true;
+	if (writing && cursor) {
+		UINT written = 0;
+		FRESULT result = f_write(&file, buffer, cursor, &written);
+		if (written > cursor) return false;
+		memmove(buffer, buffer + written, cursor - written);
+		cursor -= written;
+		if (result != FR_OK || cursor) return false;
+	}
+	if (f_sync(&file) != FR_OK || f_close(&file) != FR_OK) return false;
+	open = false;
+	return true;
+}
+bool Commands_Base::FinishFiles()
+{
+	for (unsigned i = 0; i < 15; ++i) if (!channels[i].Finish()) return false;
+	return true;
+}
+
 void Commands_Base::Reset(void)
 {
 	receivedCommand = false;

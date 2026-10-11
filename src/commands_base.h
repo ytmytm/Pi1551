@@ -93,6 +93,7 @@ public:
 	const char* GetNameOfImageSelected() const { return selectedImageName; }
 	const FILINFO* GetImageSelected() const { return &filInfoSelectedImage; }
 	void ClearPendingImageSelection();
+	bool FinishFiles(); // flush buffered host writes and close files before a full reboot
 	const char* GetLastOpenPath() const { return lastOpenPath; }
 
 	void SetMountedDiskImagePath(const char* path);
@@ -141,6 +142,7 @@ protected:
 		u32 fileSize;
 
 		void Close();
+		bool Finish();
 		bool WriteFull() const { return cursor >= sizeof(buffer); }
 		bool CanFit(u32 bytes) const { return bytes <= sizeof(buffer) - cursor; }
 	};

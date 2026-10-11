@@ -70,6 +70,7 @@ extern "C" FRESULT f_write(FIL* fp, const void* buffer, UINT requested, UINT* wr
 	std::map<FIL*, std::FILE*>::iterator it = files.find(fp);
 	if (it == files.end())
 		return FR_INVALID_OBJECT;
+	if (Fail("partial")) requested /= 2;
 	*written = static_cast<UINT>(std::fwrite(buffer, 1, requested, it->second));
 	fp->fptr += *written;
 	if (fp->fptr > fp->obj.objsize)
