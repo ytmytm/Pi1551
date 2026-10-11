@@ -164,7 +164,7 @@ std::vector<Menu::Row> Menu::Rows() {
         r.push_back(Row("Browser")); r.push_back(Row("Tape")); r.push_back(Row("Disk"));
         r.push_back(Row("Settings")); r.push_back(Row("Status")); r.push_back(Row("Reboot Pi1551")); break;
     case View::Settings: {
-        const char* names[] = {"ROM", "Drive", "Tape", "Browser", "OLED", "Encoder", "Sound", "Load settings", "Save settings"};
+        const char* names[] = {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"};
         for (unsigned i = 0; i < 9; ++i) r.push_back(Row(names[i]));
         break;
     }

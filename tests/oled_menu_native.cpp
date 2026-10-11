@@ -254,7 +254,7 @@ static void long_fliplist_window() {
     Device(m); Press(m,Key::Back); CHECK(m.Cursor() == 0); CHECK(m.CurrentView() == View::Fliplist);
 }
 static void new_runtime_controls() {
-    KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"OLED");
+    KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Display");
     Enter(m,"Temp"); CHECK(k.Get(Setting::Temp) == 0); CHECK(std::string(m.Render(0).rows[0]).substr(13) == "   ");
     Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 60);
     Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 16);

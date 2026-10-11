@@ -85,7 +85,7 @@ Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `rotaryEncoderInvert`, `soundOnGPIOFreq`). SD2IEC ON is stored as
 `disableSD2IECCommands = 0`.
 
-Settings/OLED also uses `displayTemperature`, `i2cLcdDimTime` and
+Settings/Display also uses `displayTemperature`, `i2cLcdDimTime` and
 `i2cLcdDimContrast`. Font maps directly to `i2cLcdUseCBMChar`; Scroll maps to
 `scrollHighlightRate` (seconds, represented internally in milliseconds).
 `oledFont` and `oledScroll` are obsolete and ignored, not rewritten as active

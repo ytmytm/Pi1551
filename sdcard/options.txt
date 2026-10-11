@@ -54,7 +54,7 @@ SoundOnGPIOFreq = 1200 // Buzzer frequency in Hz.
 // Freq/Duration are shown only in BUZZER mode; SAMPLE has a fixed clip length.
 // Mode and enable can change runtime; both methods use the same GPIO13.
 
-// Settings -> OLED. OLED layout is always 16 columns x 8 rows on 128x64.
+// Settings -> Display. OLED layout is always 16 columns x 8 rows on 128x64.
 DisplayTemperature = 1 // Temp ON/OFF controls the header; Status always shows TEMP.
 i2cLcdOnContrast = 127
 oledDimming = 1

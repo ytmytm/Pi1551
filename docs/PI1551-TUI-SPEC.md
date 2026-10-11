@@ -311,7 +311,7 @@ ROM
 Drive
 Tape
 Browser
-OLED
+Display
 Encoder
 Sound
 Load settings
@@ -330,11 +330,11 @@ Submenus:
   be an image or an `.LST`), while `OFF` disables automatic mounting;
   `Reset path ON` returns Browser to the `/1551` starting folder after a
   computer reset; `OFF` preserves the current Browser folder;
-- OLED: `Temp`, `Contrast`, `Dimming`, `Dim time`, `Dim level`, `Orient`,
+- Display: `Temp`, `Contrast`, `Dimming`, `Dim time`, `Dim level`, `Orient`,
   `Font` and `Scroll`. Temp controls only the header; Status still shows TEMP.
   Dim time is in seconds (0/OFF disables automatic dimming), Dim level is
   absolute OLED contrast 0..255. The timeout is measured since the last UI
-  input and begins dimming when Dim time expires. Labels use OLED, while the
+  input and begins dimming when Dim time expires. Labels omit LCD, while the
   existing `LCDName`/`i2cLcd...` configuration keys remain compatible;
 - Encoder: the only runtime item is `Reverse ON/OFF`; encoder presence/enabling is a
   hardware/startup option and is not exposed in the runtime menu;
