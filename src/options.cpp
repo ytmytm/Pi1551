@@ -18,6 +18,7 @@
 // along with Pi1541. If not, see <http://www.gnu.org/licenses/>.
 
 #include "options.h"
+#include "OledSettings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -383,6 +384,18 @@ const char* Options::GetRomName1581() const
 		return "1581-rom.318045-02.bin";
 	else
 		return ROMName1581;
+}
+
+bool Options::LoadRuntimeText(const std::string& text)
+{
+    std::map<oled::Setting, int> parsed;
+    if (!oled::ParseRuntimeSettings(text, parsed)) return false;
+    Options defaults;
+    for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) {
+        oled::Setting id = (oled::Setting)i;
+        SetRuntime(id, parsed.count(id) ? parsed[id] : defaults.Runtime(id));
+    }
+    return true;
 }
 
 int Options::Runtime(oled::Setting id) const

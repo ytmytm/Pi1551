@@ -101,8 +101,11 @@ int main(int argc, char** argv) {
     CHECK(options.Runtime(Setting::Sound) == 1); // fixed buzzer pin is independent of tape READ
     Enter("Menu..."); Enter("Settings"); Enter("ROM"); Press(Key::Right); Press(Key::Enter); CHECK(roms.currentROMIndex == 2);
     Press(Key::Enter); Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 9); CHECK(applies >= 2);
+    { std::ofstream f(root+"/options.txt",std::ios::binary); f << "// user order\r\nROM2 = do-not-touch.bin\r\n\tDeViCeID = 8  // drive\r\nunknown = keep\r\nidleSleep = 0 // externally edited"; }
     Press(Key::Back); Enter("Save settings");
-    std::string saved = Read(root+"/options.txt"); CHECK(saved.find("deviceID = 9") != std::string::npos);
+    std::string saved = Read(root+"/options.txt");
+    CHECK(saved == "// user order\r\nROM2 = do-not-touch.bin\r\n\tDeViCeID = 9  // drive\r\nunknown = keep\r\nidleSleep = 0 // externally edited");
+    Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
     CHECK(saved.find("ROM2 = do-not-touch.bin") != std::string::npos); CHECK(saved.find("unknown = keep") != std::string::npos);
     Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 8); Press(Key::Back);
     NativeFatFSFail("write"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved); CHECK(options.GetDeviceID() == 8);
@@ -110,6 +113,11 @@ int main(int argc, char** argv) {
     NativeFatFSFail("rename"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
     NativeFatFSFailNth("rename",2); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
     Enter("Load settings"); CHECK(options.GetDeviceID() == 9);
+    CHECK(options.IdleSleep() == 0); // on-demand reload updates runtime values from the current file
+    options.SetRuntime(Setting::Freq,1600); Enter("Save settings");
+    CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1600\r\n");
+    options.SetRuntime(Setting::Freq,1200); Enter("Save settings");
+    CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1200\r\n"); // existing key stays in place
     { std::ofstream f(root+"/options.txt"); f << "deviceID = wrong\n"; }
     Enter("Load settings"); CHECK(options.GetDeviceID() == 9);
     Choose("ROM"); Press(Key::Back); Enter("Reboot Pi1551"); CHECK(rebootCount == 0);

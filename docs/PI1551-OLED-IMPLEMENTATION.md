@@ -46,17 +46,27 @@ or compatibility with every physical loader. HDMI is not the menu target.
 
 ## Runtime persistence
 
-Load settings reads `/options.txt`, validates recognized runtime values before
+Load settings reads `/options.txt` on demand through `Options::LoadRuntimeText`, validates recognized runtime values before
 applying them, and uses normal boot defaults for omitted runtime values.
 ROM slot filenames, hardware/model choices and other startup-only values are
 not changed by this action. Loading does not itself mount media or reset the
 drive. Existing runtime state is retained on a read/parse failure.
 
-Save settings writes and synchronizes `/options.txt.tmp`, renames the original
+Save settings rereads the current file and changes only values modified in the
+device since boot or the last successful load/save. Values in untouched
+settings remain as the user currently wrote them, including external edits.
+An existing option keeps its line number, key spelling, indentation, spacing,
+inline comments and line ending; only its numeric value is replaced. Missing
+changed options are appended only when their current value differs from the
+`Options` default. CRLF/LF and the absence of a final newline are preserved;
+appending adds the necessary separator using the file's newline style.
+Duplicate definitions remain intact; only the last (effective) definition is
+changed. A no-op save does not write or rename any files.
+
+When content changes, Save settings writes and synchronizes `/options.txt.tmp`, renames the original
 to `/options.txt.bak`, installs the new file, then removes the backup. Failure
 before installation keeps/restores the original. Unknown options, ROM slots
-and comments are retained; duplicate recognized runtime definitions are
-collapsed. Existing `.tmp`/`.bak` files cause a reported failure rather than
+and comments are retained. Existing `.tmp`/`.bak` files cause a reported failure rather than
 overwriting recovery material. If power fails between renames, recover the
 original from `.bak` (there is no boot-time automatic recovery yet).
 

@@ -48,6 +48,7 @@ public:
 	Options(void);
 
 	void Process(char* buffer);
+	bool LoadRuntimeText(const std::string& text);
 	int Runtime(oled::Setting id) const;
 	void SetRuntime(oled::Setting id, int value);
 

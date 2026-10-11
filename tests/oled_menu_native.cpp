@@ -205,6 +205,33 @@ static void random_navigation() {
         CHECK(m.Mounted() == k.medium);
     }
 }
+static void settings_preserve_user_layout() {
+    std::string input = "// user's order\r\nROM2 = custom.bin\r\n\tDeViCeID\t =  0x08   // selected drive\r\n\r\nidleSleep=1; keep this comment\r\nunknown = value";
+    std::map<Setting,int> changes, defaults;
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == input);
+    changes[Setting::Device] = 8;
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == input); // preserve spelling of unchanged numeric value
+    changes[Setting::Device] = 9;
+    std::string expected = input; expected.replace(expected.find("0x08"),4,"9");
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected);
+    changes[Setting::Idle] = 0; expected.replace(expected.find("idleSleep=1"),11,"idleSleep=0");
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected);
+    changes[Setting::Freq] = 1200; defaults[Setting::Freq] = 1200;
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected); // missing default must not be added
+    changes[Setting::Freq] = 1600;
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\nsoundOnGPIOFreq = 1600\r\n");
+    changes.clear(); changes[Setting::Device] = 9;
+    CHECK(MergeRuntimeSettings("deviceID = 8 // earlier\ndeviceID\t=\t8 # effective",changes) ==
+        "deviceID = 8 // earlier\ndeviceID\t=\t9 # effective");
+    changes.clear(); changes[Setting::SD2IEC] = 1;
+    CHECK(MergeRuntimeSettings("disableSD2IECCommands=1 // inverted",changes) == "disableSD2IECCommands=0 // inverted");
+    std::string comments = "/* examples\n deviceID = 8\n*/\ndeviceID = /* chosen */0x08/* keep */\n// deviceID = 8\n";
+    std::map<Setting,int> parsed; CHECK(ParseRuntimeSettings(comments,parsed)); CHECK(parsed[Setting::Device] == 8);
+    changes.clear(); changes[Setting::Device] = 9;
+    std::string commentedExpected = comments; commentedExpected.replace(commentedExpected.find("0x08"),4,"9");
+    CHECK(MergeRuntimeSettings(comments,changes) == commentedExpected);
+    CHECK(!ParseRuntimeSettings("/* incomplete",parsed)); CHECK(parsed[Setting::Device] == 8);
+}
 static void long_fliplist_window() {
     KernelStub k; Menu m(k);
     for (unsigned i = 0; i < 120; ++i) {
@@ -221,6 +248,8 @@ static void long_fliplist_window() {
     Device(m); Press(m,Key::Back); CHECK(m.Cursor() == 0); CHECK(m.CurrentView() == View::Fliplist);
 }
 int main() {
+    try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
+    catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     struct Test { const char* name; void (*run)(); };
     Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
     unsigned failures = 0;

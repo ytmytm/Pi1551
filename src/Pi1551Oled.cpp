@@ -74,7 +74,12 @@ static bool ValidMedia(const std::string& path) {
     f_close(&file); return ok;
 }
 class KernelBackend : public oled::Backend {
+    std::map<oled::Setting, int> baseline;
 public:
+    void CaptureBaseline() {
+        for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i)
+            baseline[(oled::Setting)i] = Get((oled::Setting)i);
+    }
     bool List(const std::string& path, std::vector<oled::Entry>& result) override {
         DIR d; if (f_opendir(&d, path.c_str()) != FR_OK) return false;
         FILINFO f; bool ok = true;
@@ -153,24 +158,26 @@ public:
         return ValidMedia(path);
     }
     bool LoadSettings() override {
-        std::string text; std::map<oled::Setting,int> parsed;
-        if (!ReadText("/options.txt", text) || !oled::ParseRuntimeSettings(text, parsed)) return false;
-        // Defaults are supplied by the same Options constructor as cold boot.
-        Options defaults;
-        for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) {
-            oled::Setting id = (oled::Setting)i;
-            options.SetRuntime(id, parsed.count(id) ? parsed[id] : defaults.Runtime(id));
-        }
-        OledKernelApplySettings(); return true;
+        std::string text;
+        if (!ReadText("/options.txt", text) || !options.LoadRuntimeText(text)) return false;
+        OledKernelApplySettings(); CaptureBaseline(); return true;
     }
     bool SaveSettings() override {
         std::string text; FILINFO f;
         FRESULT exists = f_stat("/options.txt", &f);
         if (exists != FR_OK && exists != FR_NO_FILE) return false;
         if (exists == FR_OK && !ReadText("/options.txt", text)) return false;
-        std::map<oled::Setting,int> values;
-        for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) values[(oled::Setting)i] = Get((oled::Setting)i);
-        text = oled::MergeRuntimeSettings(text, values);
+        std::map<oled::Setting,int> parsed, changes, defaults;
+        if (!oled::ParseRuntimeSettings(text, parsed)) return false;
+        Options bootDefaults;
+        for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) {
+            oled::Setting id = (oled::Setting)i;
+            defaults[id] = bootDefaults.Runtime(id);
+            if (Get(id) != baseline[id]) changes[id] = Get(id);
+        }
+        std::string updated = oled::MergeRuntimeSettings(text, changes, defaults);
+        if (updated == text) { CaptureBaseline(); return true; }
+        text = updated;
         // Never truncate the original: sync a new file, then retain it as a backup.
         if (f_stat("/options.txt.tmp", &f) == FR_OK || f_stat("/options.txt.bak", &f) == FR_OK) return false;
         FIL out; if (f_open(&out, "/options.txt.tmp", FA_WRITE | FA_CREATE_NEW) != FR_OK) return false;
@@ -185,6 +192,7 @@ public:
             return false;
         }
         if (exists == FR_OK) f_unlink("/options.txt.bak");
+        CaptureBaseline();
         return true;
     }
     bool WriteImage() override { return OledKernelWriteImage(); }
@@ -202,6 +210,7 @@ static KernelBackend backend;
 bool Enabled() { return menu != 0; }
 void Initialize() {
     lastAction = Pi1551Clock();
+    backend.CaptureBaseline();
     menu = new oled::Menu(backend, DEFAULT_BROWSE_DIR);
     OledKernelApplySettings();
     if (backend.Get(oled::Setting::AutoMount) && backend.AutoMountAvailable())

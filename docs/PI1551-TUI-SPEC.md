@@ -348,8 +348,12 @@ In the target firmware, `Load settings` rereads the configured options file
 and applies its runtime-changeable values, replacing unsaved changes. It must
 report a read/parse failure without falsely reporting success; startup-only
 hardware options remain boot-time settings. `Save settings` persists the
-current runtime values for future boots, preserving unrelated and unknown
-options. A write failure must leave the current runtime state intact and be
+changed runtime values for future boots. It rereads the current file, preserves
+the user's order, key spelling, whitespace, comments and line endings, and
+replaces only the value in the last effective definition of a changed option.
+Absent changed options are appended only for non-default values. Untouched
+options (including independent user edits) and duplicate earlier definitions
+remain unchanged. A no-op save performs no writes. A write failure must leave the current runtime state intact and be
 reported. Neither action itself mounts media or resets the device. The TUI
 mock only reports these actions using its fake `options-pi1551.txt`; it does
 not read or write a file.
