@@ -248,8 +248,7 @@ void SSD1306::SetContrast(u8 value)
 	contrast = value;
 	SendCommand(SSD1306_CMD_SET_CONTRAST_CONTROL);
 	SendCommand(value);
-	if (type != LCD_1106_128x64)	// dont fiddle vcomdeselect on 1106 displays
-		SetVCOMDeselect( value >> 8);
+	// Brightness changes must not alter the independently initialized VCOMH level.
 }
 
 void SSD1306::SetVCOMDeselect(u8 value)

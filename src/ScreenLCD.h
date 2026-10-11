@@ -33,6 +33,7 @@ public:
 		, ssd1306(0)
 	{
 	}
+	~ScreenLCD() { delete ssd1306; }
 
 	void Open(u32 width, u32 height, u32 colourDepth, int BSCMaster, int LCDAddress, int LCDFlip, LCD_MODEL LCDType, bool luseCBMFont);
 

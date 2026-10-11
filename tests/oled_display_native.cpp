@@ -12,11 +12,19 @@ extern "C" int RPI_I2CWrite(int,unsigned char,void* data,unsigned count) {
     return count;
 }
 struct DisplayProbe : SSD1306 {
-    DisplayProbe() : SSD1306(1,0x3c,128,64,0,LCD_1306_128x64) {}
+    DisplayProbe(LCD_MODEL model = LCD_1306_128x64) : SSD1306(1,0x3c,128,64,0,model) {}
     unsigned char* Pixels() { return frame; }
 };
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL display:%d %s\n",__LINE__,#x); return 1; } } while(0)
 int main() {
+    for (LCD_MODEL model : {LCD_1306_128x64, LCD_1106_128x64}) {
+        DisplayProbe panel(model);
+        for (unsigned value : {0u,10u,127u,255u}) {
+            commands.clear(); panel.SetContrast(value);
+            CHECK(commands.size() == 2); CHECK(commands[0] == 0x81); CHECK(commands[1] == value);
+            CHECK(panel.GetContrast() == value); // no VCOMH (0xDB) or other electrical commands
+        }
+    }
     DisplayProbe d; oled::Frame f = {};
     for (unsigned y = 0; y < 8; ++y) { memset(f.rows[y],' ',16); f.rows[y][1] = 'A'+y; }
     transfers = 0; d.PlotMenu(f,false); CHECK(transfers == 0);
