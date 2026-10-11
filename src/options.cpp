@@ -155,6 +155,8 @@ Options::Options(void)
 	, i2cScan(0)
 	, i2cLcdFlip(0)
 	, i2cLcdOnContrast(127)
+	, i2cLcdDimContrast(10)
+	, i2cLcdDimTime(30)
 	, i2cLcdUseCBMChar(0)
 	, i2cLcdModel(LCD_UNKNOWN)
 	, scrollHighlightRate(0.1f)
@@ -236,6 +238,12 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(tapeMotorAlwaysOn)
 		ELSE_CHECK_DECIMAL_OPTION(skipMotorSpinUpDelay)
 		ELSE_CHECK_DECIMAL_OPTION(idleSleep)
+		ELSE_CHECK_DECIMAL_OPTION(autoMountEnabled)
+		ELSE_CHECK_DECIMAL_OPTION(oledDimming)
+		ELSE_CHECK_DECIMAL_OPTION(oledFont)
+		ELSE_CHECK_DECIMAL_OPTION(oledScroll)
+		ELSE_CHECK_DECIMAL_OPTION(oledSound)
+		ELSE_CHECK_DECIMAL_OPTION(oledSoundGPIO)
 		ELSE_CHECK_DECIMAL_OPTION(lowercaseBrowseModeFilenames)
 		ELSE_CHECK_DECIMAL_OPTION(displayTemperature)
 		ELSE_CHECK_DECIMAL_OPTION(displayPC)
@@ -376,6 +384,59 @@ const char* Options::GetRomName1581() const
 		return "1581-rom.318045-02.bin";
 	else
 		return ROMName1581;
+}
+
+int Options::Runtime(oled::Setting id) const
+{
+    using oled::Setting;
+    switch (id) {
+    case Setting::Device: return deviceID;
+    case Setting::Idle: return idleSleep;
+    case Setting::RAM: return RAMBOard;
+    case Setting::Spinup: return skipMotorSpinUpDelay;
+    case Setting::IgnoreReset: return ignoreReset;
+    case Setting::MotorAlways: return tapeMotorAlwaysOn;
+    case Setting::AutoMount: return autoMountEnabled;
+    case Setting::ResetPath: return onResetChangeToStartingFolder;
+    case Setting::Lowercase: return lowercaseBrowseModeFilenames;
+    case Setting::SD2IEC: return !disableSD2IECCommands;
+    case Setting::Contrast: return i2cLcdOnContrast;
+    case Setting::Dimming: return oledDimming;
+    case Setting::Orient: return i2cLcdFlip;
+    case Setting::Font: return oledFont;
+    case Setting::Scroll: return oledScroll;
+    case Setting::Reverse: return rotaryEncoderInvert;
+    case Setting::Sound: return oledSound;
+    case Setting::GPIO: return oledSoundGPIO;
+    case Setting::Freq: return soundOnGPIOFreq;
+    default: return 0;
+    }
+}
+void Options::SetRuntime(oled::Setting id, int value)
+{
+    using oled::Setting;
+    switch (id) {
+    case Setting::Device: deviceID = value; break;
+    case Setting::Idle: idleSleep = value; break;
+    case Setting::RAM: RAMBOard = value; break;
+    case Setting::Spinup: skipMotorSpinUpDelay = value; break;
+    case Setting::IgnoreReset: ignoreReset = value; break;
+    case Setting::MotorAlways: tapeMotorAlwaysOn = value; break;
+    case Setting::AutoMount: autoMountEnabled = value; break;
+    case Setting::ResetPath: onResetChangeToStartingFolder = value; break;
+    case Setting::Lowercase: lowercaseBrowseModeFilenames = value; break;
+    case Setting::SD2IEC: disableSD2IECCommands = !value; break;
+    case Setting::Contrast: i2cLcdOnContrast = value; break;
+    case Setting::Dimming: oledDimming = value; break;
+    case Setting::Orient: i2cLcdFlip = value; break;
+    case Setting::Font: oledFont = value; break;
+    case Setting::Scroll: oledScroll = value; break;
+    case Setting::Reverse: rotaryEncoderInvert = value; break;
+    case Setting::Sound: oledSound = value; break;
+    case Setting::GPIO: oledSoundGPIO = value; break;
+    case Setting::Freq: soundOnGPIOFreq = value; break;
+    default: break;
+    }
 }
 
 DiskImage::DiskType Options::GetNewDiskType() const

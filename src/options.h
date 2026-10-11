@@ -22,6 +22,7 @@
 
 #include "types.h"
 #include "DiskImage.h"
+#include "OledMenu.h"
 
 class TextParser
 {
@@ -47,6 +48,8 @@ public:
 	Options(void);
 
 	void Process(char* buffer);
+	int Runtime(oled::Setting id) const;
+	void SetRuntime(oled::Setting id, int value);
 
 	inline unsigned int GetDeviceID() const { return deviceID; }
 	inline unsigned int GetOnResetChangeToStartingFolder() const { return onResetChangeToStartingFolder; }
@@ -127,6 +130,9 @@ public:
 	static float GetFloat(char* pString);
 
 private:
+	unsigned autoMountEnabled = 1;
+	unsigned oledDimming = 1, oledFont = 1, oledScroll = 1;
+	unsigned oledSound = 1, oledSoundGPIO = 18;
 	unsigned int deviceID;
 	unsigned int onResetChangeToStartingFolder;
 	unsigned int extraRAM;
