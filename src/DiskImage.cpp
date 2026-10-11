@@ -2104,18 +2104,18 @@ bool DiskImage::AddFileToRAMD64(unsigned char* ramD64, const char* name, const u
 
 					int bytesToCopy = (256 - 2);
 
-					if (bytesRemaining < (256 - 2))
+					if (bytesRemaining <= (256 - 2))
 					{
-						bytesToCopy = bytesRemaining + 1;
+						bytesToCopy = bytesRemaining;
 						ptrTrackSector[0] = 0;
-						ptrTrackSector[1] = bytesToCopy;
+						ptrTrackSector[1] = bytesToCopy + 1;
 					}
 
 					bytesRemaining -= bytesToCopy;
 
 					memcpy(ptrTrackSector + 2, data, bytesToCopy);
+					data += bytesToCopy;
 				}
-				data += (256 - 2);
 			}
 		}
 	}

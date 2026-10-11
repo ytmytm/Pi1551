@@ -684,9 +684,7 @@ static int match_pattern(const u8* rawpattern, const u8* rawname)
 			continue;
 		char patternAscii = static_cast<char>(petscii2ascii(patternChar));
 		char nameAscii = static_cast<char>(petscii2ascii(nameChar));
-		if (patternAscii >= 'A' && patternAscii <= 'Z'
-			&& nameAscii >= 'A' && nameAscii <= 'Z'
-			&& toupper(static_cast<unsigned char>(patternAscii)) == toupper(static_cast<unsigned char>(nameAscii)))
+		if (toupper(static_cast<unsigned char>(patternAscii)) == toupper(static_cast<unsigned char>(nameAscii)))
 			continue;
 		return 0;
 	}

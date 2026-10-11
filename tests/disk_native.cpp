@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 extern void NativeFatFSFail(const std::string& operation);
 extern "C" void SetACTLed(int) {}
 static bool Sector(void* context,u8 track,u8 sector,u8* bytes) {
@@ -29,14 +30,19 @@ int main(int argc,char** argv) {
     NativeFatFSFail("sync"); CHECK(!cbm_image_sync()); CHECK(cbm_image_is_mounted()); CHECK(cbm_image_sync());
     cbm_image_unmount(); CHECK(!cbm_image_is_mounted());
     disk->Close();
-    unsigned char program[] = {0x01,0x10,0x60,0x00};
-    strcpy(info.fname,"/1551/HELLO.PRG"); info.fsize = sizeof(program);
-    CHECK(disk->OpenPRG(&info,program,sizeof(program)));
-    CHECK(cbm_image_mount_d64_sector_reader(info.fname,Sector,disk));
-    u32 fileSize = 0; CHECK(cbm_image_open_file(2,"HELLO.PRG",fileSize)); CHECK(fileSize == sizeof(program));
-    u8 byte; CHECK(cbm_image_read_channel_byte(2,byte)); CHECK(byte == 1);
-    CHECK(cbm_image_read_channel_byte(2,byte)); CHECK(byte == 0x10);
-    cbm_image_unmount(); disk->Close(); delete disk;
+    const unsigned lengths[] = {2,4,253,254,255,508,509,60000};
+    for (unsigned length : lengths) {
+        std::vector<unsigned char> program(length);
+        for (unsigned i = 0; i < length; ++i) program[i] = i % 256;
+        strcpy(info.fname,"/1551/HELLO.PRG"); info.fsize = length;
+        CHECK(disk->OpenPRG(&info,program.data(),length));
+        CHECK(cbm_image_mount_d64_sector_reader(info.fname,Sector,disk));
+        u32 fileSize = 0; CHECK(cbm_image_open_file(2,"HELLO.PRG",fileSize)); CHECK(fileSize == 0xFFFFFFFF);
+        for (unsigned i = 0; i < length; ++i) { u8 byte; CHECK(cbm_image_read_channel_byte(2,byte)); CHECK(byte == program[i]); }
+        CHECK(cbm_image_channel_at_eof(2));
+        cbm_image_unmount(); disk->Close();
+    }
+    delete disk;
     puts("PASS actual D64 encoder, dirty retention, write/sync failures and runtime protection");
     return 0;
 }
