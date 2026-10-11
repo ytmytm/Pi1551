@@ -51,11 +51,11 @@ bool Menu::Browse(bool fresh, bool tape) {
         browserReturn = Position{view, cursor, offset}; hasBrowserReturn = true;
     }
     std::string next = tape ? "/" : fresh ? start : path;
-    if (!fresh && !tape && !lastMounted.empty() && !IsEmulated(lastMounted)) next = Parent(lastMounted);
+    if (!fresh && !tape && !lastMounted.empty()) next = Parent(lastMounted);
     tapeFilter = tape; view = View::Browser; cursor = 1; offset = 0; editing = false;
     if (fresh) { history.clear(); hasBrowserReturn = false; }
     ChangeDirectory(next);
-    if (!fresh && !tape && !lastMounted.empty() && !IsEmulated(lastMounted))
+    if (!fresh && !tape && !lastMounted.empty())
         for (unsigned i = 0; i < files.size(); ++i) if (files[i].path == lastMounted) cursor = i + 1;
     Clamp(); scrollReset = true; return true;
 }
@@ -130,7 +130,14 @@ void Menu::MountFailed() { mounted.clear(); view = View::Browser; cursor = 1; of
 void Menu::HostReset() {
     if (backend.Get(Setting::IgnoreReset)) return;
     backend.ResetDrive();
-    if (backend.Get(Setting::ResetPath)) ChangeDirectory(start);
+    if (backend.Get(Setting::ResetPath)) {
+        unsigned savedCursor = cursor, savedOffset = offset;
+        ChangeDirectory(start);
+        if (view != View::Browser) { cursor = savedCursor; offset = savedOffset; }
+        for (size_t i = 0; i < history.size(); ++i)
+            if (history[i].view == View::Browser) { history[i].cursor = 1; history[i].offset = 0; }
+        Clamp();
+    }
 }
 static const char* On(bool b) { return b ? "ON" : "OFF"; }
 std::vector<Menu::Row> Menu::Rows() {

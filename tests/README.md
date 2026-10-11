@@ -1,4 +1,19 @@
-# Native TCBM2SD protocol tests
+# Native Pi1551 tests
+
+Run the OLED/menu/component suite without Raspberry Pi:
+
+```sh
+make test-oled-native
+```
+
+It compiles the production menu, kernel adapter, settings parser, TAP player,
+D64/PRG code, OLED raster and host-file buffering with ASan/UBSan. GPIO/I2C and
+kernel hooks record side effects; a POSIX FatFS shim supports disposable card
+fixtures and injected write/sync/rename failures. See
+[PI1551-OLED-IMPLEMENTATION.md](../docs/PI1551-OLED-IMPLEMENTATION.md) for coverage,
+architecture and hardware-test limits.
+
+## TCBM2SD protocol tests
 
 Run from the repository root:
 

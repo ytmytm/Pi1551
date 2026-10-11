@@ -1,8 +1,10 @@
 # Pi1551 OLED TUI — current protocol and behaviour
 
 This document describes the current implementation of
-`tools/pi1551_oled_tui.py`. It is the specification for the independent TUI
-simulator, not a firmware implementation.
+`tools/pi1551_oled_tui.py` and the matching Pi1551 firmware menu. The simulator
+remains the interaction reference; the firmware uses real media, GPIO and
+persistent settings. Hardware-specific details and native testing are described
+in `docs/PI1551-OLED-IMPLEMENTATION.md`.
 
 ## Display model
 
@@ -62,6 +64,9 @@ even in `ALWAYS` mode, but cannot turn the effective motor off there. `P` means
 a TAP is loaded; it is asserted for a loaded TAP and released by eject. Motor
 state is independent of tape presence and disk activity.
 The simulated counter is 000..999 and the percentage is derived from it.
+The firmware derives the counter from actual TAP timing using the existing
+Datasette spool model. At the end it may show `100%`, which still fits the
+16-column row; PLAY remains pressed until eject.
 
 ## Main views
 
@@ -155,7 +160,7 @@ directory operations without spending an OLED row on a synthetic item.
 
 The first content row is always selectable: `Menu...` in `SOLO` and
 `Menu... LIST N` in `LIST`, where `N` is the number of images (counts above 99
-are shown as `99+`). The count appears only in Fliplist, not in Browser. Up to
+are shown as `Menu... LIST99+` to fit 15 content columns). The count appears only in Fliplist, not in Browser. Up to
 five images are shown below the menu row. The active image has a `▶` marker;
 the selected image row is inverted. This five-row window follows the cursor so
 every fliplist entry can be seen and selected.
@@ -163,9 +168,8 @@ every fliplist entry can be seen and selected.
 - Enter on `Menu...`: open the Device menu.
 - Enter on any selected fliplist image opens Browser and unmounts the active
   image. In `LIST` it preserves the fliplist; in `SOLO` it clears the temporary
-  one-item list. For D64/G64 it opens the current SD Browser; for a
-  non-emulated container it opens the parent directory containing that image
-  and selects the image there.
+  one-item list. It opens the SD directory containing the selected medium and
+  focuses that medium there, for emulated images and non-emulated containers alike.
 - Left/right mounting a non-emulated fliplist entry (D71/D80/D81/D82/PRG)
   keeps the UI in Fliplist. The computer sees the mounted source as a
   directory-like medium. Enter is the separate action that returns to its
@@ -328,6 +332,19 @@ Submenus:
 - Sound: visible items are `Sound`, `GPIO` and `Freq`; GPIO and frequency are
   selected from lists;
 - ROM: separate ROM selector.
+
+Settings cycle on encoder click, as in the mock; rotation continues navigating
+rows. The counter editor is the exception: one impulse changes the target by
+one, Enter seeks and Back cancels. Firmware Font selects C64/ASCII, both 8x8;
+ASCII is the fallback when no valid chargen was loaded. Errors and completed
+load/save/write actions use a dismissible message menu with `..` first. Enter
+on the message or Back returns to the previous screen; long messages scroll.
+
+On the current board GPIO19 is also the fixed cassette READ output. The firmware
+rejects enabling SOUND on GPIO19 while a TAP is loaded, and rejects loading a
+TAP while SOUND on GPIO19 is active, with `GPIO19 is TAPE`. GPIO18 permits
+independent simultaneous tape and disk sound. The mock has no physical pin
+collision and remains permissive.
 
 In the target firmware, `Load settings` rereads the configured options file
 and applies its runtime-changeable values, replacing unsaved changes. It must

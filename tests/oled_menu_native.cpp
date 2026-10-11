@@ -165,6 +165,7 @@ static void reset_and_settings() {
     KernelStub k; Menu m(k); Enter(m,"[disks]"); CHECK(m.OpenMedia(Image("d64")));
     k.settings[Setting::IgnoreReset] = 1; m.HostReset(); CHECK(k.resets == 0);
     k.settings[Setting::IgnoreReset] = 0; m.HostReset(); CHECK(k.resets == 1); CHECK(m.Path() == "/1551"); CHECK(!m.Mounted().empty());
+    CHECK(m.Cursor() == 0);
     Device(m); Enter(m,"Settings"); Enter(m,"Drive"); Enter(m,"Device number"); CHECK(k.settings[Setting::Device] == 9);
     Enter(m,"Skip spinup"); CHECK(k.settings[Setting::Spinup] == 1);
     Press(m,Key::Back); Enter(m,"Browser"); k.available = false;
@@ -196,9 +197,24 @@ static void random_navigation() {
         CHECK(m.Mounted() == k.medium);
     }
 }
+static void long_fliplist_window() {
+    KernelStub k; Menu m(k);
+    for (unsigned i = 0; i < 120; ++i) {
+        std::string name = "disk" + std::to_string(i) + ".d81";
+        k.lst.push_back(Entry("/1551/disks/"+name,name));
+    }
+    CHECK(m.OpenMedia(Entry("/1551/list.lst","list.lst")));
+    CHECK(std::string(m.Render(0).rows[2]) == " Menu... LIST99+");
+    Press(m,Key::Left); CHECK(m.Cursor() == 0);
+    Press(m,Key::Right,120); CHECK(m.Cursor() == 120); CHECK(k.medium == k.lst.back().path);
+    Frame f = m.Render(0); CHECK(f.inverse[7]); CHECK(f.active[7]);
+    Press(m,Key::Right); CHECK(m.Cursor() == 1); CHECK(k.medium == k.lst[0].path);
+    Press(m,Key::Left); CHECK(m.Cursor() == 0);
+    Device(m); Press(m,Key::Back); CHECK(m.Cursor() == 0); CHECK(m.CurrentView() == View::Fliplist);
+}
 int main() {
     struct Test { const char* name; void (*run)(); };
-    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation}};
+    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
     unsigned failures = 0;
     for (const Test& t : tests) try { t.run(); std::cout << "PASS " << t.name << "\n"; } catch (const std::exception& e) { ++failures; std::cerr << "FAIL " << t.name << ": " << e.what() << "\n"; }
     return failures ? 1 : 0;
