@@ -23,7 +23,7 @@ struct KernelStub : Backend {
         sd["/1551/disks"] = {Entry("/1551/disks/a.d64","a.d64"), Entry("/1551/disks/b.g64","b.g64"), Entry("/1551/disks/c.d71","c.d71"), Entry("/1551/disks/d.d80","d.d80"), Entry("/1551/disks/e.d81","e.d81"), Entry("/1551/disks/f.d82","f.d82"), Entry("/1551/disks/g.prg","g.prg")};
         sd["/1551/tapes"] = {Entry("/1551/tapes/boulder dash.tap","boulder dash.tap"),Entry("/1551/tapes/info.txt","info.txt")};
         sd["/1551/roms"] = {Entry("/1551/roms/ignored.bin","ignored.bin")};
-        settings[Setting::Device] = 8; settings[Setting::GPIO] = 18; settings[Setting::Freq] = 1200;
+        settings[Setting::Device] = 8; settings[Setting::Freq] = 1200;
         settings[Setting::ResetPath] = 1; settings[Setting::Contrast] = 255; settings[Setting::Scroll] = 1;
         status.rom = "dos1551.bin"; status.firmware = "1.26"; status.temperature = 38;
         status.sdSize = "8192MB"; status.sdFree = "6400MB";
@@ -171,7 +171,13 @@ static void reset_and_settings() {
     Press(m,Key::Back); Enter(m,"Browser"); k.available = false;
     Frame f = m.Render(0); for (unsigned row = 2; row < 8; ++row) CHECK(std::string(f.rows[row]).find("Auto mount") == std::string::npos);
     Choose(m,"Reset path"); Press(m,Key::Enter); CHECK(k.settings[Setting::ResetPath] == 0);
-    Press(m,Key::Back); Enter(m,"Sound"); Enter(m,"GPIO"); CHECK(k.settings[Setting::GPIO] == 19);
+    Press(m,Key::Back); Enter(m,"Sound");
+    Frame sound = m.Render(0);
+    CHECK(std::string(sound.rows[3]).find("Sound OFF") != std::string::npos);
+    CHECK(std::string(sound.rows[4]).find("Freq 1200 Hz") != std::string::npos);
+    CHECK(std::string(sound.rows[5]) == std::string(16,' '));
+    Enter(m,"Sound"); CHECK(k.settings[Setting::Sound] == 1);
+    Enter(m,"Freq"); CHECK(k.settings[Setting::Freq] == 2000);
     Press(m,Key::Back); Enter(m,"Save settings"); CHECK(k.effects.back() == "save-settings");
 }
 static void persistence_preserves_unknown() {
@@ -186,6 +192,8 @@ static void persistence_preserves_unknown() {
     CHECK(!ParseRuntimeSettings("deviceID = 10\n",values));
     CHECK(!ParseRuntimeSettings("soundOnGPIOFreq = 0\n",values));
     CHECK(!ParseRuntimeSettings("i2cLcdOnContrast = 999\n",values));
+    CHECK(ParseRuntimeSettings("oledSoundGPIO = 19\n",values)); CHECK(values.empty());
+    CHECK(MergeRuntimeSettings("oledSoundGPIO = 19\n",values) == "oledSoundGPIO = 19\n");
 }
 static void random_navigation() {
     KernelStub k; Menu m(k); srand(1551);

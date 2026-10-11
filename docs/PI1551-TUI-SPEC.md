@@ -329,8 +329,8 @@ Submenus:
   `Scroll`;
 - Encoder: the only runtime item is `Reverse ON/OFF`; encoder presence/enabling is a
   hardware/startup option and is not exposed in the runtime menu;
-- Sound: visible items are `Sound`, `GPIO` and `Freq`; GPIO and frequency are
-  selected from lists;
+- Sound: visible items are `Sound` ON/OFF and `Freq`; frequency is selected
+  from a list. The buzzer is permanently wired to GPIO13 (SOUND);
 - ROM: separate ROM selector.
 
 Settings cycle on encoder click, as in the mock; rotation continues navigating
@@ -340,11 +340,9 @@ ASCII is the fallback when no valid chargen was loaded. Errors and completed
 load/save/write actions use a dismissible message menu with `..` first. Enter
 on the message or Back returns to the previous screen; long messages scroll.
 
-On the current board GPIO19 is also the fixed cassette READ output. The firmware
-rejects enabling SOUND on GPIO19 while a TAP is loaded, and rejects loading a
-TAP while SOUND on GPIO19 is active, with `GPIO19 is TAPE`. GPIO18 permits
-independent simultaneous tape and disk sound. The mock has no physical pin
-collision and remains permissive.
+The buzzer uses the board's fixed SOUND output, GPIO13 (physical pin 33).
+GPIO18 belongs to the TCBM data bus and GPIO19 is cassette READ. Neither is
+selectable for sound; disk sound and cassette playback operate independently.
 
 In the target firmware, `Load settings` rereads the configured options file
 and applies its runtime-changeable values, replacing unsaved changes. It must

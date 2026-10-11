@@ -202,18 +202,18 @@ std::vector<Menu::Row> Menu::Rows() {
         static const Item browser[] = {{Setting::AutoMount,"Auto mount"},{Setting::ResetPath,"Reset path"},{Setting::Lowercase,"Lowercase"},{Setting::SD2IEC,"SD2IEC"}};
         static const Item display[] = {{Setting::Contrast,"Contrast"},{Setting::Dimming,"Dimming"},{Setting::Orient,"Orient"},{Setting::Font,"Font"},{Setting::Scroll,"Scroll"}};
         static const Item encoder[] = {{Setting::Reverse,"Reverse"}};
-        static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::GPIO,"GPIO"},{Setting::Freq,"Freq"}};
+        static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::Freq,"Freq"}};
         const Item* items = drive; unsigned n = 5;
         if (view == View::TapeSettings) { items = tape; n = 1; }
         if (view == View::BrowserSettings) { items = browser; n = 4; }
         if (view == View::Display) { items = display; n = 5; }
         if (view == View::Encoder) { items = encoder; n = 1; }
-        if (view == View::Sound) { items = sound; n = 3; }
+        if (view == View::Sound) { items = sound; n = 2; }
         for (unsigned i = 0; i < n; ++i) {
             Setting id = items[i].id;
             if (id == Setting::AutoMount && !backend.AutoMountAvailable()) continue;
             int v = backend.Get(id); std::string value = On(v);
-            if (id == Setting::Device || id == Setting::Contrast || id == Setting::GPIO || id == Setting::Freq) value = Number(v);
+            if (id == Setting::Device || id == Setting::Contrast || id == Setting::Freq) value = Number(v);
             if (id == Setting::Freq) value += " Hz";
             if (id == Setting::IgnoreReset) value = v ? "IGNORE" : "REACT";
             if (id == Setting::MotorAlways) value = v ? "ALWAYS" : "COMP.";
@@ -240,7 +240,7 @@ void Menu::Clamp() {
 Setting Menu::SelectedSetting() {
     static const Setting drive[] = {Setting::Device, Setting::Idle, Setting::RAM, Setting::Spinup, Setting::IgnoreReset};
     static const Setting display[] = {Setting::Contrast, Setting::Dimming, Setting::Orient, Setting::Font, Setting::Scroll};
-    static const Setting sound[] = {Setting::Sound, Setting::GPIO, Setting::Freq};
+    static const Setting sound[] = {Setting::Sound, Setting::Freq};
     unsigned i = cursor ? cursor - 1 : 0;
     if (view == View::Drive) return drive[i];
     if (view == View::Display) return display[i];
@@ -254,7 +254,6 @@ Setting Menu::SelectedSetting() {
 void Menu::ChangeValue(int delta) {
     Setting id = SelectedSetting(); int v = backend.Get(id);
     if (id == Setting::Device) v = v == 8 ? 9 : 8;
-    else if (id == Setting::GPIO) v = v == 18 ? 19 : 18;
     else if (id == Setting::Contrast) v = v == 255 ? 32 : 255;
     else if (id == Setting::Scroll) v = (v + delta + 3) % 3;
     else if (id == Setting::Freq) {

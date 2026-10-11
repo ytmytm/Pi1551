@@ -418,12 +418,11 @@ push_led_sound:
 	unsigned ledSoundSet = 0;
 	if (OutputLED) ledSoundSet |= 1u << PIGPIO_OUT_LED;
 	else ledSoundClear |= 1u << PIGPIO_OUT_LED;
-	// SoundOnGPIO=1: square-wave buzzer on GPIO13.  SoundOnGPIO=0: PWM sample via ALT0 — do not drive digitally.
+	// Runtime buzzer output is fixed to the board's SOUND pin (GPIO13).
 	if (options.Runtime(oled::Setting::Sound))
 	{
-		unsigned pin = options.Runtime(oled::Setting::GPIO);
-		if (OutputSound) ledSoundSet |= 1u << pin;
-		else ledSoundClear |= 1u << pin;
+		if (OutputSound) ledSoundSet |= 1u << PIGPIO_OUT_SOUND;
+		else ledSoundClear |= 1u << PIGPIO_OUT_SOUND;
 	}
 	write32(ARM_GPIO_GPCLR0, ledSoundClear);
 	write32(ARM_GPIO_GPSET0, ledSoundSet);

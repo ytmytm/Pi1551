@@ -96,11 +96,9 @@ int main(int argc, char** argv) {
     Press(Key::Right); Press(Key::Right); CHECK(medium == "/1551/a.d81");
     Press(Key::Right); CHECK(medium == "/1551/a.prg");
     Enter("Menu..."); Enter("Browser"); CHECK(medium.empty());
-    options.SetRuntime(Setting::Sound,1); options.SetRuntime(Setting::GPIO,19);
-    Pi1551Oled::HostSelection("/1551/a.tap"); CHECK(!g_tapePlayer->IsLoaded());
-    CHECK(Pi1551Oled::TestMenu().Message() == "GPIO19 is TAPE");
-    Pi1551Oled::TestMenu().Render(now/1000); Press(Key::Back);
-    options.SetRuntime(Setting::GPIO,18); Pi1551Oled::HostSelection("/1551/a.tap"); CHECK(g_tapePlayer->IsLoaded());
+    options.SetRuntime(Setting::Sound,1);
+    Pi1551Oled::HostSelection("/1551/a.tap"); CHECK(g_tapePlayer->IsLoaded());
+    CHECK(options.Runtime(Setting::Sound) == 1); // fixed buzzer pin is independent of tape READ
     Enter("Menu..."); Enter("Settings"); Enter("ROM"); Press(Key::Right); Press(Key::Enter); CHECK(roms.currentROMIndex == 2);
     Press(Key::Enter); Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 9); CHECK(applies >= 2);
     Press(Key::Back); Enter("Save settings");

@@ -243,7 +243,6 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(oledFont)
 		ELSE_CHECK_DECIMAL_OPTION(oledScroll)
 		ELSE_CHECK_DECIMAL_OPTION(oledSound)
-		ELSE_CHECK_DECIMAL_OPTION(oledSoundGPIO)
 		ELSE_CHECK_DECIMAL_OPTION(lowercaseBrowseModeFilenames)
 		ELSE_CHECK_DECIMAL_OPTION(displayTemperature)
 		ELSE_CHECK_DECIMAL_OPTION(displayPC)
@@ -407,7 +406,6 @@ int Options::Runtime(oled::Setting id) const
     case Setting::Scroll: return oledScroll;
     case Setting::Reverse: return rotaryEncoderInvert;
     case Setting::Sound: return oledSound;
-    case Setting::GPIO: return oledSoundGPIO;
     case Setting::Freq: return soundOnGPIOFreq;
     default: return 0;
     }
@@ -433,7 +431,6 @@ void Options::SetRuntime(oled::Setting id, int value)
     case Setting::Scroll: oledScroll = value; break;
     case Setting::Reverse: rotaryEncoderInvert = value; break;
     case Setting::Sound: oledSound = value; break;
-    case Setting::GPIO: oledSoundGPIO = value; break;
     case Setting::Freq: soundOnGPIOFreq = value; break;
     default: break;
     }

@@ -69,7 +69,6 @@ New runtime options written alongside the existing options are:
 | `oledFont` | 0 ASCII, 1 C64; both occupy 8x8 pixels |
 | `oledScroll` | 0 slow, 1 medium, 2 fast |
 | `oledSound` | 0/1; runtime square-wave sound |
-| `oledSoundGPIO` | 18/19; GPIO19 conflicts with cassette READ |
 
 Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `ignoreReset`, `tapeMotorAlwaysOn`, `onResetChangeToStartingFolder`,
@@ -77,6 +76,11 @@ Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `disableSD2IECCommands`, `i2cLcdOnContrast`, `i2cLcdFlip`,
 `rotaryEncoderInvert`, `soundOnGPIOFreq`). SD2IEC ON is stored as
 `disableSD2IECCommands = 0`.
+
+The buzzer is fixed to `PIGPIO_OUT_SOUND` (GPIO13, physical pin 33). SOUND
+contains only enable/disable and frequency; it never changes TCBM GPIO18 or
+cassette READ GPIO19. Legacy `oledSoundGPIO` entries are ignored and preserved
+as unrelated options when saving; they cannot redirect the output.
 
 An empty, missing or invalid automount image/list is treated as OFF and hides
 the option. The mock keeps it visible. Disk size/header checks reject unsupported

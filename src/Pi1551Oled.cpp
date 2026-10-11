@@ -122,9 +122,6 @@ public:
     }
     bool LoadTape(const std::string& path) override {
         error = "TAP load failed";
-        if (options.Runtime(oled::Setting::Sound) && options.Runtime(oled::Setting::GPIO) == TAPE_READ_GPIO) {
-            error = "GPIO19 is TAPE"; return false;
-        }
         FILINFO f; if (!g_tapePlayer || f_stat(path.c_str(), &f) != FR_OK || path.size() >= sizeof(f.fname)) return false;
         strcpy(f.fname, path.c_str()); return g_tapePlayer->LoadTap(&f);
     }
@@ -145,11 +142,6 @@ public:
     int Get(oled::Setting id) override { return options.Runtime(id); }
     bool Set(oled::Setting id, int v) override {
         error.clear();
-        if (g_tapePlayer && g_tapePlayer->IsLoaded() &&
-            ((id == oled::Setting::GPIO && v == TAPE_READ_GPIO) ||
-             (id == oled::Setting::Sound && v && Get(oled::Setting::GPIO) == TAPE_READ_GPIO))) {
-            error = "GPIO19 is TAPE"; return false;
-        }
         options.SetRuntime(id, v); OledKernelApplySettings(); return true;
     }
     std::string Error() override { return error.empty() ? "Operation failed" : error; }
@@ -163,9 +155,6 @@ public:
     bool LoadSettings() override {
         std::string text; std::map<oled::Setting,int> parsed;
         if (!ReadText("/options.txt", text) || !oled::ParseRuntimeSettings(text, parsed)) return false;
-        if (g_tapePlayer && g_tapePlayer->IsLoaded() &&
-            (parsed.count(oled::Setting::GPIO) ? parsed[oled::Setting::GPIO] : 18) == TAPE_READ_GPIO &&
-            (parsed.count(oled::Setting::Sound) ? parsed[oled::Setting::Sound] : 1)) return false;
         // Defaults are supplied by the same Options constructor as cold boot.
         Options defaults;
         for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) {

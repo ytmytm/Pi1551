@@ -11,7 +11,7 @@ enum class View { Browser, Fliplist, Device, Tape, Seek, Disk, Settings,
     ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
-    Scroll, Reverse, Sound, GPIO, Freq, Count };
+    Scroll, Reverse, Sound, Freq, Count };
 struct Entry {
     std::string path, name;
     bool directory;

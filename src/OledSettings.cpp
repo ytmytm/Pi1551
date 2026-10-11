@@ -4,7 +4,7 @@
 #include <stdio.h>
 namespace oled {
 const char* OptionName(Setting id) {
-    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "oledFont", "oledScroll", "rotaryEncoderInvert", "oledSound", "oledSoundGPIO", "soundOnGPIOFreq"};
+    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "oledFont", "oledScroll", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq"};
     return names[(unsigned)id];
 }
 static std::string Lower(std::string s) { for (size_t i = 0; i < s.size(); ++i) s[i] = tolower((unsigned char)s[i]); return s; }
@@ -18,7 +18,6 @@ static std::string Name(const std::string& line) {
 }
 static bool Valid(Setting id, int v) {
     if (id == Setting::Device) return v == 8 || v == 9;
-    if (id == Setting::GPIO) return v == 18 || v == 19;
     if (id == Setting::Freq) return v >= 100 && v <= 10000;
     if (id == Setting::Contrast) return v >= 0 && v <= 255;
     if (id == Setting::Scroll) return v >= 0 && v <= 2;

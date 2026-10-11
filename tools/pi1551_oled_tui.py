@@ -57,7 +57,7 @@ class Simulator:
         "reboot_confirm": ["..", "Cancel", "Reboot Pi1551?"],
         "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
-        "sound": ["..", "Sound", "GPIO", "Freq"],
+        "sound": ["..", "Sound", "Freq"],
         "tape_settings": ["..", "Motor ON"],
         "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC"],
         "display": ["..", "Contrast", "Dimming", "Orient", "Font", "Scroll"],
@@ -86,7 +86,7 @@ class Simulator:
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
                         "SD2IEC": True, "Contrast": 255, "Dimming": True, "Orientation": "normal", "Font": "C64",
                         "Scroll rate": "medium", "Encoder enabled": True, "Encoder reverse": False,
-                        "Sound": True, "GPIO": "18", "Freq": "1600 Hz", "Reset": "REACT"}
+                        "Sound": True, "Freq": "1600 Hz", "Reset": "REACT"}
         self.reset_cursor()
     @property
     def current_dir(self) -> Node: return self.path[-1]
@@ -152,7 +152,7 @@ class Simulator:
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
           "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC": self.on(self.options["SD2IEC"]),
-          "GPIO": self.options["GPIO"], "Freq": self.options["Freq"],
+          "Freq": self.options["Freq"],
           "D64": self.active_media.name if self.active_media else "---", "TAP": self.tape.name if self.tape else "---",
           "LED": self.on(self.disk is not None and self.activity != "browser"), "MOTOR": self.on(self.motor_active()),
           "PLAY": self.on(self.tape is not None), "TRACK": f"{self.track:04.1f}{'S' if self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "---",
@@ -392,7 +392,6 @@ class Simulator:
         elif item == "Reset path": self.options[item] = not self.options[item]
         elif item == "Lowercase": self.options["Lowercase names"] = not self.options["Lowercase names"]
         elif item == "Reverse": self.options["Encoder reverse"] = not self.options["Encoder reverse"]
-        elif item == "GPIO": self.options[item] = "19" if self.options[item] == "18" else "18"
         elif item == "Freq": self.options[item] = {"1600 Hz": "1200 Hz", "1200 Hz": "2000 Hz", "2000 Hz": "1600 Hz"}.get(self.options[item], "1600 Hz")
         elif item == "Motor ON": self.options["Motor override"] = not self.options["Motor override"]
         self.message = f"{item}: {self.display_value(item)}"

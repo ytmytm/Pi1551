@@ -2976,7 +2976,6 @@ void OledKernelSelectROM(unsigned index) {
 }
 void OledKernelApplySettings()
 {
-    static unsigned oldSoundPin = 18;
     GlobalSetDeviceID(options.GetDeviceID());
     m_TCBM_Commands.SetDeviceId(deviceID);
     m_TCBM_Commands.SetLowercaseBrowseModeFilenames(options.LowercaseBrowseModeFilenames());
@@ -2984,15 +2983,10 @@ void OledKernelApplySettings()
     TCBM_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
     if (g_tapePlayer) g_tapePlayer->SetMotorAlwaysOn(options.TapeMotorAlwaysOn());
     headSoundFreq = 1000000 / (2 * std::max(100u, options.SoundOnGPIOFreq()));
-    // Runtime SOUND uses a square-wave output on the selected pin.
-    unsigned pin = options.Runtime(oled::Setting::GPIO);
-    if (oldSoundPin != TAPE_READ_GPIO || !g_tapePlayer || !g_tapePlayer->IsLoaded())
-        RPI_SetGpioLo((rpi_gpio_pin_t)oldSoundPin);
-    if (pin != TAPE_READ_GPIO || !g_tapePlayer || !g_tapePlayer->IsLoaded()) {
-        RPI_SetGpioPinFunction((rpi_gpio_pin_t)pin, FS_OUTPUT);
-        RPI_SetGpioLo((rpi_gpio_pin_t)pin);
-    }
-    TCBM_Bus::OutputSound = false; oldSoundPin = pin;
+    // The board's buzzer is permanently wired to SOUND (GPIO13).
+    RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_OUTPUT);
+    RPI_SetGpioLo((rpi_gpio_pin_t)PIGPIO_OUT_SOUND);
+    TCBM_Bus::OutputSound = false;
 }
 bool OledKernelWriteProtected()
 {
