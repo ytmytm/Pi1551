@@ -40,17 +40,17 @@ class TuiControls(unittest.TestCase):
                 self.assertIs(s.current_dir,s.start_folder if reset_path else folder)
         s = Simulator(); s.start_folder.name = "Very_long_directory_ending"
         with patch("tools.pi1551_oled_tui.time.monotonic",return_value=0):
-            self.assertEqual(s.status()[0],"8: Very_long")
+            self.assertEqual(s.status()[0],"8:Very_long_")
         seen = []
         for step in range(100):
             with patch("tools.pi1551_oled_tui.time.monotonic",return_value=step * .1): seen.append(s.status()[0])
         self.assertTrue(any("ending" in text for text in seen)); self.assertTrue(all(len(text) == 12 for text in seen))
         s.options["Temp"] = False
-        self.assertEqual(s.status()[0],"8: Very_long_dir")
+        self.assertEqual(s.status()[0],"8:Very_long_dire")
         ui = UI.__new__(UI); ui.width = 16; ui.ox = ui.oy = 0; lines = []
         ui.text = lambda y,x,text: lines.append(text)
         ui.status_line(0,s.status()[0],""); self.assertEqual(len(lines[-1]),16)
-        ui.status_line(0,"8: Very_long","38C"); self.assertEqual(lines[-1],"8: Very_long 38C")
+        ui.status_line(0,"8:Very_long_","38C"); self.assertEqual(lines[-1],"8:Very_long_ 38C")
 
     def test_reverse_and_scroll_preview(self):
         s = Simulator(); s.set_screen("encoder",True)

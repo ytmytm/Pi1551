@@ -368,7 +368,7 @@ Frame Menu::Render(uint32_t ms) {
         snprintf(b, sizeof(b), "%u: %u.%u%s", backend.Get(Setting::Device), s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
         memcpy(f.rows[0], b, std::min((size_t)headerWidth, strlen(b)));
     } else {
-        std::string prefix = Number(backend.Get(Setting::Device)) + ": ";
+        std::string prefix = Number(backend.Get(Setting::Device)) + ":";
         std::string folder = Basename(path); if (folder.empty()) folder = "/";
         std::string key = path + prefix + Number(headerWidth);
         if (key != headerKey) { headerKey = key; headerTime = ms; }

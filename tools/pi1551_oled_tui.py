@@ -475,7 +475,7 @@ class Simulator:
         tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}P" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
         return drive, tape
     def folder_status(self) -> str:
-        prefix = f"{self.device}: "; folder = self.current_dir.name
+        prefix = f"{self.device}:"; folder = self.current_dir.name
         width = (12 if self.options["Temp"] else 16) - len(prefix)
         key = (self.source_text(),prefix,width)
         now = time.monotonic()

@@ -46,8 +46,8 @@ example `8: 18.0      38C`.
 
 - Emulating D64/G64: `8: 18.0` with the current track/half-track.
 - Append `S` while the idle trap is actually active: `8: 18.0S`.
-- No emulated D64/G64: `8: <last SD folder>`, for example `8: games`
-  for `/1551/games`; SD root is `8: /`. The device prefix stays fixed.
+- No emulated D64/G64: `8:<last SD folder>`, for example `8:games`
+  for `/1551/games`; SD root is `8:/`. The device prefix stays fixed, without a space.
   With temperature ON, four rightmost columns are reserved for ` 38C`;
   OFF gives the folder all remaining columns. Long folder names scroll
   independently of the selected row, at the configured Scroll speed, including
