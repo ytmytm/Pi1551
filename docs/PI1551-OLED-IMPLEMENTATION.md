@@ -171,3 +171,15 @@ frame, independent of HDMI state and without SD reads. Missing/unreadable or
 wrong-sized chargen leaves two identical ASCII slots; valid size is 4096 bytes.
 Native raster tests switch both ways using the shipped chargen.bin on SSD1306
 and SH1106, then clear the global CBMFont pointer to verify slot independence.
+
+Reset path is independent of drive Reset REACT/IGNORE. Core0 samples the raw
+active-low RESET alongside buttons and sends one path-only event per assertion
+when IGNORE and Reset path ON are selected. REACT keeps the existing reset
+protocol path, which also invokes the same browser-path operation. A path-only
+event in emulation queues a transition; directory I/O runs outside the real-time
+loop and the CPU resumes without being reset. It does not unmount media,
+clear the list, rewind tape or invoke automount. Holding RESET produces no
+repeated path resets. Native tests cover both policies, held inputs and deferral.
+The browser header shows only the final SD directory component with an
+independent scrolling clock, preserving the device prefix and optional four
+columns for temperature. Disabling Temp extends its width to all 16 columns.

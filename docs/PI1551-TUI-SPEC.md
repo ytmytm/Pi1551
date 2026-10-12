@@ -46,7 +46,12 @@ example `8: 18.0      38C`.
 
 - Emulating D64/G64: `8: 18.0` with the current track/half-track.
 - Append `S` while the idle trap is actually active: `8: 18.0S`.
-- No emulated D64/G64: `8: BROWSER`.
+- No emulated D64/G64: `8: <last SD folder>`, for example `8: games`
+  for `/1551/games`; SD root is `8: /`. The device prefix stays fixed.
+  With temperature ON, four rightmost columns are reserved for ` 38C`;
+  OFF gives the folder all remaining columns. Long folder names scroll
+  independently of the selected row, at the configured Scroll speed, including
+  the complete suffix. Changing directory or header width restarts that scroll.
 - The simulated temperature is currently `38C`.
 
 ### Row 1 — tape status
@@ -329,7 +334,7 @@ Submenus:
   `SD2IEC`; `Auto mount ON` enables the configured `AutoMountImage` (which may
   be an image or an `.LST`), while `OFF` disables automatic mounting;
   `Reset path ON` returns Browser to the `/1551` starting folder after a
-  computer reset; `OFF` preserves the current Browser folder;
+  computer reset, including `Reset IGNORE`; `OFF` preserves the current Browser folder;
 - Display: `Temp`, `Contrast`, `Dimming`, `Dim time`, `Dim level`, `Orient`,
   `Font` and `Scroll`. Temp controls only the header; Status still shows TEMP.
   Dim time is in seconds (0/OFF disables automatic dimming), Dim level is
@@ -375,8 +380,9 @@ next frame (up to 100 ms); idle dimming waits for Dim time. Device number,
 RAMBOard, idle trap, host reset policy, tape motor policy and sound settings
 are read live or applied by the settings adapter. Lowercase changes the next
 directory listing supplied to the computer, not SD filenames on the OLED.
-Skip spinup affects the next ROM spinup delay; Reset path and Auto mount the
-next respected host reset (Auto mount also applies at boot). New image Type
+Skip spinup affects the next ROM spinup delay; Reset path applies on any
+host reset, independently of the drive policy; Auto mount applies on the
+next respected host reset (and at boot). New image Type
 affects the next created image, never converts a mounted disk. These
 event-dependent settings do not force a reset, remount or file creation.
 
@@ -472,9 +478,9 @@ keeping that container active as the mounted browser medium. Browser list
 prefixes stay fixed while the filename scrolls.
 The current fake `Auto mount` option is selectable as a setting, but the
 simulator does not emulate firmware startup or parse a real `options.txt`.
-`Reset REACT/IGNORE` controls
-whether the simulated computer RESET is processed at all. When it is processed,
-`Reset path ON/OFF` controls only the Browser path: it returns to `/1551` or
+`Reset REACT/IGNORE` controls whether computer RESET resets the drive CPU
+and permits reset-time automount. Independently, `Reset path ON/OFF`
+controls only the Browser path on every computer RESET: it returns to `/1551` or
 keeps the current path. It does not by itself unmount the active image or clear
 the fliplist. A valid enabled `AutoMountImage` may separately select a new
-image or list during the reset.
+image or list during a REACT reset, not an IGNORE reset.

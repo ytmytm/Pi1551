@@ -5,6 +5,7 @@ namespace Pi1551Oled {
 void Initialize();
 bool Enabled();
 void PollInput(); // core 0 only
+void ObserveHostReset(bool asserted); // core 0: raw RESET, independent of drive policy
 void Draw(); // core 0 only, including all I2C traffic
 void Service(bool emulating); // core 1 only
 bool TransitionPending();

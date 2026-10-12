@@ -469,10 +469,25 @@ class Simulator:
         found = self.find_path(self.sd, self.browser_source)
         return "/" + "/".join(node.name for node in found[1:]) if found else self.browser_source.name
     def status(self) -> tuple[str, str]:
-        drive = f"{self.device}: {self.track:04.1f}{'S' if self.disk and self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else f"{self.device}: BROWSER"
+        if self.disk: self.header_key = None
+        drive = f"{self.device}: {self.track:04.1f}{'S' if self.disk and self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else self.folder_status()
         percent = min(99, self.tape_pos // 10)
         tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}P" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
         return drive, tape
+    def folder_status(self) -> str:
+        prefix = f"{self.device}: "; folder = self.current_dir.name
+        width = (12 if self.options["Temp"] else 16) - len(prefix)
+        key = (self.source_text(),prefix,width)
+        now = time.monotonic()
+        if key != getattr(self,"header_key",None): self.header_key, self.header_clock = key, now
+        pos = 0
+        if len(folder) > width:
+            last = len(folder) - width; cycle = last * 2 + 14
+            ticks = int((now - self.header_clock) / self.options["scrollHighlightRate"]) % cycle
+            if 7 < ticks <= 7 + last: pos = ticks - 7
+            elif 7 + last < ticks <= 14 + last: pos = last
+            elif ticks > 14 + last: pos = cycle - ticks
+        return prefix + folder[pos:pos+width]
     def toggle_motor(self) -> None:
         self.tape_motor = not self.tape_motor
         self.message = f"Computer MOTOR {self.on(self.tape_motor)}; effective {self.on(self.motor_active())}"
@@ -480,16 +495,14 @@ class Simulator:
         self.track = 18.0; self.activity = "mounted" if self.disk else "browser"
         self.message = "Drive reset"
     def computer_reset(self) -> None:
-        if self.options["Reset"] == "IGNORE":
-            self.message = "Computer RESET ignored"
-            return
-        self.reset_count += 1; self.reset_drive()
+        ignored = self.options["Reset"] == "IGNORE"
+        if not ignored: self.reset_count += 1; self.reset_drive()
         if self.options["Reset path"]:
             self.path = [self.sd, self.start_folder]; self.browser_source = self.start_folder
             self.stack = [("browser", 1, 0) if screen == "browser" else (screen, cursor, offset)
                           for screen, cursor, offset in self.stack]
             if self.screen == "browser": self.reset_cursor()
-        self.message = f"Computer RESET #{self.reset_count}"
+        self.message = "Drive RESET ignored" if ignored else f"Computer RESET #{self.reset_count}"
     def tick(self) -> None:
         if self.tape and self.motor_active(): self.tape_pos = (self.tape_pos + 1) % 1000
         if self.disk and self.activity == "mounted": self.track = 1.0 if self.track > 35 else self.track + .1; self.activity = "idle" if self.options["Idle trap"] else "run"
@@ -575,8 +588,8 @@ class UI:
     def line(self, row: int, value: str, selected: bool = False, marker: str = " ") -> None:
         self.text(self.oy + row, self.ox, (marker + clip(value, 15)).ljust(16), curses.color_pair(2) if selected else 0)
     def status_line(self, row: int, left: str, right: str) -> None:
-        value = clip(left, self.width - len(right))
-        self.text(self.oy + row, self.ox, (value + " " * max(1, self.width - len(value) - len(right)) + right).ljust(self.width))
+        value = clip(left, self.width - len(right) - (1 if right else 0))
+        self.text(self.oy + row, self.ox, (value + " " * max(0, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
         x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
         active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_seek": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)

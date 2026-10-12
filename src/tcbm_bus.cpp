@@ -115,9 +115,11 @@ void TCBM_Bus::ReadGPIOUserInput()
 	ReadGPIOUserInput(gplev0);
 }
 
-void TCBM_Bus::PollGPIOUserInput1551()
+bool TCBM_Bus::PollGPIOUserInput1551()
 {
-	ReadGPIOUserInput(read32(ARM_GPIO_GPLEV0));
+	unsigned level = read32(ARM_GPIO_GPLEV0);
+	ReadGPIOUserInput(level);
+	return (level & PIGPIO_MASK_IN_RESET) == 0;
 }
 
 void TCBM_Bus::ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk)

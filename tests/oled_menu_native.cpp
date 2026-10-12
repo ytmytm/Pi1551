@@ -83,10 +83,34 @@ static void startup_and_source() {
     KernelStub k; Menu m(k);
     Frame f = m.Render(0); CHECK(m.Cursor() == 1); CHECK(std::string(f.rows[2]).find("Menu...") != std::string::npos);
     CHECK(std::string(f.rows[3]).find("[..]") != std::string::npos);
-    CHECK(std::string(f.rows[0]) == "8: BROWSER   38C");
+    CHECK(std::string(f.rows[0]) == "8: 1551      38C");
     Enter(m,"[disks]"); CHECK(k.cwd == "/1551/disks");
     Press(m,Key::Back); CHECK(k.cwd == "/1551");
     Press(m,Key::Back); CHECK(k.cwd == "/"); Press(m,Key::Back); CHECK(m.CurrentView() == View::Browser);
+}
+static void folder_header_and_reset_policies() {
+    for (int ignore = 0; ignore < 2; ++ignore) for (int resetPath = 0; resetPath < 2; ++resetPath) {
+        KernelStub k; Menu m(k); Enter(m,"[disks]");
+        k.settings[Setting::IgnoreReset] = ignore; k.settings[Setting::ResetPath] = resetPath;
+        m.HostReset(); CHECK(k.resets == (ignore ? 0 : 1));
+        CHECK(m.Path() == (resetPath ? "/1551" : "/1551/disks"));
+    }
+    KernelStub k; Menu m(k);
+    std::string leaf = "Very_long_directory_ending", dir = "/1551/" + leaf;
+    k.sd[dir] = {}; m.SetHostDirectory(dir);
+    Frame f = m.Render(0); CHECK(std::string(f.rows[0]) == "8: Very_long 38C");
+    bool tail = false;
+    for (unsigned ms = 0; ms < 10000; ms += 100) {
+        m.Input(Key::Left); // cursor activity must not restart the independent header scroll
+        Frame scrolled = m.Render(ms);
+        CHECK(std::string(scrolled.rows[0]).substr(0,3) == "8: ");
+        CHECK(std::string(scrolled.rows[0]).substr(12) == " 38C");
+        tail |= std::string(scrolled.rows[0]).find("ending") != std::string::npos;
+    }
+    CHECK(tail);
+    k.settings[Setting::Temp] = 0; f = m.Render(10000);
+    CHECK(std::string(f.rows[0]) == "8: Very_long_dir");
+    m.SetHostDirectory("/"); CHECK(std::string(m.Render(10000).rows[0]) == "8: /            ");
 }
 static void solo_all_types() {
     const char* types[] = {"d64","g64","d71","d80","d81","d82","prg"};
@@ -171,6 +195,7 @@ static void failures_and_reboot() {
 static void reset_and_settings() {
     KernelStub k; Menu m(k); Enter(m,"[disks]"); CHECK(m.OpenMedia(Image("d64")));
     k.settings[Setting::IgnoreReset] = 1; m.HostReset(); CHECK(k.resets == 0);
+    CHECK(m.Path() == "/1551"); CHECK(!m.Mounted().empty());
     k.settings[Setting::IgnoreReset] = 0; m.HostReset(); CHECK(k.resets == 1); CHECK(m.Path() == "/1551"); CHECK(!m.Mounted().empty());
     CHECK(m.Cursor() == 0);
     Device(m); Enter(m,"Settings"); Enter(m,"Drive"); Enter(m,"Device number"); CHECK(k.settings[Setting::Device] == 9);
@@ -296,7 +321,7 @@ static void canonical_setting_formats() {
     CHECK(ParseRuntimeSettings("oledScroll = 1\noledFont = 1",parsed)); CHECK(parsed.empty());
 }
 int main() {
-    try { new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS runtime display/sound/image controls and canonical settings\n"; }
+    try { folder_header_and_reset_policies(); new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS folder header, independent reset policies and runtime settings\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }

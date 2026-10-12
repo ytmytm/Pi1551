@@ -7,7 +7,7 @@
 deviceID = 8
 RAMBOard = 1
 IgnoreReset = 0 // 0 = REACT to computer RESET; 1 = IGNORE
-OnResetChangeToStartingFolder = 1 // RESET returns the SD path to /1551
+OnResetChangeToStartingFolder = 1 // RESET returns the SD path to /1551, even with ignoreReset = 1.
 skipMotorSpinUpDelay = 1
 IdleSleep = 1 // Pause D64 emulation only when the ROM and host bus are idle.
 // S after the track number (e.g. 18.0S) means the drive is actually sleeping.

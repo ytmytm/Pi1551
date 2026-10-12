@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tools.pi1551_oled_tui import Simulator
+from tools.pi1551_oled_tui import Simulator, UI
 
 class TuiControls(unittest.TestCase):
     def click(self, sim, label):
@@ -29,6 +29,28 @@ class TuiControls(unittest.TestCase):
         self.assertEqual(s.display_value("Mode"),"SAMPLE")
         self.click(s,"Mode"); self.assertIn("Duration",s.items())
         self.assertEqual(s.display_value("Mode"),"BUZZER")
+
+    def test_independent_reset_path_and_folder_header(self):
+        for ignore in (False,True):
+            for reset_path in (False,True):
+                s = Simulator(); folder = s.start_folder.children[0]; s.path.append(folder)
+                s.options["Reset"] = "IGNORE" if ignore else "REACT"; s.options["Reset path"] = reset_path
+                s.computer_reset()
+                self.assertEqual(s.reset_count,0 if ignore else 1)
+                self.assertIs(s.current_dir,s.start_folder if reset_path else folder)
+        s = Simulator(); s.start_folder.name = "Very_long_directory_ending"
+        with patch("tools.pi1551_oled_tui.time.monotonic",return_value=0):
+            self.assertEqual(s.status()[0],"8: Very_long")
+        seen = []
+        for step in range(100):
+            with patch("tools.pi1551_oled_tui.time.monotonic",return_value=step * .1): seen.append(s.status()[0])
+        self.assertTrue(any("ending" in text for text in seen)); self.assertTrue(all(len(text) == 12 for text in seen))
+        s.options["Temp"] = False
+        self.assertEqual(s.status()[0],"8: Very_long_dir")
+        ui = UI.__new__(UI); ui.width = 16; ui.ox = ui.oy = 0; lines = []
+        ui.text = lambda y,x,text: lines.append(text)
+        ui.status_line(0,s.status()[0],""); self.assertEqual(len(lines[-1]),16)
+        ui.status_line(0,"8: Very_long","38C"); self.assertEqual(lines[-1],"8: Very_long 38C")
 
     def test_reverse_and_scroll_preview(self):
         s = Simulator(); s.set_screen("encoder",True)

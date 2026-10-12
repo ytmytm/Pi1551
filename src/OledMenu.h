@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 namespace oled {
-enum class Key { Left, Right, Enter, Insert, Back };
+enum class Key { Left, Right, Enter, Insert, Back, ResetPath };
 enum class View { Browser, Fliplist, Device, Tape, Seek, Disk, Settings,
     ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways,
@@ -69,6 +69,7 @@ public:
     void Refresh(); // host changes to SD directory
     bool OpenMedia(const Entry& entry); // host selection and automount use same rules
     void HostReset();
+    void ResetBrowserPath();
     void SetHostDirectory(const std::string& next) { ChangeDirectory(next); }
     void ShowHostBrowser(const std::string& next) { if (Browse()) ChangeDirectory(next); }
     View CurrentView() const { return view; }
@@ -97,6 +98,8 @@ private:
     View view = View::Browser;
     unsigned cursor = 1, offset = 0, target = 0;
     uint32_t selectionTime = 0;
+    uint32_t headerTime = 0;
+    std::string headerKey;
     bool scrollReset = true;
     std::vector<Row> Rows();
     void Open(View next);

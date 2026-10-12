@@ -129,8 +129,10 @@ void Menu::Back() {
 }
 void Menu::MountFailed() { mounted.clear(); view = View::Browser; cursor = 1; offset = 0; message = "Mount failed"; Refresh(); }
 void Menu::HostReset() {
-    if (backend.Get(Setting::IgnoreReset)) return;
-    backend.ResetDrive();
+    if (!backend.Get(Setting::IgnoreReset)) backend.ResetDrive();
+    ResetBrowserPath();
+}
+void Menu::ResetBrowserPath() {
     if (backend.Get(Setting::ResetPath)) {
         unsigned savedCursor = cursor, savedOffset = offset;
         ChangeDirectory(start);
@@ -326,6 +328,7 @@ void Menu::Select() {
 }
 void Menu::Input(Key key) {
     scrollReset = true;
+    if (key == Key::ResetPath) { ResetBrowserPath(); return; }
     if (key == Key::Back) { Back(); return; }
     if (key == Key::Enter) { Select(); Clamp(); return; }
     if (key == Key::Insert) {
@@ -359,9 +362,27 @@ Frame Menu::Render(uint32_t ms) {
     Frame f = {}; for (unsigned i = 0; i < 8; ++i) memset(f.rows[i], ' ', 16);
     if (scrollReset) { selectionTime = ms; scrollReset = false; }
     Status s = backend.ReadStatus(); char b[64];
-    if (s.emulating) snprintf(b, sizeof(b), "%u: %u.%u%s", backend.Get(Setting::Device), s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
-    else snprintf(b, sizeof(b), "%u: BROWSER", backend.Get(Setting::Device));
-    memcpy(f.rows[0], b, std::min((size_t)12, strlen(b)));
+    unsigned headerWidth = backend.Get(Setting::Temp) ? 12 : 16;
+    if (s.emulating) {
+        headerKey.clear();
+        snprintf(b, sizeof(b), "%u: %u.%u%s", backend.Get(Setting::Device), s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
+        memcpy(f.rows[0], b, std::min((size_t)headerWidth, strlen(b)));
+    } else {
+        std::string prefix = Number(backend.Get(Setting::Device)) + ": ";
+        std::string folder = Basename(path); if (folder.empty()) folder = "/";
+        std::string key = path + prefix + Number(headerWidth);
+        if (key != headerKey) { headerKey = key; headerTime = ms; }
+        unsigned width = headerWidth - prefix.size(), pos = 0;
+        if (folder.size() > width) {
+            unsigned max = folder.size() - width, cycle = max * 2 + 14;
+            unsigned ticks = ((ms - headerTime) / std::max(10, backend.Get(Setting::Scroll))) % cycle;
+            if (ticks > 7 && ticks <= 7 + max) pos = ticks - 7;
+            else if (ticks > 7 + max && ticks <= 14 + max) pos = max;
+            else if (ticks > 14 + max) pos = cycle - ticks;
+        }
+        std::string text = prefix + folder.substr(pos,width);
+        memcpy(f.rows[0],text.data(),text.size());
+    }
     if (backend.Get(Setting::Temp)) {
         snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
     }

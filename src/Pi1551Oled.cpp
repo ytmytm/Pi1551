@@ -37,6 +37,7 @@ static bool realTime = false;
 static std::string pendingMount;
 static oled::Menu* checkpoint = 0;
 static bool pendingUnmount = false, pendingReboot = false;
+static bool pendingBrowserReset = false, hostResetDown = false;
 static volatile uint32_t lastAction = 0;
 static std::string error;
 static void Barrier() { Pi1551Barrier(); }
@@ -218,6 +219,8 @@ public:
 static KernelBackend backend;
 bool Enabled() { return menu != 0; }
 void Initialize() {
+    hostResetDown = false;
+    pendingBrowserReset = false;
     lastAction = Pi1551Clock();
     backend.CaptureBaseline();
     menu = new oled::Menu(backend, DEFAULT_BROWSE_DIR);
@@ -228,7 +231,7 @@ void Initialize() {
 }
 void PollInput() {
     if (!menu) return;
-    TCBM_Bus::PollGPIOUserInput1551();
+    ObserveHostReset(TCBM_Bus::PollGPIOUserInput1551());
     bool next = false, prev = false; TCBM_Bus::ConsumeRotaryDiskSteps(next, prev);
     TCBM_Bus::ClearRotarySynthesizedButtons();
     if (next) Enqueue(oled::Key::Right);
@@ -241,7 +244,14 @@ void PollInput() {
         pressed[i] = down;
     }
 }
-bool TransitionPending() { return pendingUnmount || !pendingMount.empty() || pendingReboot; }
+void ObserveHostReset(bool asserted) {
+    // REACT is handled by the existing protocol/emulation reset path. In IGNORE,
+    // forward only the independently configured browser action, once per pulse.
+    if (asserted && !hostResetDown && options.IgnoreReset() && options.Runtime(oled::Setting::ResetPath))
+        Enqueue(oled::Key::ResetPath);
+    hostResetDown = asserted;
+}
+bool TransitionPending() { return pendingUnmount || !pendingMount.empty() || pendingReboot || pendingBrowserReset; }
 bool InputPending() { return readIndex != writeIndex; }
 void CompleteTransition() {
     realTime = false;
@@ -251,6 +261,7 @@ void CompleteTransition() {
     else if (!pendingMount.empty()) {
         std::string p = pendingMount; pendingMount.clear(); ok = OledKernelMount(p.c_str());
     }
+    else if (pendingBrowserReset) { pendingBrowserReset = false; menu->ResetBrowserPath(); }
     if (!ok) {
         if (checkpoint) { delete menu; menu = checkpoint; checkpoint = 0; }
         menu->Notify("Media/write error");
@@ -264,7 +275,9 @@ void Service(bool emulating) {
     while (readIndex != writeIndex && !TransitionPending()) {
         Barrier(); oled::Key key = events[readIndex]; readIndex = (readIndex + 1) % 64;
         if (realTime) { delete checkpoint; checkpoint = new oled::Menu(*menu); }
-        lastAction = Pi1551Clock(); menu->Input(key);
+        lastAction = Pi1551Clock();
+        if (key == oled::Key::ResetPath && realTime) pendingBrowserReset = true;
+        else menu->Input(key);
         if (!TransitionPending()) { delete checkpoint; checkpoint = 0; }
     }
     static uint32_t next = 0; uint32_t now = Pi1551Clock();

@@ -344,7 +344,7 @@ public:
 	static void ReadBrowseMode(void);
 	static void ReadGPIOUserInput(void);
 	static void ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs = 1);
-	static void PollGPIOUserInput1551(void);
+	static bool PollGPIOUserInput1551(void); // returns raw active-low RESET, before ignore policy
 	/// Sample reset line and GPLEV0 for buttons/rotary (no TPI input merge). Call once per emulation loop before ReadGPIOUserInput when not using ReadEmulationMode1551 every step.
 	static void PollGPIOInputs1551(void);
 	static void ConsumeRotaryDiskSteps(bool& nextDisk, bool& prevDisk);

@@ -115,6 +115,21 @@ int main(int argc, char** argv) {
     CHECK(LastContrast() == 127);
     options.SetRuntime(Setting::Contrast,0); CHECK(options.Runtime(Setting::Contrast) == 1);
     options.SetRuntime(Setting::Contrast,127); options.SetRuntime(Setting::DimLevel,10);
+    options.SetRuntime(Setting::IgnoreReset,1);
+    Menu& resetMenu = Pi1551Oled::TestMenu(); resetMenu.SetHostDirectory("/");
+    unsigned resetsBefore = resetCount;
+    Pi1551Oled::ObserveHostReset(true); now += 200000; Pi1551Oled::Service(false);
+    CHECK(resetMenu.Path() == "/1551"); CHECK(resetCount == resetsBefore);
+    resetMenu.SetHostDirectory("/");
+    Pi1551Oled::ObserveHostReset(true); Pi1551Oled::Service(false);
+    CHECK(resetMenu.Path() == "/"); // held RESET produces only one event
+    Pi1551Oled::ObserveHostReset(false); options.SetRuntime(Setting::ResetPath,0);
+    Pi1551Oled::ObserveHostReset(true); Pi1551Oled::Service(false); CHECK(resetMenu.Path() == "/");
+    Pi1551Oled::ObserveHostReset(false); options.SetRuntime(Setting::ResetPath,1);
+    Pi1551Oled::ObserveHostReset(true); Pi1551Oled::Service(true);
+    CHECK(Pi1551Oled::TransitionPending()); CHECK(resetMenu.Path() == "/");
+    Pi1551Oled::CompleteTransition(); CHECK(resetMenu.Path() == "/1551"); CHECK(resetCount == resetsBefore);
+    Pi1551Oled::ObserveHostReset(false); options.SetRuntime(Setting::IgnoreReset,0);
     { char config[] = "AutoMountImage = bad.d64\n"; options.Process(config); }
     options.SetRuntime(Setting::AutoMount,1); Pi1551Oled::HostReset(); CHECK(medium.empty());
     Enter("Menu..."); Enter("Settings"); Enter("Browser");
