@@ -137,8 +137,9 @@ cursor. Clicking another ROM switches immediately. Clicking the already
 active ROM or Back exits. Only Settings -> ROM changes ROMs; files named
 .bin/.rom or folders named roms have no special selection action in Browser.
 
-The old hold-button combinations, longpress ROM selector and inherited USB
-keyboard browser/caddy shortcuts are not the controls of this OLED UI.
+The old hold-button combinations and longpress ROM selector are not the
+controls of this OLED UI. The separate [HDMI and USB keyboard section](#hdmi-and-usb-keyboard-legacy-reference)
+preserves the legacy shortcuts and explains their current availability.
 A USB keyboard is not a substitute for the encoder menu. For desktop testing,
 run make tui: left/right rotate, Enter clicks, i is Insert, b is Back,
 r simulates computer RESET, m toggles computer MOTOR, and q quits.
@@ -318,6 +319,79 @@ saving are separate actions.
 See [the interaction specification](docs/PI1551-TUI-SPEC.md) for exact state
 transitions and [the implementation notes](docs/PI1551-OLED-IMPLEMENTATION.md)
 for native test coverage and hardware limitations.
+
+## HDMI And USB Keyboard (Legacy Reference)
+
+### Availability In The Current Pi1551 Build
+
+HDMI still displays startup information: the boot/logo screen, font/ROM
+loading, and diagnostics enabled by ShowOptions or i2cScan. ChargenFont is
+also used by HDMI text. These startup features have not been removed.
+
+The old interactive HDMI browser and its USB keyboard shortcuts are **not
+active in the current Pi1551 menu path**. The input/display routines remain
+in the source, but UpdateScreen and ServicePi1551UserInput return to the new
+menu before reaching their legacy handlers. The Pi1551 emulator initializes
+that menu regardless of whether an OLED is connected; removing LCDName or
+disconnecting the OLED does not restore the old HDMI browser.
+
+Consequently, the tables below preserve the previous interface as a legacy
+reference, not as a list of currently working shortcuts. In particular,
+Ctrl+Alt+Delete is handled by the old keyboard polling routines, not by an
+independent always-active handler. Use Menu -> Reboot Pi1551 in this version.
+Restoring interactive HDMI/USB support requires firmware integration; it is
+not an options.txt toggle. Desktop make tui controls are separate and still
+work as documented in the OLED section.
+
+### Legacy HDMI Browser Keyboard
+
+| Action in the old browser | Key |
+| --- | --- |
+| Select file/folder | Enter |
+| Add to the disk caddy | Insert or Alt+Enter |
+| Return/back | Backspace |
+| Finish the caddy and start emulation | Space |
+| Move highlight | Up / Down |
+| Page up/down | PageUp/PageDown or Left/Right |
+| First/last entry | Home / End |
+| Reboot Raspberry Pi | Left Ctrl+Left Alt+Delete |
+| Create a new disk image | Alt+N |
+| Auto-load the configured image | Alt+A |
+| Simulate host reset | Alt+R |
+| Toggle the SD read-only attribute | Alt+W |
+| Create autoswap.lst | Alt+L |
+| Select ROM slot | F1..F7 |
+| Set device ID 8..11 | F8..F11 |
+| Search by initial characters | 0..9, A..Z except R and P |
+| Toggle tape READ test signal | R |
+| Toggle tape SENSE test signal | P |
+
+In the old browser, R and P are reserved for diagnostic tape signal toggles,
+not filename search. The old caddy/PRG emulation workflow is also distinct
+from the current SOLO/LIST and read-only PRG-container behavior.
+
+### Legacy Emulation Keyboard
+
+| Action in the old emulation UI | Key |
+| --- | --- |
+| Exit emulation | Esc |
+| Previous disk | PageUp |
+| Next disk | PageDown |
+| Auto-load the configured image | Alt+A |
+| Simulate host reset | Alt+R |
+| Halt debug mode | H |
+| Step debug mode | S |
+| Run debug mode | R held |
+| Reset the emulated drive | E |
+| Direct disk swap | F1..F10, 1..0, keypad 1..0 |
+| Toggle tape READ test signal | R pressed |
+| Toggle tape SENSE test signal | P pressed |
+| Reboot Raspberry Pi | Left Ctrl+Left Alt+Delete |
+
+These mappings are retained in InputMappings::CheckKeyboardBrowseMode and
+CheckKeyboardEmulationMode. Their presence in source alone does not mean the
+current Pi1551 loop calls them. Debug and test-signal actions should not be
+confused with the ordinary Tape menu controls.
 
 ## TAP Playback
 

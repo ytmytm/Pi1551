@@ -208,6 +208,17 @@ See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
 rules, option values and examples. Run `make tui` for the keyboard simulator;
 `make help` lists build and native-test targets.
 
+### HDMI And USB Keyboard
+
+HDMI startup output (logo, font/ROM loading and configured diagnostics) remains.
+The old interactive HDMI browser and USB keyboard handlers remain in source,
+but the current Pi1551 menu path bypasses them, even without an attached OLED.
+The [HDMI/USB keyboard reference](USER-MANUAL.md#hdmi-and-usb-keyboard-legacy-reference)
+preserves their key tables and explains which features are startup-only and
+which are legacy/inactive. Disconnecting the OLED is not a compatibility-mode
+switch. The make tui keyboard simulator remains independent of USB input on
+the Raspberry Pi.
+
 ## Browser Mode, Emulation Mode, And Tape Mode
 
 Pi1551 has three practical modes:
