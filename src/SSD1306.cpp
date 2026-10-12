@@ -91,8 +91,10 @@ void SSD1306::InitHardware()
 	SendCommand(SSD1306_ENABLE_CHARGE_PUMP);	// 0x8D Enable charge pump regulator
 	SendCommand(0x14);  // external = 0x10 internal = 0x14
 
-	SendCommand(SSD1306_CMD_SET_MEMORY_ADDRESSING_MODE);  // 0x20	Set Memory Addressing Mode
-	SendCommand(0x10);	// 10 - Page Addressing Mode for SH1106 compatibility
+	if (type != LCD_1106_128x64) {
+		SendCommand(SSD1306_CMD_SET_MEMORY_ADDRESSING_MODE);
+		SendCommand(0x02); // SSD1306 page addressing; SH1106 is page-only.
+	}
 
 	Home();
 
@@ -292,8 +294,8 @@ void SSD1306::PlotMenu(const oled::Frame& text, bool cbmFont)
 				c = petscii2screen(ascii2petscii(c));
 				memcpy(raster, CBMFont + (c + 256) * 8, 8);
 			} else {
-				// Fixed 8x8 geometry even without an SD chargen file.
-				for (unsigned y = 0; y < 8; ++y) raster[y] = avpriv_vga16_font[c * 16 + y * 2];
+				// Native 8x8 glyphs, not a vertically decimated 8x16 font.
+				memcpy(raster, avpriv_cga_font + c * 8, 8);
 			}
 			transpose8(columns, raster, text.inverse[row]);
 			memcpy(frame + row * 128 + col * 8, columns, 8);
