@@ -59,9 +59,20 @@ static bool ReadText(const char* path, std::string& text) {
     if (f_close(&f) != FR_OK) ok = false;
     return ok;
 }
+static std::string SDPath(std::string path) {
+    // FatFS getcwd returns SD:/... or 0:/..., panel paths use /... .
+    if (path.size() >= 3 && !strncasecmp(path.c_str(),"SD:",3)) path.erase(0,3);
+    else if (path.size() >= 2 && path.compare(0,2,"0:") == 0) path.erase(0,2);
+    if (path.empty()) return "/";
+    size_t colon = path.find(':');
+    size_t rootLength = colon == std::string::npos ? 1 : colon + 2;
+    while (path.size() > rootLength && path.back() == '/') path.pop_back();
+    return path;
+}
 static std::string Absolute(const std::string& name, const std::string& base) {
-    if (!name.empty() && (name[0] == '/' || name.find(':') != std::string::npos)) return name;
-    return base + (base == "/" ? "" : "/") + name;
+    std::string n = SDPath(name), b = SDPath(base);
+    if (!n.empty() && (n[0] == '/' || n.find(':') != std::string::npos)) return n;
+    return b + (b == "/" ? "" : "/") + n;
 }
 static bool ValidMedia(const std::string& path) {
     FILINFO f; if (!oled::IsMedia(path) || f_stat(path.c_str(), &f) != FR_OK || (f.fattrib & AM_DIR)) return false;
@@ -312,24 +323,51 @@ void Draw() {
 }
 void HostReset() {
     if (!menu) return;
+    realTime = false; // host callbacks run after returning to the kernel dispatcher
     menu->HostReset();
     if (!backend.Get(oled::Setting::IgnoreReset) && backend.Get(oled::Setting::AutoMount) && backend.AutoMountAvailable())
         HostSelection(Absolute(options.GetAutoMountImageName(), DEFAULT_BROWSE_DIR).c_str());
 }
 void HostSelection(const char* name) {
     if (!menu || !name || !name[0]) return;
+    realTime = false;
     char cwd[256]; if (f_getcwd(cwd, sizeof(cwd)) != FR_OK) return;
-    std::string p = Absolute(name, cwd); menu->OpenMedia(oled::Entry(p, oled::Basename(p)));
+    std::string p = Absolute(name, cwd); menu->OpenHostMedia(oled::Entry(p, oled::Basename(p)));
 }
-void HostDirectory() {
+bool HostDirectory() {
+    if (!menu) return false;
+    realTime = false;
+    char cwd[256]; if (f_getcwd(cwd, sizeof(cwd)) != FR_OK) return false;
+    if (menu->ShowHostBrowser(SDPath(cwd))) return true;
+    // CD changed cwd before dispatch. Failed flush must keep the prior source.
+    f_chdir(menu->Path().c_str());
+    return false;
+}
+bool HostParent() {
+    if (!menu) return false;
+    realTime = false;
+    if (!menu->Mounted().empty()) return menu->ShowHostBrowser(oled::Parent(menu->Mounted()));
+    char cwd[256]; if (f_getcwd(cwd, sizeof(cwd)) != FR_OK) return false;
+    return menu->ShowHostBrowser(oled::Parent(SDPath(cwd)));
+}
+bool HostRoot() { realTime = false; return menu && menu->ShowHostBrowser(DEFAULT_BROWSE_DIR); }
+void HostRefresh(const char* containerPath) {
     if (!menu) return;
-    char cwd[256]; if (f_getcwd(cwd, sizeof(cwd)) != FR_OK) return;
-    // The kernel already changed cwd for a host CD. Reflect it without re-entering containers.
-    if (!menu->Mounted().empty()) menu->ShowHostBrowser(cwd);
-    else if (menu->CurrentView() == oled::View::Browser) {
-        // Updating the source through the same state-machine operation.
-        menu->SetHostDirectory(cwd);
+    realTime = false;
+    if (containerPath && containerPath[0]) {
+        if (strcasecmp(menu->Mounted().c_str(), SDPath(containerPath).c_str())) HostSelection(containerPath);
+        return;
     }
+    if (!menu->Mounted().empty()) {
+        // CD out of a container has removed the protocol mount. Preserve its
+        // containing folder, rather than accidentally climbing one level more.
+        std::string directory = oled::Parent(menu->Mounted());
+        menu->ShowHostBrowser(directory);
+        return;
+    }
+    char cwd[256]; if (f_getcwd(cwd, sizeof(cwd)) != FR_OK) return;
+    if (menu->Path() != SDPath(cwd)) menu->ShowHostBrowser(SDPath(cwd));
+    else menu->Refresh(); // directory listing changed, not the selected UI view
 }
 std::string MountedPath() { return menu ? menu->Mounted() : ""; }
 #ifdef PI1551_NATIVE_TEST

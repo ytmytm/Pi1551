@@ -127,6 +127,19 @@ static void solo_all_types() {
         m.Input(Key::Back); m.Input(Key::Back); m.Input(Key::Back); CHECK(m.CurrentView() == View::Browser);
     }
 }
+static void host_navigation_replaces_stale_panel_history() {
+    KernelStub k; Menu m(k); Enter(m,"[disks]");
+    k.status.tape = "keep.tap"; k.status.play = true;
+    CHECK(m.OpenHostMedia(Image("d64"))); Device(m); Enter(m,"Settings"); Enter(m,"Drive");
+    CHECK(m.ShowHostBrowser("/1551/tapes")); CHECK(m.CurrentView() == View::Browser);
+    CHECK(m.Path() == k.cwd); CHECK(m.Mounted().empty()); CHECK(k.medium.empty()); CHECK(m.List().empty());
+    Press(m,Key::Back); CHECK(m.Path() == "/1551"); CHECK(m.CurrentView() == View::Browser);
+    Press(m,Key::Back,2); CHECK(m.CurrentView() == View::Browser); CHECK(k.medium.empty());
+    CHECK(k.status.tape == "keep.tap"); CHECK(k.status.play);
+    CHECK(m.OpenHostMedia(Image("d81"))); CHECK(m.Path() == "/1551/disks"); CHECK(m.Cursor() == 0);
+    k.failUnmount = true; CHECK(!m.ShowHostBrowser("/1551")); CHECK(m.Mounted() == k.medium);
+    k.failUnmount = false; CHECK(m.ShowHostBrowser("/1551")); CHECK(m.Mounted().empty());
+}
 static void mixed_list_toggle_and_restore() {
     KernelStub k; Menu m(k); Enter(m,"[disks]");
     Choose(m,"c.d71"); m.Input(Key::Insert);
@@ -323,7 +336,7 @@ static void canonical_setting_formats() {
     CHECK(ParseRuntimeSettings("oledScroll = 1\noledFont = 1",parsed)); CHECK(parsed.empty());
 }
 int main() {
-    try { folder_header_and_reset_policies(); new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS folder header, independent reset policies and runtime settings\n"; }
+    try { host_navigation_replaces_stale_panel_history(); folder_header_and_reset_policies(); new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS host/panel histories, folder header, reset policies and runtime settings\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }

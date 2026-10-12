@@ -69,10 +69,11 @@ public:
     Frame Render(uint32_t milliseconds);
     void Refresh(); // host changes to SD directory
     bool OpenMedia(const Entry& entry); // host selection and automount use same rules
+    bool OpenHostMedia(const Entry& entry);
     void HostReset();
     void ResetBrowserPath();
     void SetHostDirectory(const std::string& next) { ChangeDirectory(next); }
-    void ShowHostBrowser(const std::string& next) { if (Browse()) ChangeDirectory(next); }
+    bool ShowHostBrowser(const std::string& next);
     View CurrentView() const { return view; }
     unsigned Cursor() const { return cursor; }
     const std::vector<Entry>& List() const { return flip; }

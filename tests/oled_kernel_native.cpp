@@ -49,6 +49,7 @@ unsigned Pi1551NativeClock() { return now; }
 extern void NativeFatFSRoot(const std::string& root);
 extern void NativeFatFSFail(const std::string& operation);
 extern void NativeFatFSFailNth(const std::string& operation, unsigned n);
+extern void NativeFatFSCwdPrefix(const std::string& prefix);
 extern "C" void RPI_SetGpioInputPullUp(rpi_gpio_pin_t) {}
 extern "C" void RPI_SetGpioOutput(rpi_gpio_pin_t) {}
 extern "C" void RPI_SetGpioHi(rpi_gpio_pin_t p) { pins[p] = true; }
@@ -94,6 +95,54 @@ static void Choose(const std::string& text) {
     throw std::runtime_error("No row " + text);
 }
 static void Enter(const std::string& text) { Choose(text); Press(Key::Enter); }
+static int MixedHostNavigation() {
+    using namespace Pi1551Oled;
+    Menu& m = TestMenu();
+    CHECK(f_chdir("/1551") == FR_OK); CHECK(HostDirectory());
+    Enter("Menu..."); Enter("Browser");
+    for (const std::string& prefix : {std::string("SD:"),std::string("0:"),std::string("")}) {
+        NativeFatFSCwdPrefix(prefix);
+        CHECK(f_chdir("/1551/sub/deep") == FR_OK); CHECK(HostDirectory());
+        CHECK(m.Path() == "/1551/sub/deep"); CHECK(m.CurrentView() == View::Browser);
+        CHECK(HostParent()); CHECK(m.Path() == "/1551/sub");
+        CHECK(HostParent()); CHECK(m.Path() == "/1551");
+        HostSelection("a.d64"); CHECK(m.Mounted() == "/1551/a.d64");
+        CHECK(m.CurrentView() == View::Fliplist); CHECK(m.Path() == "/1551");
+        Service(true); // reproduce the stale realTime flag after Emulate1551 returns
+        CHECK(HostParent()); CHECK(m.Path() == "/1551"); CHECK(m.Mounted().empty());
+        CHECK(medium.empty()); CHECK(m.List().empty()); CHECK(!TransitionPending());
+        CHECK(HostParent()); CHECK(m.Path() == "/");
+        CHECK(HostParent()); CHECK(m.Path() == "/");
+        CHECK(HostRoot()); CHECK(m.Path() == "/1551");
+    }
+    NativeFatFSCwdPrefix("SD:");
+    for (const char* name : {"a.d81","a.prg","a.d64"}) {
+        HostSelection(name); CHECK(!m.Mounted().empty());
+        CHECK(HostParent()); CHECK(m.Mounted().empty()); CHECK(medium.empty());
+        CHECK(m.Path() == "/1551"); CHECK(m.List().empty());
+    }
+    HostSelection("list.lst"); CHECK(m.ListMode()); CHECK(m.List().size() == 3);
+    HostRefresh("SD:/1551/a.d81"); CHECK(m.Mounted() == "/1551/a.d81");
+    CHECK(m.List().size() == 3); CHECK(m.CurrentView() == View::Fliplist);
+    Enter("Menu..."); Enter("Settings"); Enter("Display");
+    HostRefresh("0:/1551/a.d81"); CHECK(m.CurrentView() == View::Display); // no duplicate/remount
+    HostRefresh("SD:/1551/A.D81"); CHECK(m.CurrentView() == View::Display);
+    CHECK(f_chdir("/1551/sub/deep") == FR_OK); CHECK(HostDirectory());
+    CHECK(m.CurrentView() == View::Browser); CHECK(medium.empty()); CHECK(m.List().size() == 3);
+    Press(Key::Back); CHECK(m.Path() == "/1551/sub"); // no stale Display/Fliplist return
+    HostSelection("SD:/1551/a.d81"); CHECK(m.Path() == "/1551");
+    failUnmount = true; CHECK(!HostParent()); CHECK(m.Mounted() == medium); CHECK(!medium.empty());
+    failUnmount = false; m.Render(now/1000); Press(Key::Back); CHECK(HostParent());
+    CHECK(m.Path() == "/1551"); CHECK(m.Mounted().empty()); CHECK(m.List().size() == 3);
+    CHECK(g_tapePlayer->IsLoaded()); // CD never ejects the independent tape
+    Enter("Menu..."); Enter("Browser");
+    CHECK(m.List().empty());
+    Enter("Menu..."); Enter("Settings"); Enter("Drive"); HostRefresh();
+    CHECK(m.CurrentView() == View::Drive); // a plain SD refresh does not steal menu focus
+    NativeFatFSCwdPrefix("");
+    std::cout << "PASS mixed host/panel navigation: SD parents, media exits, aliases, histories and failures\n";
+    return 0;
+}
 static std::string Read(const std::string& path) { std::ifstream f(path); std::ostringstream s; s << f.rdbuf(); return s.str(); }
 int main(int argc, char** argv) {
     CHECK(argc == 2); std::string root = argv[1]; NativeFatFSRoot(root);
@@ -218,6 +267,7 @@ int main(int argc, char** argv) {
     Enter("Load settings"); CHECK(options.GetDeviceID() == 9);
     Choose("ROM"); Press(Key::Back); Enter("Reboot Pi1551"); CHECK(rebootCount == 0);
     Press(Key::Enter); CHECK(rebootCount == 0); Enter("Reboot Pi1551"); Press(Key::Right); Press(Key::Enter); CHECK(rebootCount == 1);
+    CHECK(MixedHostNavigation() == 0);
     Pi1551Oled::TestShutdown(); delete g_tapePlayer; g_tapePlayer = 0;
     screenLCD = 0;
     std::string templateText = Read("sdcard/options.txt"); CHECK(!templateText.empty());

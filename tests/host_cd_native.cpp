@@ -1,0 +1,51 @@
+// Execute the real shared CD parser against a native filesystem and image layer.
+#include "commands_base.h"
+#include "cbm_diskimage.h"
+#include <string>
+#include <cstdio>
+#include <cstring>
+unsigned versionMajor = 1, versionMinor = 26;
+int numberOfUSBMassStorageDevices = 0;
+void Reboot_Pi() {}
+void SwitchDrive(const char*) {}
+void DisplayMessage(int,int,bool,const char*,u32,u32) {}
+void FileBrowser::RefreshDevicesEntries(std::vector<BrowsableList::Entry>&,bool) {}
+extern "C" FRESULT f_getfree(const TCHAR*,DWORD*,FATFS**) { return FR_DISK_ERR; }
+extern void NativeFatFSRoot(const std::string& root);
+struct CDProbe : Commands_Base {
+    void SimulateIECBegin() override {}
+    UpdateAction SimulateIECUpdate() override { return updateAction; }
+    bool WriteSerialPortByte(u8,bool) override { return true; }
+    void ReadBrowseMode() override {}
+    bool IsReset() override { return false; }
+    void Listen() override {}
+    void Talk() override {}
+    void LoadFile() override {}
+    void SaveFile() override {}
+    void LoadDirectory() override {}
+    UpdateAction Change(const char* path) {
+        char text[256]; strcpy(text,path); updateAction = NONE; CD(0,text); return updateAction;
+    }
+};
+#define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL host CD:%d %s\n",__LINE__,#x); return 1; } } while(0)
+int main(int argc,char** argv) {
+    CHECK(argc == 2); NativeFatFSRoot(argv[1]); CHECK(f_chdir("/1551") == FR_OK);
+    CDProbe command{};
+    CHECK(command.Change("..") == Commands_Base::POP_DIR);
+    CHECK(command.Change("_") == Commands_Base::POP_DIR);
+    CHECK(command.Change("/") == Commands_Base::DIR_PUSHED);
+    char cwd[256]; CHECK(f_getcwd(cwd,sizeof(cwd)) == FR_OK); CHECK(std::string(cwd) == "/");
+    CHECK(command.Change("//") == Commands_Base::DIR_PUSHED);
+    CHECK(f_getcwd(cwd,sizeof(cwd)) == FR_OK); CHECK(std::string(cwd) == "/1551");
+    CHECK(command.Change("A.D81") == Commands_Base::REFRESH); CHECK(cbm_image_is_mounted());
+    CHECK(command.Change("..") == Commands_Base::POP_DIR);
+    CHECK(cbm_image_is_mounted()); // retain the medium until kernel/UI flushes and commits exit
+    CHECK(command.Change("_") == Commands_Base::POP_DIR); CHECK(cbm_image_is_mounted());
+    CHECK(command.Change("SUB/") == Commands_Base::DIR_PUSHED); CHECK(cbm_image_is_mounted());
+    cbm_image_unmount();
+    CHECK(f_chdir("/1551") == FR_OK);
+    CHECK(command.Change("A.D64") == Commands_Base::NONE);
+    CHECK(std::string(command.GetNameOfImageSelected()) == "a.d64");
+    CHECK(std::string(command.GetMountedDiskImagePath()) == "/1551/a.d64");
+    puts("PASS production CD parser: parent aliases, SD roots, deferred container exit");
+}

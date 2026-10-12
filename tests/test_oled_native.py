@@ -56,6 +56,7 @@ def run():
                                "-o", str(build / "bridge")], cwd=ROOT, check=True)
         card = build / "sd"
         (card / "1551").mkdir(parents=True)
+        (card / "1551" / "sub" / "deep").mkdir(parents=True)
         (card / "1551" / "a.d64").write_bytes(bytes(174848))
         (card / "1551" / "bad.d64").write_bytes(b"broken")
         (card / "1551" / "a.d81").write_bytes(bytes(819200))
@@ -64,6 +65,12 @@ def run():
         (card / "1551" / "list.lst").write_text("a.d64\na.d81\na.prg\na.d64\n")
         (card / "options.txt").write_text("deviceID = 8\nROM2 = do-not-touch.bin\nunknown = keep\n")
         subprocess.run([str(build / "bridge"), str(card)], cwd=ROOT, check=True)
+        subprocess.run(flags + ["-O0", "-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-reorder",
+                               "-Wno-type-limits", "-Wno-unused-parameter", "-fno-sanitize=vptr",
+                               "tests/host_cd_native.cpp", "tests/fatfs_posix.cpp", "src/commands_base.cpp",
+                               "src/cbm_diskimage.cpp", "src/tcbm2sd_protocol.cpp", "src/DiskImage.cpp",
+                               "-Wl,--gc-sections", "-o", str(build / "host-cd")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "host-cd"), str(card)], cwd=ROOT, check=True)
 
 if __name__ == "__main__":
     run()

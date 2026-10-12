@@ -1515,6 +1515,10 @@ void Commands_Base::CD(int partition, char* filename)
 	DEBUG_LOG("CD %s\r\n", filenameEdited);
 	if (filenameEdited[0] == '_' && len == 1)
 	{
+#if defined(PI1551SUPPORT)
+		// The kernel/UI owns flushing and image-vs-directory parent semantics.
+		updateAction = POP_DIR;
+#else
 		if (cbm_image_is_mounted())
 		{
 			DeactivateCbmImageMode();
@@ -1522,9 +1526,13 @@ void Commands_Base::CD(int partition, char* filename)
 		}
 		else
 			updateAction = POP_DIR;
+#endif
 	}
 	else if (filenameEdited[0] == '.' && filenameEdited[1] == '.' && len == 2)
 	{
+#if defined(PI1551SUPPORT)
+		updateAction = POP_DIR;
+#else
 		if (cbm_image_is_mounted())
 		{
 			DeactivateCbmImageMode();
@@ -1532,6 +1540,13 @@ void Commands_Base::CD(int partition, char* filename)
 		}
 		else
 			updateAction = POP_DIR;
+#endif
+	}
+	else if (len && filenameEdited[len - 1] == '\\')
+	{
+		// CD/ and CD// name directories, not an empty filename pattern.
+		if (f_chdir(filenameEdited) == FR_OK) updateAction = DIR_PUSHED;
+		else Error(ERROR_62_FILE_NOT_FOUND);
 	}
 	else
 	{
@@ -1561,7 +1576,7 @@ void Commands_Base::CD(int partition, char* filename)
 		}
 		else
 		{
-			DIR dir;
+			DIR dir = {};
 			FILINFO filInfo;
 
 			char path[256] = { 0 };
@@ -1608,8 +1623,9 @@ void Commands_Base::CD(int partition, char* filename)
 									}
 									else
 									{
-										if (cbm_image_is_mounted())
-											DeactivateCbmImageMode();
+#if !defined(PI1551SUPPORT)
+										if (cbm_image_is_mounted()) DeactivateCbmImageMode();
+#endif
 										updateAction = DIR_PUSHED;
 									}
 								}
@@ -1641,8 +1657,9 @@ void Commands_Base::CD(int partition, char* filename)
 							Error(ERROR_62_FILE_NOT_FOUND);
 						else
 						{
-							if (cbm_image_is_mounted())
-								DeactivateCbmImageMode();
+#if !defined(PI1551SUPPORT)
+							if (cbm_image_is_mounted()) DeactivateCbmImageMode();
+#endif
 							updateAction = DIR_PUSHED;
 						}
 					}
@@ -1652,6 +1669,7 @@ void Commands_Base::CD(int partition, char* filename)
 					Error(ERROR_62_FILE_NOT_FOUND);
 				}
 			}
+			f_closedir(&dir);
 		}
 	}
 }

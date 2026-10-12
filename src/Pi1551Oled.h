@@ -13,7 +13,10 @@ bool InputPending();
 void CompleteTransition(); // core 1, after leaving the real-time loop
 void HostReset();
 void HostSelection(const char* path);
-void HostDirectory();
+bool HostDirectory(); // adopt cwd already changed by the host
+bool HostParent(); // mounted image -> containing SD folder; SD folder -> parent
+bool HostRoot();
+void HostRefresh(const char* containerPath = 0);
 std::string MountedPath();
 #ifdef PI1551_NATIVE_TEST
 void TestInput(oled::Key key);

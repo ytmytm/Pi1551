@@ -7,7 +7,11 @@
 namespace oled {
 static std::string Number(unsigned n) { char b[24]; snprintf(b, sizeof(b), "%u", n); return b; }
 std::string Basename(const std::string& p) { return p.substr(p.find_last_of('/') + 1); }
-std::string Parent(const std::string& p) { size_t i = p.find_last_of('/'); return i == 0 || i == std::string::npos ? "/" : p.substr(0, i); }
+std::string Parent(const std::string& p) {
+    size_t i = p.find_last_of('/'), colon = p.find(':');
+    if (colon != std::string::npos && i == colon + 1) return p.substr(0,i+1);
+    return i == 0 || i == std::string::npos ? "/" : p.substr(0,i);
+}
 std::string Extension(const std::string& p) {
     size_t i = p.find_last_of('.');
     std::string s = i == std::string::npos ? "" : p.substr(i + 1);
@@ -59,6 +63,17 @@ bool Menu::Browse(bool fresh, bool tape) {
         for (unsigned i = 0; i < files.size(); ++i) if (files[i].path == lastMounted) cursor = i + 1;
     Clamp(); scrollReset = true; return true;
 }
+bool Menu::ShowHostBrowser(const std::string& next) {
+    // Host navigation is authoritative. Do not take the panel's Browse()
+    // detour through lastMounted, or preserve a stale submenu return target.
+    if (!backend.Unmount()) { message = "Write failed"; return false; }
+    message.clear();
+    mounted.clear(); lastMounted.clear();
+    if (!listMode) flip.clear();
+    history.clear(); hasBrowserReturn = false; tapeFilter = false; editing = false;
+    view = View::Browser; cursor = 1; offset = 0; scrollReset = true;
+    return ChangeDirectory(next);
+}
 bool Menu::Activate(const Entry& entry) {
     if (!backend.Mount(entry.path)) { message = "Mount failed"; return false; }
     mounted = entry.path; lastMounted = mounted; return true;
@@ -90,6 +105,15 @@ bool Menu::OpenMedia(const Entry& e) {
     } else return false;
     view = View::Fliplist; cursor = 0; offset = 0; tapeFilter = false;
     history.clear(); hasBrowserReturn = false; scrollReset = true; return true;
+}
+bool Menu::OpenHostMedia(const Entry& e) {
+    if (!OpenMedia(e)) return false;
+    message.clear();
+    if (Extension(e.path) == "TAP") return true;
+    unsigned savedCursor = cursor, savedOffset = offset;
+    bool ok = ChangeDirectory(Parent(e.path));
+    cursor = savedCursor; offset = savedOffset; Clamp();
+    return ok;
 }
 void Menu::Toggle(const Entry& e) {
     listMode = true;

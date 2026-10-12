@@ -91,6 +91,7 @@ public:
 
 	// Allow traps to request a directory pop without exposing CD()
 	void RequestPopDir();
+	void ClearPendingPopDir() { pendingPopDir = false; }
 
 protected:
 	bool WriteSerialPortByte(u8 data, bool eoi) override;

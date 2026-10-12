@@ -3122,6 +3122,16 @@ void emulator()
                 Pi1551Oled::HostReset();
                 if (emulating == EMULATING_1551) g_oledResumeCpu = true;
             }
+            else if (reason == EXIT_CD)
+            {
+                // Consume the ROM-trapped parent command before SimulateIECBegin
+                // clears pendingPopDir. A failed flush keeps the drive mounted.
+                m_TCBM_Commands.ClearPendingPopDir();
+                if (!Pi1551Oled::HostParent() && diskCaddy.GetCurrentDisk()) {
+                    emulating = EMULATING_1551;
+                    g_oledResumeCpu = true;
+                }
+            }
             else
             {
                 // Firmware trap handoff may have changed the physical mode.
@@ -3155,15 +3165,18 @@ void emulator()
                 m_TCBM_Commands.ClearPendingImageSelection();
                 break;
             case TCBM_Commands::DIR_PUSHED:
-            case TCBM_Commands::POP_DIR:
-            case TCBM_Commands::POP_TO_ROOT:
-            case TCBM_Commands::REFRESH:
-                if (m_TCBM_Commands.IsCbmImageModeActive()) {
-                    const char* path = m_TCBM_Commands.GetMountedDiskImagePath();
-                    if (path[0] && Pi1551Oled::MountedPath() != path) Pi1551Oled::HostSelection(path);
-                    break;
-                }
+            case TCBM_Commands::DEVICE_SWITCHED:
                 Pi1551Oled::HostDirectory();
+                break;
+            case TCBM_Commands::POP_DIR:
+                Pi1551Oled::HostParent();
+                break;
+            case TCBM_Commands::POP_TO_ROOT:
+                Pi1551Oled::HostRoot();
+                break;
+            case TCBM_Commands::REFRESH:
+                Pi1551Oled::HostRefresh(m_TCBM_Commands.IsCbmImageModeActive()
+                    ? m_TCBM_Commands.GetMountedDiskImagePath() : 0);
                 break;
             case TCBM_Commands::DEVICEID_CHANGED:
                 options.SetRuntime(oled::Setting::Device, m_TCBM_Commands.GetDeviceId());
