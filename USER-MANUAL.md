@@ -15,25 +15,24 @@ TCBM register addresses, including games such as Corruption and Fish.
 
 Browser mode is active after boot and whenever no disk image is being emulated.
 It exposes the SD card as a file-level device over TCBM and also provides the
-HDMI/OLED file picker.
+OLED media picker. The current menu targets the OLED, not the legacy HDMI UI.
 
 Use browser mode to:
 
 - Load PRG files directly from SD.
 - Browse folders on the SD card.
-- Select a D64 for 1551 emulation.
+- Select a D64 or G64 for 1551 emulation.
 - Open D71, D81, D80, or D82 images as read-only file containers.
 - Load a TAP file into the tape player.
 - Create new D64 or G64 images from the UI.
 
 ### 1551 Emulation Mode
 
-Selecting a D64 starts cycle-exact Commodore 1551 emulation. The emulated 1551
+Selecting a D64 or G64 starts cycle-exact Commodore 1551 emulation. The emulated 1551
 has its own 6502, 6523 TPI, DOS ROM, drive mechanics, and disk image state.
 
-D64 is the primary supported emulation format. G64/NIB/NBZ/D71/D81 support is
-inherited from Pi1541 disk image code in places, but Pi1551's advertised
-cycle-exact 1551 path is D64.
+D64 and G64 are the emulation formats offered by the current OLED menu.
+D71/D80/D81/D82 and PRG use file-level container access, not drive emulation.
 
 ### Tape Player
 
@@ -45,8 +44,8 @@ Supported TAP files must use the Plus/4/C16 TAP signature `C16-TAPE-RAW`.
 Versions 0, 1, and 2 are accepted. PAL/NTSC timing is taken from the TAP
 header.
 
-The tape status appears on the OLED when a tape is loaded. The display shows a
-three-digit counter, PLAY state, motor state, and percentage.
+The tape status is always visible on the OLED. It shows a three-digit counter,
+PLAY state, motor state and percentage, or dashes when no TAP is loaded.
 
 ## File And Image Behavior
 
@@ -67,35 +66,21 @@ Directory listings (`LOAD "$",8`) mark entries as follows:
 | `DIR` | Subfolder, or a mountable disk image (`.d64`, `.d71`, `.d81`, `.d80`, `.d82`, any case) |
 | `PRG` | Program file or other non-directory file on SD (including `.prg`, `.tap`, extensionless files such as `boot.t2sd`, and so on) |
 
-### PRG Files And The Disk Caddy
+### PRG Files And Virtual Disks
 
-Pi1551 inherits a Pi1541 feature for **1551 emulation mode**: a standalone `.prg`
-can be turned into a **temporary one-file D64 in RAM** and mounted like a normal
-disk image. The original file on SD is not modified.
-
-This is useful when software must run through real 1551 DOS and drive timing
-instead of browser-mode file transfer. It is **not** used for a normal
-`LOAD "program",8` from the Plus/4.
-
-Ways to mount a `.prg` for emulation:
+Enter on a standalone `.prg` in the OLED browser wraps it in a temporary
+one-file D64 in RAM and mounts it as a read-only container. The original SD
+file is unchanged and the drive CPU does not enter emulation.
 
 | Action | Result |
 | --- | --- |
-| **Enter** on a highlighted `.prg` in the Pi browser | Builds the virtual D64, loads the caddy, and enters 1551 emulation immediately. |
-| **Insert** on a highlighted `.prg` | Adds it to the caddy queue only. Press **Space** (or finish the caddy from the UI flow) to mount and start emulation. |
-| Host **CD**/**OPEN** selecting a `.prg` for mount | Same virtual-D64 path as Enter when the firmware treats the file as mountable media. |
+| Enter on a highlighted `.prg` | Mounts its virtual disk and opens Fliplist view, without emulation. |
+| Insert on a highlighted `.prg` | Adds/removes it from the mixed-format fliplist; does not mount it. |
+| Normal Commodore `LOAD "program",8` in SD Browser | Reads the original PRG directly, without creating or mounting a disk. |
 
-Inside emulation, the program appears on a synthetic disk (typically as the
-only file). Use normal 1551 `LOAD`/`RUN` against that emulated disk, not against
-the SD path.
-
-To run a `.prg` without entering emulation, load it from the Commodore in
-browser mode as above, or stay in browser mode on the Pi side and do not press
-Enter on the `.prg`.
-
-The same caddy mechanism also accepts `.d64`, `.g64`, `.t64`, and related
-Pi1541 image types. `.t64` tape images are converted to a synthetic D64 in the
-same spirit as `.prg` files.
+Once mounted, the program is the only file on the virtual disk exposed to
+the computer. Use normal `LOAD`/`RUN`. T64/NIB/NBZ are not offered as mountable
+media by this OLED menu merely because inherited code recognizes them.
 
 ### D64 Images
 
@@ -112,131 +97,227 @@ emulate those drive mechanisms as 1551 hardware.
 
 ### LST Files
 
-LST files can be used as disk-swap lists. The browser can also create
-`autoswap.lst` from selected images.
+Enter on a nonempty `.lst` loads its fliplist and mounts the first valid
+entry. Lines name D64/G64/D71/D80/D81/D82/PRG media, relative to the LST file's
+folder or by absolute SD path. The OLED menu does not write or edit LST files.
 
-## Physical Buttons
+## OLED Menu And Controls
 
-The default logical button order is:
+The current front-panel UI targets 128x64 SSD1306/SH1106 displays: eight rows
+of 16 characters. The first two rows remain status rows; the next six are
+menu/list content. A selectable Menu... row is always available in Browser
+and Fliplist. There is no hidden longpress menu or longpress ROM selector.
 
-| Logical button | Default number | Typical Pi1551 hat function |
+### Encoder And Buttons
+
+Enable the encoder at startup with RotaryEncoderEnable = 1. Fixed hat wiring:
+
+| Signal | GPIO | Hat switch |
 | --- | ---: | --- |
-| Enter | 1 | Select / exit emulation |
-| Up | 2 | Move up / previous disk |
-| Down | 3 | Move down / next disk |
-| Back | 4 | Go back / exit emulation |
-| Insert | 5 | Add/select helper |
+| A / CLK | 17 | SW3 |
+| B / DT | 22 | SW2 |
+| Pushbutton | 27 | SW1 |
+| Back | 4 | SW4 |
+| Insert | 5 | SW5 |
 
-The firmware stores its built-in button numbers as one-based values, then
-converts them internally to zero-based GPIO button indexes.
-
-Button 1 (`Enter`) is also involved in ROM switching. With plain buttons and
-no rotary encoder, hold `Enter` and press another button to select ROM slots
-1-4 as shown below. With the rotary encoder enabled, hold the rotary
-pushbutton for about two seconds to open the ROM selector, release it, rotate
-to choose a ROM, then press and release to apply.
-
-### Browser Mode Buttons
-
-| Action | Button |
+| Control | Action |
 | --- | --- |
-| Move highlight up | Up |
-| Move highlight down | Down |
-| Select file, enter folder, or mount image | Enter |
-| Go to parent folder | Back |
-| Add highlighted disk image or `.prg` to the disk caddy (queue only) | Insert |
-| Set device ID 8 | Hold Insert, press Enter |
-| Set device ID 9 | Hold Insert, press Up |
-| Set device ID 10 | Hold Insert, press Down |
-| Select ROM 1 | Hold Enter, press Up |
-| Select ROM 2 | Hold Enter, press Down |
-| Select ROM 3 | Hold Enter, press Back |
-| Select ROM 4 | Hold Enter, press Insert |
+| Rotate left/right | Move highlight; in Fliplist, highlighting an image mounts it immediately. |
+| Encoder click (Enter) | Select an item, toggle/cycle a setting, enter a folder, or mount media. |
+| Insert in Browser | Add/remove the highlighted supported image or PRG from LIST; entering a folder does not add it. |
+| Insert in Fliplist | Enter Browser in LIST mode, retaining entries and unmounting the image so you can add more media. |
+| Back in a submenu | Return to its parent, like selecting the first item, .. . |
+| Back in Browser | Go to the parent SD folder; at SD root it can restore the saved caller/Fliplist. |
+| Enter on a Fliplist image | Unmount and return to its containing SD folder, never inside the image. |
+| Back in Fliplist | Unmount and enter Browser, retaining LIST but clearing a temporary SOLO image. |
 
-When the rotary encoder is enabled, ROM switching is handled by the rotary ROM
-selector instead of the hold-Enter button combinations.
+Each submenu starts with ..; entry initially highlights the next item.
+Inverted text is the cursor; the ROM triangle marks the active ROM, not the
+cursor. Clicking another ROM switches immediately. Clicking the already
+active ROM or Back exits. Only Settings -> ROM changes ROMs; files named
+.bin/.rom or folders named roms have no special selection action in Browser.
 
-### Emulation Mode Buttons
+The old hold-button combinations, longpress ROM selector and inherited USB
+keyboard browser/caddy shortcuts are not the controls of this OLED UI.
+A USB keyboard is not a substitute for the encoder menu. For desktop testing,
+run make tui: left/right rotate, Enter clicks, i is Insert, b is Back,
+r simulates computer RESET, m toggles computer MOTOR, and q quits.
 
-| Action | Button |
-| --- | --- |
-| Exit emulation and return to browser | Enter or Back |
-| Next disk in caddy/LST | Up |
-| Previous disk in caddy/LST | Down |
+### Complete Menu Tree
 
-### Rotary Encoder
+Values shown below are choices, not extra menu levels. A submenu's .. always
+returns to its parent. Status entries and the loaded TAP filename are informational.
 
-Enable with:
+~~~text
+Browser / Fliplist
+└─ Menu...                         (LIST and count appear when applicable)
+   ├─ ..
+   ├─ Clear list                   (only when there are entries)
+   ├─ Browser                      (clear list and unmount)
+   ├─ Tape
+   │  ├─ ..
+   │  ├─ 1:<loaded TAP filename>    (or just 1: when empty; scrolls)
+   │  ├─ Load TAP...
+   │  ├─ Eject TAP
+   │  ├─ Rewind
+   │  └─ Go to counter
+   │     ├─ ..
+   │     └─ TARGET 000..999
+   ├─ Disk
+   │  ├─ ..
+   │  ├─ WProt ON/OFF
+   │  ├─ Write image
+   │  ├─ New image
+   │  │  ├─ ..
+   │  │  ├─ Type D64/G64
+   │  │  └─ Create image
+   │  └─ Reset drive
+   ├─ Settings
+   │  ├─ ..
+   │  ├─ ROM
+   │  │  ├─ ..
+   │  │  └─ Configured ROM1..ROM7 filenames, active ROM marked by triangle
+   │  ├─ Drive
+   │  │  ├─ ..
+   │  │  ├─ Device number 8/9
+   │  │  ├─ Idle trap ON/OFF
+   │  │  ├─ RAMBOard ON/OFF
+   │  │  ├─ Skip spinup ON/OFF
+   │  │  └─ Reset REACT/IGNORE
+   │  ├─ Tape
+   │  │  ├─ ..
+   │  │  └─ Motor ON ALWAYS/COMP.
+   │  ├─ Browser
+   │  │  ├─ ..
+   │  │  ├─ Auto mount ON/OFF        (valid AutoMountImage required)
+   │  │  ├─ Reset path ON/OFF
+   │  │  ├─ Lowercase ON/OFF
+   │  │  └─ SD2IEC ON/OFF
+   │  ├─ Display
+   │  │  ├─ ..
+   │  │  ├─ Temp ON/OFF
+   │  │  ├─ Contrast 16,32,...,240,255
+   │  │  ├─ Dimming ON/OFF
+   │  │  ├─ Dim time OFF/5/10/30/60/120/300s
+   │  │  ├─ Dim level 0,16,32,...,240,255
+   │  │  ├─ Orient normal/flip
+   │  │  ├─ Font ASCII/C64
+   │  │  └─ Scroll 0.05/0.10/0.20/0.35/0.50/1.00s + scrolling demo
+   │  ├─ Encoder
+   │  │  ├─ ..
+   │  │  └─ Reverse ON/OFF
+   │  ├─ Sound
+   │  │  ├─ ..
+   │  │  ├─ Sound ON/OFF
+   │  │  ├─ Mode SAMPLE/BUZZER
+   │  │  ├─ Freq 1200/1600/2000 Hz   (BUZZER only)
+   │  │  └─ Duration 0/50/100/250/500/1000/2000/5000ms (BUZZER only)
+   │  ├─ Load settings
+   │  └─ Save settings
+   ├─ Status
+   │  ├─ ..
+   │  ├─ TEMP, SD size, FREE space, FW version
+   │  ├─ DOS filename, current image filename, TAP filename
+   │  └─ LED, MOTOR, PLAY, TRACK (S while idle)
+   └─ Reboot Pi1551
+      ├─ ..
+      ├─ Cancel                    (initial selection)
+      └─ Reboot Pi1551?
+~~~
 
-```text
-RotaryEncoderEnable = 1
-```
+### Browser, SOLO And LIST
 
-On the Pi1551 hat, the wiring is fixed:
+Folders are shown as [name]; disk images are not bracketed. Enter on D64/G64
+mounts and starts emulation. Enter on D71/D80/D81/D82 or PRG mounts a file
+container without emulation. Either action opens Fliplist view, even for one
+image: container contents are listed to the Commodore, not on the OLED.
+Simply browsing an SD folder selects that folder's virtual file-list source;
+there is no separate drive-mode switch or Use this dir item.
 
-| Encoder signal | GPIO | Hat button |
-| --- | ---: | --- |
-| Pushbutton | GPIO27 | SW1 |
-| B / DT | GPIO22 | SW2 |
-| A / CLK | GPIO17 | SW3 |
+Enter alone mounts a temporary SOLO image. Returning to Browser clears that
+one-item list, so an unexpected 1> prefix is not left behind. To prepare a
+persistent LIST, use Insert: it toggles membership, with 1>, 2>, etc. shown in
+Browser. While building LIST, Enter on the final image adds it if necessary,
+mounts it and opens Fliplist. Enter on an existing member activates it.
+LST selection also creates LIST. Mixed D64/G64 and container entries switch
+between emulation and file-level access automatically.
 
-Turn the encoder to move through the browser. Press and release the encoder
-button to select.
+In Fliplist, Menu... remains selectable. Rotate onto an image to mount it
+immediately, including the first image after Menu...; rotating from the last
+image wraps to the first, and rotating left from the first reaches Menu... .
+Enter on an image returns to the SD folder containing it and unmounts it.
+LIST survives that return; SOLO does not. Menu -> Browser deliberately clears
+the list and unmounts, while Clear list explicitly clears it without being a
+separate list-editing menu.
 
-To switch ROMs, hold the rotary pushbutton for about two seconds. The ROM
-selector opens. Release, rotate to choose a ROM, then press and release to
-apply. In emulation mode the drive CPU is reset and fast-booted after the ROM
-switch.
+The header shows, for example, 8:games (the last SD folder) or 8: 18.0S
+(track/half-track while emulating). A long folder name scrolls independently
+of the selected row. Temp ON reserves four rightmost characters for a space
+and temperature; Temp OFF gives the directory the full remaining width.
+Selected long media/ROM filenames scroll with their prefixes fixed.
 
-Use `RotaryEncoderInvert = 1` if rotation is backwards.
+Tape status always shows TAPE, counter, percent and M/P flags. No TAP is
+TAPE --- --% M- or TAPE --- --% --; a loaded tape at the beginning has
+000 00%, not missing-file dashes. MOTOR reflects the computer input (or
+ALWAYS override) even without a tape; PLAY stays pressed from load until
+eject, including EOF.
 
-## USB Keyboard Shortcuts
+### Runtime Settings And Actions
 
-A USB keyboard is optional but useful for development and setup.
+Drive settings affect the device number, idle trap, RAM expansion, spinup
+delay and drive RESET handling. Reset REACT resets the drive CPU and permits
+reset-time automount. Reset IGNORE suppresses those drive actions, but Reset
+path ON still returns the SD Browser source to /1551 on computer RESET.
+Reset path OFF keeps the folder. Neither path choice alone clears a list,
+unmounts the disk or ejects/rewinds TAP. Auto mount only appears when the
+startup-configured AutoMountImage is a valid supported image or nonempty LST;
+missing, empty or invalid files behave as OFF. The toggle applies at boot and
+the next REACT reset, not as an immediate mount command.
 
-### Browser Mode Keyboard
+Motor ON ALWAYS ignores computer MOTOR for playback; COMP. follows it.
+Load TAP... opens a tape-filtered browser. Eject releases PLAY. Rewind seeks
+to the beginning; Go to counter changes TARGET by exactly one per encoder
+impulse, click seeks and Back cancels. A tape must be loaded to seek.
 
-| Action | Key |
-| --- | --- |
-| Select | Enter |
-| Add to caddy | Insert or Alt+Enter |
-| Back | Backspace |
-| Finish selected caddy and start emulation | Space |
-| Up/down | Up / Down |
-| Page up/down | PageUp/PageDown or Left/Right |
-| Home/end | Home / End |
-| Reboot Raspberry Pi | Left Ctrl+Left Alt+Delete |
-| Create new disk image | Alt+N |
-| Auto-load configured image | Alt+A |
-| Fake reset | Alt+R |
-| Toggle SD read-only attribute | Alt+W |
-| Create `autoswap.lst` | Alt+L |
-| Select ROM slot | F1..F7 |
-| Set device ID | F8..F11 set IDs 8..11 |
-| Search by first characters | 0..9, A..Z except R and P |
-| Toggle tape READ test signal | R |
-| Toggle tape SENSE test signal | P |
+WProt is write protection; read-only media stays protected. Write image
+flushes the mounted medium. New image first lets you choose D64/G64, then
+Create image creates an unused NEWIMAGE1.d64/g64, NEWIMAGE2.d64/g64, etc. in
+the current SD folder, without overwriting or automatically mounting it.
+Reset drive resets only the emulated drive. Reboot Pi1551 is a confirmed full
+device restart after flushing writes, not a computer RESET.
 
-R and P are reserved for tape test toggles, so they are not used for browser
-search.
+Display changes apply on the next refresh. Contrast never offers zero;
+custom valid options.txt values remain usable until you change them.
+Dimming uses Dim time seconds since input; OFF/zero disables the timer.
+Dim level 0 switches the OLED off after the timeout, and input wakes it.
+Font switches cached ASCII/C64 8x8 slots immediately: startup loads the
+4096-byte ChargenFont file; missing, unreadable or wrong-sized files make
+both slots ASCII. Scroll is seconds per character step and includes a demo
+after the fixed value. Reverse affects the next encoder impulse.
 
-### Emulation Mode Keyboard
+Sound ON/OFF is independent of SAMPLE/BUZZER; both use fixed GPIO13.
+Freq and Duration appear only in BUZZER mode. Each successful Sound-menu
+change starts a one-second preview window without blocking disk/tape/UI:
+SAMPLE loops the click, BUZZER uses its frequency and configured Duration
+(capped to one second); shorter Duration leaves silence for the rest,
+and OFF or zero Duration is silent. New changes replace the preview.
 
-| Action | Key |
-| --- | --- |
-| Exit emulation | Esc |
-| Previous disk | PageUp |
-| Next disk | PageDown |
-| Auto-load configured image | Alt+A |
-| Fake reset | Alt+R |
-| Halt debug mode | H |
-| Step debug mode | S |
-| Run debug mode | R held |
-| Reset emulated drive | E |
-| Direct disk swap | F1..F10, 1..0, keypad 1..0 |
-| Toggle tape READ test signal | R pressed |
-| Toggle tape SENSE test signal | P pressed |
-| Reboot Raspberry Pi | Left Ctrl+Left Alt+Delete |
+Load settings rereads /options.txt on demand and applies runtime options,
+replacing unsaved changes. Startup-only fields (hardware/encoder enable,
+ROM filenames, ChargenFont, AutoMountImage filename, StarFileName) require
+editing the file and restarting; ROM selection is from already loaded slots.
+Load does not reset, remount or save. Save settings updates only values changed
+since boot or the last successful load/save; it retains user order, existing
+comments, unrelated settings, whitespace and line endings. It edits the last
+effective occurrence of a duplicate option, and appends absent changed
+non-default options. No changed values means no rewrite. Failed save/load
+reports an error and preserves pending settings; never remove a .tmp/.bak
+recovery file without checking its contents. Disk/image writes and settings
+saving are separate actions.
+
+See [the interaction specification](docs/PI1551-TUI-SPEC.md) for exact state
+transitions and [the implementation notes](docs/PI1551-OLED-IMPLEMENTATION.md)
+for native test coverage and hardware limitations.
 
 ## TAP Playback
 
@@ -266,14 +347,15 @@ Options not present in the file use built-in defaults from `src/options.cpp`.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `deviceID` | `8` | TCBM device number. |
-| `OnResetChangeToStartingFolder` | `1` | Return browser folder to `/1551` after reset. |
-| `AutoMountImage` | empty | Auto-mount a filename from `/1551` after boot/reset. Also accepts `.lst`. |
+| `OnResetChangeToStartingFolder` | `1` | Return Browser to `/1551` on computer RESET, including when `IgnoreReset = 1`. Menu: Reset path. |
+| `AutoMountImage` | empty | Startup filename, relative to `/1551` or absolute. Supported image/container/PRG or nonempty `.lst`, mounted at boot and REACT reset when enabled. |
+| `autoMountEnabled` | `1` | Runtime Auto mount toggle. Missing, empty or invalid AutoMountImage acts as OFF and hides the menu item. |
 | `StarFileName` | empty | File served for `LOAD"*"` / `DLOAD"*"` style requests. |
 | `AutoBaseName` | `autoname` | Prefix for automatically created disk images. |
-| `NewDiskType` | `d64` | Type created by Alt+N. Valid values: `d64`, `g64`. |
+| `NewDiskType` | `d64` | Initial format for Disk -> New image -> Type, D64 or G64. |
 | `DisableSD2IECCommands` | `0` | Disable browser-mode SD2IEC-style commands when set to `1`. |
 | `LowercaseBrowseModeFilenames` | `0` | Send browser-mode filenames as lowercase. |
-| `IgnoreReset` | `0` | Ignore host reset pulses when set to `1`. |
+| `IgnoreReset` | `0` | Drive Reset: 0 = REACT, 1 = IGNORE. Does not suppress the independent Reset path action. |
 | `QuickBoot` | `0` | Skip startup delay/logo pause when set to `1`. |
 | `ShowOptions` | `0` | Print parsed options on HDMI at startup. |
 
@@ -283,34 +365,37 @@ Options not present in the file use built-in defaults from `src/options.cpp`.
 | --- | --- | --- |
 | `ROM1` or `ROM` | `dos1551.bin` | Primary ROM slot used by the UI. |
 | `ROM2`..`ROM7` | empty | Additional selectable 1551 ROM slots. |
-| `ROM1551` | `dos1551-318008-01.bin` | Legacy dedicated 1551 ROM option. If `ROM1` is empty, it can supply slot 1. |
-| `ChargenFont` or `Font` | `chargen` | 8-bit character ROM/font file for HDMI text. |
+| `ROM1551` | `dos1551-318008-01.bin` | Legacy dedicated 1551 option; not the source of the Settings -> ROM list. |
+| `ChargenFont` or `Font` | `chargen` | Startup C64 8x8 font file for HDMI and the OLED C64 slot; exactly 4096 bytes. The supplied template names `chargen.bin`. |
 
 ROM files are searched from the SD root and `/roms` paths used by the firmware.
-ROM slots can be switched at runtime. With the rotary encoder enabled, hold the
-rotary pushbutton for about two seconds, release it, rotate to pick a ROM, and
-press/release to apply. Without rotary, browser-mode button shortcuts can
-select ROM slots 1-4 by holding `Enter` and pressing `Up`, `Down`, `Back`, or
-`Insert`. USB keyboard shortcuts can select ROM slots with `F1`..`F7`.
+Settings -> ROM selects an already loaded ROM1..ROM7 slot immediately. Missing
+or invalid slots are omitted. There is no longpress or Browser ROM-file action.
+Change slot filenames in options.txt and reboot to load different ROM files.
 
 ### Display
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `LCDName` | empty | OLED model. Valid values: `ssd1306_128x64`, `ssd1306_128x32`, `sh1106_128x64`. |
+| `LCDName` | empty | Startup OLED model: use `ssd1306_128x64` or `sh1106_128x64` for this eight-row menu. The inherited parser also recognizes `ssd1306_128x32`, which cannot show all eight rows. |
 | `LcdLogoName` or `LCDLogoName` | `1541classic` | Built-in logo name or custom raw logo filename. |
 | `i2cLcdAddress` | `0x3c` | I2C OLED address. `60` decimal is `0x3c`. |
 | `i2cScan` | `0` | Scan I2C and display found addresses at startup. |
 | `i2cLcdFlip` | `0` | Rotate OLED 180 degrees. |
-| `i2cLcdOnContrast` | `127` | OLED active contrast. |
-| `i2cLcdDimContrast` | unset/0 | OLED dimmed contrast. |
-| `i2cLcdDimTime` | unset/0 | Time before OLED dimming. |
-| `i2cLcdUseCBMChar` | `0` | Use CBM font on OLED. |
+| `i2cLcdOnContrast` | `127` | Active brightness 1..255; menu steps 16,32,...,240,255. Startup zero is clamped; runtime load rejects zero. |
+| `oledDimming` | `1` | Runtime Dimming ON/OFF. |
+| `i2cLcdDimContrast` | `10` | Dim level 0..255; menu steps 0,16,32,...,240,255. Zero powers the OLED off until input. |
+| `i2cLcdDimTime` | `30` | Seconds since last input before dimming; 0/OFF disables the timer. |
+| `i2cLcdUseCBMChar` | `0` | Runtime Font: 0 = ASCII, 1 = cached C64. Both slots are ASCII if chargen failed to load. |
 | `DisplayPNGIcons` | `0` | Show 320x200 PNG files matching disk image names on HDMI. |
 | `GraphIEC` | `0` | Show TCBM and tape signal activity on HDMI. |
-| `DisplayTemperature` | `0` | Show Raspberry Pi CPU temperature. |
+| `DisplayTemperature` | `0` | Runtime Temp ON/OFF in the header; Status still shows temperature. |
 | `DisplayPC` | `0` | Show emulated 6502 program counter for debugging. |
-| `scrollHighlightRate` | `0.07` | Long filename scroll rate in seconds. |
+| `scrollHighlightRate` | `0.10` | Runtime seconds per character step for filenames and folder header, with a Scroll demo. |
+
+The LCD-prefixed keys are kept for options.txt compatibility, not separate
+LCD hardware settings. Obsolete oledFont/oledScroll entries are ignored and
+preserved; use i2cLcdUseCBMChar and scrollHighlightRate instead.
 
 The Pi1551 hat always uses I2C bus 1 for the OLED. `i2cBusMaster` exists in
 the code but is forced to `1` after parsing.
@@ -320,11 +405,13 @@ the code but is forced to `1` after parsing.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `SoundOnGPIO` | `0` | `0`: legacy PWM/DMA sample on GPIO13. `1`: square-wave buzzer on GPIO13. |
+| `oledSound` | `1` | Runtime Sound ON/OFF, independent of the SAMPLE/BUZZER mode. |
 | `SoundOnGPIODuration` | `1000` | Buzzer duration in milliseconds when `SoundOnGPIO = 1`. |
 | `SoundOnGPIOFreq` | `1200` | Buzzer frequency in Hz when `SoundOnGPIO = 1`. |
 
 For Pi1551 hardware with a piezo or buzzer on the SOUND pin, use
-`SoundOnGPIO = 1`.
+`SoundOnGPIO = 1`. GPIO13 is fixed; there is no selectable buzzer GPIO.
+All four runtime Sound items trigger the one-second preview described above.
 
 ### Tape
 
@@ -344,8 +431,8 @@ For Pi1551 hardware with a piezo or buzzer on the SOUND pin, use
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `RotaryEncoderEnable` | `0` | Enable KY-040 rotary navigation. |
-| `RotaryEncoderInvert` | `0` | Reverse rotary direction. |
+| `RotaryEncoderEnable` | `0` | Startup-only enable for the fixed-wiring encoder; not a runtime menu item. |
+| `RotaryEncoderInvert` | `0` | Runtime Encoder -> Reverse; changes the next decoded impulse immediately. |
 
 ### Inherited Fields That Are Not User Settings
 
@@ -374,13 +461,19 @@ deviceID = 8
 ROM1 = dos1551.bin
 ROM2 = dos1551-ram.bin
 ROM3 = super_dos_1551.rom
-ChargenFont = chargen
+ChargenFont = chargen.bin
 OnResetChangeToStartingFolder = 1
 StarFileName = boot.t2sd
 RAMBOard = 1
 LCDName = ssd1306_128x64
 i2cLcdAddress = 60
 RotaryEncoderEnable = 1
+i2cLcdUseCBMChar = 1
+DisplayTemperature = 1
+oledDimming = 1
+i2cLcdDimTime = 30
+i2cLcdDimContrast = 0
+oledSound = 1
 SoundOnGPIO = 1
 tapeMotorAlwaysOn = 1
 skipMotorSpinUpDelay = 1

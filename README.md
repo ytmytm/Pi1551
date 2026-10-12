@@ -20,12 +20,13 @@ player through the tape port only, without the TCBM ribbon cable.
   correctly when formatting disks.
 - File-level SD card access over TCBM, similar in spirit to SD2IEC/tcbm2sd
   browser mode (including direct `LOAD` of `.prg` files without emulation).
-- Optional disk caddy: `.prg` files can be wrapped in a temporary one-file D64
-  and mounted for cycle-exact emulation (see user manual).
+- SOLO/LIST media selection, mixed-format fliplists and `.lst` loading.
+- `.prg` files can be mounted as read-only virtual one-file disks without
+  starting drive emulation; ordinary Commodore `LOAD` remains direct SD access.
 - Read-only file-level access to files inside D71, D81, D80, and D82 images.
 - TAP player for C16/C116/Plus/4 TAP files, output through the tape port.
-- Built-in browser UI on HDMI and optional I2C OLED.
-- Physical buttons or rotary encoder navigation.
+- Eight-row I2C OLED browser/menu with rotary encoder, Insert and Back controls.
+- Runtime drive, tape, display, encoder and sound settings with safe load/save.
 - Multiple 1551 ROM slots and runtime ROM switching.
 - 1551 RAM expansion ([1551-RAMBOard](https://github.com/ytmytm/1551-RAMBOard))
   supported.
@@ -127,7 +128,7 @@ Common `options.txt` settings:
 | `StarFileName` | File served for `LOAD"*"` / `DLOAD"*"` requests. |
 | `RAMBOard` | Enables 8 KiB 1551 RAM expansion emulation at `$8000`. Use with `dos1551-ram.bin`. |
 | `LCDName`, `i2cLcdAddress` | OLED model and I2C address. |
-| `RotaryEncoderEnable` | Enables rotary encoder browser navigation and ROM selector. |
+| `RotaryEncoderEnable` | Enables the fixed-wiring encoder; ROM selection is under Settings -> ROM. |
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
 | `tapeMotorAlwaysOn` | Keeps TAP playback motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` to follow MOTOR on original machines. |
 | `skipMotorSpinUpDelay` | Skips the emulated 1551 motor spin-up delay when set. |
@@ -152,13 +153,60 @@ note says otherwise.
 
 From the Commodore, the device appears as a TCBM disk device, normally unit 8.
 From the Pi UI, select a D64 or G64 to enter 1551 emulation, or browse SD card
-files directly in browser mode. A `.prg` can also be mounted for emulation
-(Enter in the Pi browser builds a one-file virtual D64); use normal
-`LOAD "name",8` on the Plus/4 when you only want to run a program without
-starting emulation.
+files directly in browser mode. Enter on a `.prg` mounts a read-only virtual
+one-file disk without starting emulation; normal `LOAD "name",8` on the
+Plus/4 reads an unmounted PRG directly from SD.
 
 See [USER-MANUAL.md](USER-MANUAL.md) for directory listing types (`DIR` vs
-`PRG`), caddy behavior, and the full Enter/Insert distinction.
+`PRG`), SOLO/LIST behavior, and the full Enter/Insert distinction.
+
+## OLED Menu And Runtime Settings
+
+The 128x64 SSD1306/SH1106 OLED uses 16 columns and eight rows. Rotate the
+encoder to move, click to select, use Insert to add/remove media from a
+fliplist, and Back to return. Select the always-visible `Menu...` row to open
+the device menu. Every submenu has `..` first, with initial focus below it.
+
+```text
+Browser / Fliplist -> Menu...
+├─ ..
+├─ Clear list                         (only when the list is nonempty)
+├─ Browser                            (clear list and unmount)
+├─ Tape: .., 1:<filename>, Load TAP..., Eject TAP, Rewind, Go to counter
+├─ Disk: .., WProt, Write image, New image, Reset drive
+│  └─ New image: .., Type D64/G64, Create image
+├─ Settings
+│  ├─ ..
+│  ├─ ROM: .., configured ROM1..ROM7 filenames
+│  ├─ Drive: .., Device number, Idle trap, RAMBOard, Skip spinup, Reset
+│  ├─ Tape: .., Motor ON ALWAYS/COMP.
+│  ├─ Browser: .., Auto mount, Reset path, Lowercase, SD2IEC
+│  ├─ Display: .., Temp, Contrast, Dimming, Dim time, Dim level, Orient, Font, Scroll
+│  ├─ Encoder: .., Reverse
+│  ├─ Sound: .., Sound, Mode SAMPLE/BUZZER, Freq, Duration
+│  ├─ Load settings
+│  └─ Save settings
+├─ Status: .., TEMP, SD, FREE, FW, DOS, image, TAP, LED, MOTOR, PLAY, TRACK
+└─ Reboot Pi1551: .., Cancel, Reboot Pi1551?
+```
+
+`Freq`/`Duration` appear only in BUZZER mode; `Auto mount` appears only when
+`AutoMountImage` names valid media. A header such as `8:games` shows the last
+SD folder; emulation shows track/half-track and `S` while idle. Long names
+scroll without moving their prefixes or the optional temperature.
+
+Changes take effect without rebooting, or at the next relevant event (for
+example `Reset path` on computer RESET). `Reset IGNORE` suppresses the drive
+reset, not `Reset path ON`. `Dim level 0` switches the OLED off after the
+idle timeout; input wakes it. `Scroll` has a scrolling demo, and Sound changes
+start a one-second preview window. `Load settings` reloads runtime values;
+`Save settings` writes changed values to `/options.txt`, preserving user
+order, comments and unrelated settings. Hardware, ROM filenames and the
+chargen filename remain startup-only configuration.
+
+See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
+rules, option values and examples. Run `make tui` for the keyboard simulator;
+`make help` lists build and native-test targets.
 
 ## Browser Mode, Emulation Mode, And Tape Mode
 
