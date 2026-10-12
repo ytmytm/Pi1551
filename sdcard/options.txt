@@ -71,7 +71,7 @@ LCDName = ssd1306_128x64
 // I2C bus 1: SDA = GPIO2 (physical pin 3), SCL = GPIO3 (physical pin 5).
 //i2cLcdAddress = 60 // 0x3c; use 61 for 0x3d
 i2cScan = 1 // Startup scan; results are printed on HDMI.
-ChargenFont = chargen // SD root or /roms; ASCII is used if no valid chargen loads.
+ChargenFont = chargen.bin // SD root or /roms; ASCII is used if no valid chargen loads.
 LcdLogoName = 1541classic // Startup logo: 1541classic, 1541ii or a .raw file.
 QuickBoot = 1 // Skip the startup pause.
 ShowOptions = 1 // Print parsed options on the HDMI startup screen.
