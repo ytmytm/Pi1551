@@ -6,6 +6,7 @@ extern "C" {
 #include <cstring>
 #include <cstdio>
 #include <vector>
+#include <fstream>
 unsigned char* CBMFont = 0;
 static std::vector<unsigned char> commands;
 static unsigned transfers = 0;
@@ -63,6 +64,31 @@ int main() {
     d.SetOrientation(1); CHECK(commands.size() == 2);
     d.SetOrientation(0); CHECK(commands[2] == 0xA1); CHECK(commands[3] == 0xC8);
     transfers = 0; d.RefreshScreen(); CHECK(transfers > 0);
+    // Both slots are prepared even if the file is unavailable: C64 then equals ASCII.
+    d.PlotMenu(f,false); memcpy(normal,d.Pixels(),1024);
+    d.PlotMenu(f,true); CHECK(memcmp(normal,d.Pixels(),1024) == 0);
+    unsigned char chargen[4096];
+    std::ifstream file("sdcard/chargen.bin",std::ios::binary);
+    file.read(reinterpret_cast<char*>(chargen),sizeof(chargen)); CHECK(file.gcount() == sizeof(chargen));
+    CBMFont = chargen;
+    for (LCD_MODEL model : {LCD_1306_128x64,LCD_1106_128x64}) {
+        CBMFont = 0;
+        DisplayProbe banked(model);
+        // Firmware creates the panel first, then loads chargen and prepares slots.
+        banked.PrepareMenuFonts(chargen);
+        banked.PlotMenu(f,false); unsigned char ascii[1024]; memcpy(ascii,banked.Pixels(),1024);
+        banked.RefreshScreen();
+        banked.PlotMenu(f,true); unsigned char c64[1024]; memcpy(c64,banked.Pixels(),1024);
+        CHECK(memcmp(ascii,c64,1024) != 0);
+        transfers = 0; banked.RefreshScreen(); CHECK(transfers > 0);
+        CBMFont = 0; // Switching must use startup slots, not re-read the global pointer.
+        banked.PlotMenu(f,false); CHECK(memcmp(ascii,banked.Pixels(),1024) == 0);
+        transfers = 0; banked.RefreshScreen(); CHECK(transfers > 0);
+        banked.PlotMenu(f,true); CHECK(memcmp(c64,banked.Pixels(),1024) == 0);
+        CBMFont = chargen;
+    }
+    CBMFont = 0;
+    puts("PASS startup ASCII/C64 slots: live switching and identical missing-file fallback");
     puts("PASS actual OLED raster: eight rows, inversion, triangle, orientation and I2C effects");
     return 0;
 }

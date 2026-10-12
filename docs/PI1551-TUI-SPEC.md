@@ -349,7 +349,11 @@ Submenus:
 Settings cycle on encoder click, as in the mock; rotation continues navigating
 rows. The counter editor is the exception: one impulse changes the target by
 one, Enter seeks and Back cancels. Firmware Font selects C64/ASCII, both 8x8;
-ASCII is the fallback when no valid chargen was loaded. Errors and completed
+At startup both font slots are prepared: built-in ASCII and C64 from the
+configured ChargenFont/Font file (exactly 4096 bytes). If loading fails or size
+is invalid, both slots contain ASCII. Font selection switches the cached slot
+on the next frame, without restarting, reading SD or reloading HDMI fonts.
+The font filename remains a startup-only setting. Errors and completed
 load/save/write actions use a dismissible message menu with `..` first. Enter
 on the message or Back returns to the previous screen; long messages scroll.
 

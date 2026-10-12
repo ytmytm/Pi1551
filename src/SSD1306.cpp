@@ -42,6 +42,7 @@ SSD1306::SSD1306(int BSCMaster, u8 address, unsigned width, unsigned height, int
 	oldFrame = (unsigned char *)malloc(sizeof_frame);
 	memset(frame, 0, sizeof_frame);
 	memset(oldFrame, 0xff, sizeof_frame);
+	PrepareMenuFonts(CBMFont);
 	RPI_I2CInit(BSCMaster, 1);
 	InitHardware();
 }
@@ -100,6 +101,17 @@ void SSD1306::InitHardware()
 
 	if (type != LCD_1106_128x64)
 		SendCommand(SSD1306_CMD_DEACTIVATE_SCROLL);	// 0x2E
+}
+
+void SSD1306::PrepareMenuFonts(const unsigned char* chargen)
+{
+	memcpy(menuFonts[0], avpriv_cga_font, sizeof(menuFonts[0]));
+	memcpy(menuFonts[1], menuFonts[0], sizeof(menuFonts[1]));
+	if (!chargen) return;
+	for (unsigned c = 0; c < 256; ++c) {
+		unsigned screenCode = petscii2screen(ascii2petscii((unsigned char)c));
+		memcpy(menuFonts[1][c], chargen + (screenCode + 256) * 8, 8);
+	}
 }
 
 void SSD1306::SendCommand(u8 command)
@@ -290,12 +302,9 @@ void SSD1306::PlotMenu(const oled::Frame& text, bool cbmFont)
 			if (col == 0 && text.active[row]) {
 				const unsigned char triangle[8] = {0x00,0x40,0x60,0x70,0x78,0x70,0x60,0x40};
 				memcpy(raster, triangle, 8);
-			} else if (cbmFont && CBMFont) {
-				c = petscii2screen(ascii2petscii(c));
-				memcpy(raster, CBMFont + (c + 256) * 8, 8);
 			} else {
-				// Native 8x8 glyphs, not a vertically decimated 8x16 font.
-				memcpy(raster, avpriv_cga_font + c * 8, 8);
+				// Runtime selection only: no font file reads or dependency on HDMI state.
+				memcpy(raster, menuFonts[cbmFont ? 1 : 0][c], 8);
 			}
 			transpose8(columns, raster, text.inverse[row]);
 			memcpy(frame + row * 128 + col * 8, columns, 8);

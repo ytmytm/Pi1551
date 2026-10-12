@@ -82,6 +82,7 @@ public:
 	void PlotCharacter(bool useCBMFont, bool petscii, int x, int y, char ascii, bool inverse);
 	void PlotText(bool useCBMFont, bool petscii, int x, int y, char* str, bool inverse);
 	void PlotMenu(const oled::Frame& text, bool cbmFont);
+	void PrepareMenuFonts(const unsigned char* chargen);
 	void SetOrientation(int value);
 
 	void InitHardware();
@@ -120,6 +121,8 @@ protected:
 	int contrast;
 	unsigned width;
 	unsigned height;
+	// Two immutable startup slots indexed by ASCII code, eight raster rows per glyph.
+	unsigned char menuFonts[2][256][8];
 };
 #endif
 

@@ -83,6 +83,11 @@ void ScreenLCD::SetPower(bool on)
 	else ssd1306->DisplayOff();
 }
 
+void ScreenLCD::PrepareMenuFonts(const unsigned char* chargen)
+{
+	ssd1306->PrepareMenuFonts(chargen);
+}
+
 void ScreenLCD::DrawMenu(const oled::Frame& frame, bool cbmFont, int orientation)
 {
 	ssd1306->SetOrientation(orientation);

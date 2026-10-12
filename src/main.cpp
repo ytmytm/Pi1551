@@ -3546,6 +3546,7 @@ static void CheckOptions()
 	DEBUG_LOG("DeviceID = %d\r\n", deviceID);
 #if not defined(EXPERIMENTALZERO)
 	const char* FontROMName = options.GetRomFontName();
+	CBMFont = 0;
 	if (FontROMName)
 	{
 		char FontROMName2[256] = "/roms/";
@@ -3559,7 +3560,7 @@ static void CheckOptions()
 		if ( (FR_OK == f_open(&fp, FontROMName, FA_READ))
 			|| (FR_OK == f_open(&fp, FontROMName2, FA_READ)) )
 		{
-			u32 bytesRead;
+			u32 bytesRead = 0;
 
 			screen.Clear(COLOUR_BLACK);
 			snprintf(tempBuffer, tempBufferSize, "Loading Font ROM %s\r\n", FontROMName);
@@ -3569,7 +3570,10 @@ static void CheckOptions()
 			screen.PrintText(false, xpos, ypos, tempBuffer, COLOUR_WHITE, COLOUR_RED);
 
 			SetACTLed(true);
-			res = f_read(&fp, CBMFontData, CBMFont_size, &bytesRead);
+			// A C64 chargen contains exactly two 256-glyph banks of 8 bytes.
+			res = FR_OK;
+			if (f_size(&fp) == CBMFont_size)
+				res = f_read(&fp, CBMFontData, CBMFont_size, &bytesRead);
 			SetACTLed(false);
 			f_close(&fp);
 			if (res == FR_OK && bytesRead == CBMFont_size)
@@ -4013,6 +4017,8 @@ extern "C"
 
 
 		CheckOptions();
+		// The panel is constructed before CheckOptions loads chargen from SD.
+		if (screenLCD) screenLCD->PrepareMenuFonts(CBMFont);
 
 #if not defined(EXPERIMENTALZERO)
 		// Reserve the sample at boot so switching SAMPLE/BUZZER needs no allocation in emulation.

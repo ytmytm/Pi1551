@@ -162,3 +162,12 @@ than dropping alternate scanlines from VGA 8x16. C64 chargen remains native
 addressing-mode command on SH1106. Both retain 64-line multiplex/COM geometry.
 Encoder pins remain fixed, with runtime inversion applied to decoded rotation
 events; button events and the decoder's in-progress quadrature state are unchanged.
+
+The display initially prepares ASCII fallback slots; startup prepares both
+256-glyph 8x8 slots again after CheckOptions loads chargen (the panel itself
+is constructed earlier): built-in ASCII and ASCII-indexed C64 (mapped into the chargen's
+lower/upper bank). Runtime Font switches the slot used by PlotMenu on the next
+frame, independent of HDMI state and without SD reads. Missing/unreadable or
+wrong-sized chargen leaves two identical ASCII slots; valid size is 4096 bytes.
+Native raster tests switch both ways using the shipped chargen.bin on SSD1306
+and SH1106, then clear the global CBMFont pointer to verify slot independence.
