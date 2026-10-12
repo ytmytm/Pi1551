@@ -44,6 +44,7 @@ public:
     virtual bool SelectROM(unsigned slot) = 0;
     virtual int Get(Setting setting) = 0;
     virtual bool Set(Setting setting, int value) = 0;
+    virtual bool PreviewSound() { return true; }
     virtual bool AutoMountAvailable() = 0;
     virtual bool LoadSettings() = 0;
     virtual bool SaveSettings() = 0;

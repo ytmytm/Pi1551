@@ -33,6 +33,8 @@ extern "C"
 #include "rpi-mailbox-interface.h"
 #include "interrupt.h"
 #include <uspi.h>
+// Avoid importing USPi's barrier macros over the board's rpiHardware variants.
+void uspi_CleanAndInvalidateDataCacheRange(u32 nAddress, u32 nLength);
 #include "rpi-mailbox.h"
 }
 #include "options.h"
@@ -219,6 +221,7 @@ static volatile Pi1551UiSnapshot g_pi1551UiSnapshot = {};
 static bool g_oledResumeCpu = false;
 static bool g_oledWakeCpu = false;
 static bool g_oledWriteProtect = false;
+static bool soundPreviewActive = false;
 
 struct Pi1551EmulationCommands
 {
@@ -1798,6 +1801,9 @@ DMA_ControlBlock dmaSoundCB =
 	0,//&dmaSoundCB,
 	0, 0
 };
+static DMA_ControlBlock soundPreviewCB __attribute__((aligned(32))) = {};
+static u32* soundPreviewData = 0;
+static u32 soundPreviewEnd = 0;
 #endif
 
 #if not defined(EXPERIMENTALZERO)
@@ -1817,6 +1823,48 @@ static void StopSoundDMA()
 	write32(PWM_CTL, PWM_CLRF1); // stop PWM and discard queued samples
 }
 bool OledKernelSampleAvailable() { return dmaSound != 0; }
+static void StopSoundPreview()
+{
+	if (!soundPreviewActive) return;
+	StopSoundDMA();
+	soundPreviewActive = false;
+	TCBM_Bus::OutputSound = false;
+	write32(PWM_RNG1, 0x1B4); write32(PWM_RNG2, 0x1B4);
+	RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND,
+		options.Runtime(oled::Setting::Sound) && !options.SoundOnGPIO() ? FS_ALT0 : FS_OUTPUT);
+	RPI_SetGpioLo((rpi_gpio_pin_t)PIGPIO_OUT_SOUND);
+}
+bool OledKernelPreviewSound()
+{
+	StopSoundPreview();
+	StopSoundDMA();
+	if (!options.Runtime(oled::Setting::Sound)) return true; // OFF is an audible mute test.
+	if (!soundPreviewData || (!options.SoundOnGPIO() && !dmaSound)) return false;
+	Pi1551SoundPreview::Fill(soundPreviewData, true, options.SoundOnGPIO(),
+		options.SoundOnGPIODuration(), options.SoundOnGPIOFreq(), Sample_bin, Sample_bin_size);
+	soundPreviewCB = dmaSoundCB;
+	soundPreviewCB.sourceAddress = soundPreviewData;
+	soundPreviewCB.transferLength = Pi1551SoundPreview::Frames * sizeof(u32);
+	// The reusable preview is written after caches are enabled. Publish both
+	// payload and descriptor to RAM before the autonomous DMA reads them.
+	uspi_CleanAndInvalidateDataCacheRange((u32)soundPreviewData, soundPreviewCB.transferLength);
+	uspi_CleanAndInvalidateDataCacheRange((u32)&soundPreviewCB, sizeof(soundPreviewCB));
+	DataSyncBarrier();
+	RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, FS_ALT0);
+	write32(PWM_CTL, PWM_USEF2 + PWM_PWEN2 + PWM_USEF1 + PWM_PWEN1 + PWM_CLRF1);
+	write32(PWM_DMAC, PWM_ENAB + 0x0001);
+	write32(DMA_ENABLE, 1);
+	write32(DMA0_BASE + DMA_CONBLK_AD, (u32)&soundPreviewCB);
+	write32(DMA0_BASE + DMA_CS, DMA_ACTIVE);
+	soundPreviewEnd = read32(ARM_SYSTIMER_CLO) + 1000000;
+	soundPreviewActive = true;
+	return true;
+}
+void OledKernelServiceSoundPreview()
+{
+	if (soundPreviewActive && (int32_t)(read32(ARM_SYSTIMER_CLO) - soundPreviewEnd) >= 0)
+		StopSoundPreview();
+}
 #endif
 
 void GlobalSetDeviceID(u8 id)
@@ -2515,7 +2563,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (headDir != oldHeadDir)	// Need to start a new sound?
 		{
 			oldHeadDir = headDir;
-			if (headSound.Trigger(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(),
+			if (!soundPreviewActive && headSound.Trigger(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(),
 				options.SoundOnGPIODuration(), options.SoundOnGPIOFreq())) {
 #if not defined(EXPERIMENTALZERO)
 				PlaySoundDMA();
@@ -2595,7 +2643,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
 
-		headSound.Step(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(), options.SoundOnGPIOFreq());
+		headSound.Step(options.Runtime(oled::Setting::Sound) && !soundPreviewActive, options.SoundOnGPIO(), options.SoundOnGPIOFreq());
 		TCBM_Bus::OutputSound = headSound.output;
 
 		TCBM_Bus::RefreshOuts1551();
@@ -2961,6 +3009,7 @@ void OledKernelSelectROM(unsigned index) {
 }
 void OledKernelApplySettings()
 {
+    StopSoundPreview();
     static int previousMode = -1, previousEnabled = -1;
     GlobalSetDeviceID(options.GetDeviceID());
     m_TCBM_Commands.SetDeviceId(deviceID);
@@ -4024,6 +4073,7 @@ extern "C"
 		// Reserve the sample at boot so switching SAMPLE/BUZZER needs no allocation in emulation.
 		{
 			dmaSound = (u32*)malloc(Sample_bin_size * 4);
+			soundPreviewData = (u32*)malloc(Pi1551SoundPreview::Frames * sizeof(u32));
 			for (int i = 0; dmaSound && i < Sample_bin_size; ++i)
 			{
 				dmaSound[i] = Sample_bin[i];

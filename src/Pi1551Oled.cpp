@@ -24,6 +24,8 @@ extern bool OledKernelWriteProtected();
 extern void OledKernelWriteProtect(bool value);
 extern bool OledKernelPrepareReboot();
 extern bool OledKernelSampleAvailable();
+extern bool OledKernelPreviewSound();
+extern void OledKernelServiceSoundPreview();
 
 namespace Pi1551Oled {
 static oled::Menu* menu = 0;
@@ -38,6 +40,7 @@ static std::string pendingMount;
 static oled::Menu* checkpoint = 0;
 static bool pendingUnmount = false, pendingReboot = false;
 static bool pendingBrowserReset = false, hostResetDown = false;
+static bool pendingSoundPreview = false;
 static volatile uint32_t lastAction = 0;
 static std::string error;
 static void Barrier() { Pi1551Barrier(); }
@@ -147,6 +150,11 @@ public:
         return false;
     }
     int Get(oled::Setting id) override { return options.Runtime(id); }
+    bool PreviewSound() override {
+        if (realTime) { pendingSoundPreview = true; return true; }
+        if (OledKernelPreviewSound()) return true;
+        error = "Preview unavailable"; return false;
+    }
     bool Set(oled::Setting id, int v) override {
         error.clear();
         if (((id == oled::Setting::SoundMode && !v) ||
@@ -221,6 +229,7 @@ bool Enabled() { return menu != 0; }
 void Initialize() {
     hostResetDown = false;
     pendingBrowserReset = false;
+    pendingSoundPreview = false;
     lastAction = Pi1551Clock();
     backend.CaptureBaseline();
     menu = new oled::Menu(backend, DEFAULT_BROWSE_DIR);
@@ -251,7 +260,7 @@ void ObserveHostReset(bool asserted) {
         Enqueue(oled::Key::ResetPath);
     hostResetDown = asserted;
 }
-bool TransitionPending() { return pendingUnmount || !pendingMount.empty() || pendingReboot || pendingBrowserReset; }
+bool TransitionPending() { return pendingUnmount || !pendingMount.empty() || pendingReboot || pendingBrowserReset || pendingSoundPreview; }
 bool InputPending() { return readIndex != writeIndex; }
 void CompleteTransition() {
     realTime = false;
@@ -262,6 +271,10 @@ void CompleteTransition() {
         std::string p = pendingMount; pendingMount.clear(); ok = OledKernelMount(p.c_str());
     }
     else if (pendingBrowserReset) { pendingBrowserReset = false; menu->ResetBrowserPath(); }
+    else if (pendingSoundPreview) {
+        pendingSoundPreview = false;
+        if (!backend.PreviewSound()) menu->Notify(backend.Error());
+    }
     if (!ok) {
         if (checkpoint) { delete menu; menu = checkpoint; checkpoint = 0; }
         menu->Notify("Media/write error");
@@ -270,6 +283,7 @@ void CompleteTransition() {
 }
 void Service(bool emulating) {
     if (!menu) return;
+    OledKernelServiceSoundPreview();
     realTime = emulating;
     // While a medium transition is queued, leave the real-time loop before taking another event.
     while (readIndex != writeIndex && !TransitionPending()) {

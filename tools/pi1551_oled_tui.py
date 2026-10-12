@@ -397,12 +397,12 @@ class Simulator:
     def change_setting(self, item: str) -> None:
         if item == "Device number": self.device = 9 if self.device == 8 else 8
         elif item in self.options and isinstance(self.options[item], bool): self.options[item] = not self.options[item]
-        elif item == "Contrast": self.options[item] = self.next_choice(self.options[item], [1,2,4,8,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255])
+        elif item == "Contrast": self.options[item] = self.next_choice(self.options[item], [16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255])
         elif item == "Orient": self.options["Orientation"] = "rotated" if self.options["Orientation"] == "normal" else "normal"
         elif item == "Font": self.options["i2cLcdUseCBMChar"] = not self.options["i2cLcdUseCBMChar"]
         elif item == "Scroll": self.options["scrollHighlightRate"] = self.next_choice(self.options["scrollHighlightRate"], [0.05,0.10,0.20,0.35,0.50,1.00])
         elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,30,60,120,300])
-        elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,1,2,4,8,10,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255])
+        elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255])
         elif item == "Duration": self.options[item] = self.next_choice(self.options[item], [0,50,100,250,500,1000,2000,5000])
         elif item == "Mode": self.options["soundOnGPIO"] = not self.options["soundOnGPIO"]
         elif item == "Reset": self.options[item] = "IGNORE" if self.options[item] == "REACT" else "REACT"
@@ -413,6 +413,9 @@ class Simulator:
         elif item == "Freq": self.options[item] = {"1600 Hz": "1200 Hz", "1200 Hz": "2000 Hz", "2000 Hz": "1600 Hz"}.get(self.options[item], "1600 Hz")
         elif item == "Motor ON": self.options["Motor override"] = not self.options["Motor override"]
         self.message = f"{item}: {self.display_value(item)}"
+        if self.screen == "sound":
+            self.sound_preview_until = time.monotonic() + 1.0
+            self.message += " — preview 1s" if self.options["Sound"] else " — preview muted"
     @staticmethod
     def next_choice(value, choices):
         return next((choice for choice in choices if choice > value), choices[0])

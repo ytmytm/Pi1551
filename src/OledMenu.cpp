@@ -268,15 +268,16 @@ static int NextChoice(int value, const int* choices, unsigned count) {
 void Menu::ChangeValue(int /*delta*/) {
     Setting id = SelectedSetting(); int v = backend.Get(id);
     if (id == Setting::Device) v = v == 8 ? 9 : 8;
-    else if (id == Setting::Contrast) { const int choices[] = {1,2,4,8,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,22); }
+    else if (id == Setting::Contrast) { const int choices[] = {16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,16); }
     else if (id == Setting::Scroll) { const int choices[] = {50,100,200,350,500,1000}; v = NextChoice(v,choices,6); }
     else if (id == Setting::DimTime) { const int choices[] = {0,5,10,30,60,120,300}; v = NextChoice(v,choices,7); }
-    else if (id == Setting::DimLevel) { const int choices[] = {0,1,2,4,8,10,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,24); }
+    else if (id == Setting::DimLevel) { const int choices[] = {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,17); }
     else if (id == Setting::Duration) { const int choices[] = {0,50,100,250,500,1000,2000,5000}; v = NextChoice(v,choices,8); }
     else if (id == Setting::Freq) {
         v = v == 1600 ? 1200 : v == 1200 ? 2000 : 1600;
     } else v = !v;
     if (!backend.Set(id, v)) message = backend.Error();
+    else if (view == View::Sound && !backend.PreviewSound()) message = backend.Error();
 }
 void Menu::Select() {
     if (cursor == 0) { if (view == View::Browser || view == View::Fliplist) Open(View::Device); else Back(); return; }

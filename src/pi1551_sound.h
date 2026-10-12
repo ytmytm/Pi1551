@@ -1,5 +1,21 @@
 #ifndef PI1551_SOUND_H
 #define PI1551_SOUND_H
+// Existing PWM setup: 19.2 MHz oscillator / 2, range 436 (GPIO13 PWM1).
+// A preview occupies one second, preserving short buzzer duration and mute.
+struct Pi1551SoundPreview {
+    static const unsigned Rate = 9600000 / 436;
+    static const unsigned Frames = Rate;
+    static void Fill(unsigned* data, bool enabled, bool buzzer, unsigned durationMs,
+                     unsigned frequency, const unsigned char* sample, unsigned sampleSize) {
+        for (unsigned i = 0; i < Frames; ++i) {
+            unsigned value = 128;
+            if (enabled && buzzer && i * 1000u / Rate < durationMs)
+                value = ((i * frequency * 2u / Rate) & 1) ? 255 : 0;
+            else if (enabled && !buzzer && sample && sampleSize) value = sample[i % sampleSize];
+            data[i] = value;
+        }
+    }
+};
 // Head-step audio timing shared by the real-time loop and native tests.
 struct Pi1551HeadSound {
     unsigned remainingUs = 0, phaseUs = 0;

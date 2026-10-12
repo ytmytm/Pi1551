@@ -48,6 +48,7 @@ struct KernelStub : Backend {
     bool SelectROM(unsigned i) override { status.rom = ROMs().at(i); effects.push_back("rom:"+status.rom); return true; }
     int Get(Setting s) override { return settings[s]; }
     bool Set(Setting s,int v) override { settings[s] = v; if (s == Setting::MotorAlways) status.motor = v; return true; }
+    bool PreviewSound() override { effects.push_back("sound-preview:1000ms"); return true; }
     bool AutoMountAvailable() override { return available; }
     bool LoadSettings() override { effects.push_back("load-settings"); return true; }
     bool SaveSettings() override { effects.push_back("save-settings"); return true; }
@@ -284,16 +285,17 @@ static void new_runtime_controls() {
     KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Display");
     Enter(m,"Temp"); CHECK(k.Get(Setting::Temp) == 0); CHECK(std::string(m.Render(0).rows[0]).substr(13) == "   ");
     Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 60);
-    Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 12);
+    Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 16);
     Enter(m,"Scroll"); CHECK(k.Get(Setting::Scroll) == 200);
     Frame preview = m.Render(0); Frame scrolled = m.Render(2000);
     CHECK(std::string(preview.rows[7]).substr(1,13) == "Scroll 0.20s ");
     CHECK(std::string(preview.rows[7]) != std::string(scrolled.rows[7]));
     std::vector<int> brightness;
-    for (unsigned i = 0; i < 22; ++i) { Enter(m,"Contrast"); brightness.push_back(k.Get(Setting::Contrast)); }
-    CHECK(brightness.front() == 1); CHECK(brightness.back() == 255);
+    for (unsigned i = 0; i < 16; ++i) { Enter(m,"Contrast"); brightness.push_back(k.Get(Setting::Contrast)); }
+    CHECK(brightness.front() == 16); CHECK(brightness.back() == 255);
     CHECK(std::adjacent_find(brightness.begin(),brightness.end(),std::greater_equal<int>()) == brightness.end());
     Press(m,Key::Back); Enter(m,"Sound"); Enter(m,"Duration"); CHECK(k.Get(Setting::Duration) == 1000);
+    CHECK(k.effects.back() == "sound-preview:1000ms");
     Enter(m,"Mode"); CHECK(k.Get(Setting::SoundMode) == 0);
     Frame sample = m.Render(0); CHECK(std::string(sample.rows[4]).find("Mode SAMPLE") != std::string::npos);
     CHECK(std::string(sample.rows[5]) == std::string(16,' '));

@@ -183,3 +183,17 @@ repeated path resets. Native tests cover both policies, held inputs and deferral
 The browser header shows only the final SD directory component with an
 independent scrolling clock, preserving the device prefix and optional four
 columns for temperature. Disabling Temp extends its width to all 16 columns.
+
+Sound changes request a one-second PCM preview from the portable
+Pi1551SoundPreview generator. SAMPLE loops the click; BUZZER is synthesized
+at the configured frequency for min(Duration,1000) ms. OFF/zero duration are
+silent. An ~88 KiB buffer is reserved at startup and reused, with the same PWM
+clock/range as ordinary audio (19.2 MHz / 2 / 436 on the Pi3 target).
+Generating and starting the DMA buffer is deferred outside emulation; no
+one-second busy wait is used. The reusable payload and control block are
+cleaned from CPU caches and published with a synchronization barrier before
+DMA starts. Service restores the GPIO mode after the window, and any
+subsequent settings apply cancels the preview first.
+Normal head-step triggers/output are suppressed while preview DMA owns SOUND.
+Native tests verify generated samples, frequency, duration, mute, menu requests
+and deferred adapter effects; DMA timing and audible quality require hardware.

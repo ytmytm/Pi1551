@@ -10,6 +10,7 @@
 #include <iostream>
 #include <cstring>
 #include <algorithm>
+#include "pi1551_sound.h"
 using namespace oled;
 Options options;
 ROMs roms;
@@ -33,6 +34,16 @@ static unsigned now = 0, resetCount = 0, rebootCount = 0, applies = 0;
 static std::string medium;
 static bool failUnmount = false, failMount = false, wp = false;
 static bool sampleAvailable = true;
+static unsigned previews = 0, previewEnd = 0;
+static std::vector<unsigned> previewData(Pi1551SoundPreview::Frames);
+bool OledKernelPreviewSound() {
+    ++previews; previewEnd = now + 1000000;
+    const unsigned char sample[] = {0,128,255};
+    Pi1551SoundPreview::Fill(previewData.data(),options.Runtime(Setting::Sound),options.SoundOnGPIO(),
+        options.SoundOnGPIODuration(),options.SoundOnGPIOFreq(),sample,3);
+    return true;
+}
+void OledKernelServiceSoundPreview() { if (previewEnd && (int)(now-previewEnd) >= 0) previewEnd = 0; }
 static bool pins[54];
 unsigned Pi1551NativeClock() { return now; }
 extern void NativeFatFSRoot(const std::string& root);
@@ -130,6 +141,22 @@ int main(int argc, char** argv) {
     CHECK(Pi1551Oled::TransitionPending()); CHECK(resetMenu.Path() == "/");
     Pi1551Oled::CompleteTransition(); CHECK(resetMenu.Path() == "/1551"); CHECK(resetCount == resetsBefore);
     Pi1551Oled::ObserveHostReset(false); options.SetRuntime(Setting::IgnoreReset,0);
+    Enter("Menu..."); Enter("Settings"); Enter("Sound");
+    int savedSound = options.Runtime(Setting::Sound), savedMode = options.Runtime(Setting::SoundMode);
+    int savedFreq = options.Runtime(Setting::Freq), savedDuration = options.Runtime(Setting::Duration);
+    options.SetRuntime(Setting::Sound,1); options.SetRuntime(Setting::SoundMode,1);
+    Enter("Sound"); CHECK(previews == 1); CHECK(!options.Runtime(Setting::Sound));
+    for (unsigned value : previewData) CHECK(value == 128);
+    Enter("Sound"); CHECK(previews == 2);
+    Choose("Mode"); Press(Key::Enter,true); CHECK(Pi1551Oled::TransitionPending()); CHECK(previews == 2);
+    Pi1551Oled::CompleteTransition(); CHECK(previews == 3); CHECK(!options.SoundOnGPIO());
+    Enter("Mode"); CHECK(previews == 4); CHECK(options.SoundOnGPIO());
+    Enter("Freq"); CHECK(previews == 5);
+    Enter("Duration"); CHECK(previews == 6);
+    now += 1000000; Pi1551Oled::Service(false); CHECK(previewEnd == 0);
+    options.SetRuntime(Setting::Sound,savedSound); options.SetRuntime(Setting::SoundMode,savedMode);
+    options.SetRuntime(Setting::Freq,savedFreq); options.SetRuntime(Setting::Duration,savedDuration);
+    Press(Key::Back); Press(Key::Back); Press(Key::Back);
     { char config[] = "AutoMountImage = bad.d64\n"; options.Process(config); }
     options.SetRuntime(Setting::AutoMount,1); Pi1551Oled::HostReset(); CHECK(medium.empty());
     Enter("Menu..."); Enter("Settings"); Enter("Browser");

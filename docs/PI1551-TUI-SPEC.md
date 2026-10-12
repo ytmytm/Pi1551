@@ -369,10 +369,21 @@ as unrelated settings. Scroll cycles 0.05/0.10/0.20/0.35/0.50/1.00 seconds.
 The Scroll row keeps its label and speed stationary, followed by a scrolling
 `Scrolling preview 0123456789` demo using the selected speed.
 Dim time cycles 0/5/10/30/60/120/300 seconds. Contrast cycles
-1/2/4/8/12/16/24/32/48/64/80/96/112/127/144/160/176/192/208/224/240/255.
-Dim level cycles 0/1/2/4/8/10/12/16/24/32/48/64/80/96/112/127/144/160/176/192/208/224/240/255.
+16/32/48/64/80/96/112/128/144/160/176/192/208/224/240/255 (never zero).
+Dim level cycles 0/16/32/48/64/80/96/112/128/144/160/176/192/208/224/240/255.
 Duration cycles 0/50/100/250/500/1000/2000/5000 ms.
 Custom file values within supported ranges remain valid until changed.
+
+Every successful change in Sound (Sound, Mode, Freq, Duration) starts a
+one-second preview window with the new settings. SAMPLE loops the loaded
+click; BUZZER uses the new frequency for the configured Duration, capped at
+one second, with silence for the rest of the window. Duration 0 and Sound OFF
+are silent. A new change replaces the preceding preview. It never changes
+the stored Duration just for demonstration. No preview runs on menu entry,
+Back, unrelated settings or load/save. Firmware plays through autonomous PWM
+DMA on the fixed SOUND pin; TUI records the one-second mock preview/message
+without emitting terminal bells or trying to reproduce audio. Menu, disk and
+tape continue; ordinary head-step audio is suppressed during the preview.
 
 Runtime application: Reverse affects the next decoded encoder step, without
 reinitializing GPIO or losing quadrature state. Display options apply on the

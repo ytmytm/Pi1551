@@ -18,13 +18,14 @@ class TuiControls(unittest.TestCase):
         self.assertNotIn("OLED",s.GROUPS["settings"])
         for label in ("Temp","Dim time","Dim level","Font","Scroll"): self.click(s,label)
         self.assertFalse(s.options["Temp"])
-        self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],12)
+        self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],16)
         self.assertFalse(s.options["i2cLcdUseCBMChar"]); self.assertEqual(s.options["scrollHighlightRate"],0.20)
         self.assertFalse({"oledFont","oledScroll","Font","Scroll rate"} & s.options.keys())
 
     def test_sound_mode(self):
         s = Simulator(); s.set_screen("sound",True)
         self.click(s,"Duration"); self.assertEqual(s.options["Duration"],1000)
+        self.assertIn("preview 1s",s.message)
         self.click(s,"Mode"); self.assertEqual(s.items(),["..","Sound","Mode"])
         self.assertEqual(s.display_value("Mode"),"SAMPLE")
         self.click(s,"Mode"); self.assertIn("Duration",s.items())
@@ -66,7 +67,7 @@ class TuiControls(unittest.TestCase):
             seen.append(s.scrolling(s.selected_name(),True))
         self.assertGreater(len(set(seen)),1)
         s.options["Contrast"] = 255; self.click(s,"Contrast")
-        self.assertEqual(s.options["Contrast"],1)
+        self.assertEqual(s.options["Contrast"],16)
 
     def test_new_image_format(self):
         s = Simulator(); s.set_screen("disk",True); count = len(s.current_dir.children)
