@@ -39,7 +39,8 @@ static bool MaskComments(const std::string& text, std::string& visible) {
 static bool Valid(Setting id, int v) {
     if (id == Setting::Device) return v == 8 || v == 9;
     if (id == Setting::Freq) return v >= 100 && v <= 10000;
-    if (id == Setting::Contrast || id == Setting::DimLevel) return v >= 0 && v <= 255;
+    if (id == Setting::Contrast) return v >= 1 && v <= 255;
+    if (id == Setting::DimLevel) return v >= 0 && v <= 255;
     if (id == Setting::Scroll) return v >= 10 && v <= 5000;
     if (id == Setting::DimTime) return v >= 0 && v <= 3600;
     if (id == Setting::Duration) return v >= 0 && v <= 5000;

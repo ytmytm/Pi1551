@@ -37,7 +37,7 @@ static bool realTime = false;
 static std::string pendingMount;
 static oled::Menu* checkpoint = 0;
 static bool pendingUnmount = false, pendingReboot = false;
-static uint32_t lastAction = 0;
+static volatile uint32_t lastAction = 0;
 static std::string error;
 static void Barrier() { Pi1551Barrier(); }
 static void Enqueue(oled::Key key) {
@@ -279,7 +279,8 @@ void Draw() {
     bool dim = options.Runtime(oled::Setting::Dimming) &&
         options.I2CLcdDimTime() != 0 &&
         (uint32_t)(Pi1551Clock() - lastAction) / 1000000 >= options.I2CLcdDimTime();
-    screenLCD->SetContrast(dim ? options.I2CLcdDimContrast() : options.I2CLcdOnContrast());
+    screenLCD->SetContrast(dim ? options.I2CLcdDimContrast() : std::max(1u, options.I2CLcdOnContrast()));
+    screenLCD->SetPower(!dim || options.I2CLcdDimContrast() != 0);
     screenLCD->DrawMenu(fresh, options.Runtime(oled::Setting::Font), options.I2CLcdFlip());
 }
 void HostReset() {

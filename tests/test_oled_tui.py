@@ -18,7 +18,7 @@ class TuiControls(unittest.TestCase):
         self.assertNotIn("OLED",s.GROUPS["settings"])
         for label in ("Temp","Dim time","Dim level","Font","Scroll"): self.click(s,label)
         self.assertFalse(s.options["Temp"])
-        self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],16)
+        self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],12)
         self.assertFalse(s.options["i2cLcdUseCBMChar"]); self.assertEqual(s.options["scrollHighlightRate"],0.20)
         self.assertFalse({"oledFont","oledScroll","Font","Scroll rate"} & s.options.keys())
 
@@ -29,6 +29,22 @@ class TuiControls(unittest.TestCase):
         self.assertEqual(s.display_value("Mode"),"SAMPLE")
         self.click(s,"Mode"); self.assertIn("Duration",s.items())
         self.assertEqual(s.display_value("Mode"),"BUZZER")
+
+    def test_reverse_and_scroll_preview(self):
+        s = Simulator(); s.set_screen("encoder",True)
+        self.click(s,"Reverse"); s.move(1); self.assertEqual(s.cursor,0)
+        s.move(-1); self.assertEqual(s.cursor,1)
+        self.click(s,"Reverse"); s.move(-1); self.assertEqual(s.cursor,0)
+        s.set_screen("display",True); self.click(s,"Scroll")
+        self.assertEqual(s.scroll_prefix(),"Scroll 0.20s ")
+        with patch("tools.pi1551_oled_tui.time.monotonic",return_value=0): s.update_scroll()
+        seen = []
+        for step in range(100):
+            with patch("tools.pi1551_oled_tui.time.monotonic",return_value=step * 0.20): s.update_scroll()
+            seen.append(s.scrolling(s.selected_name(),True))
+        self.assertGreater(len(set(seen)),1)
+        s.options["Contrast"] = 255; self.click(s,"Contrast")
+        self.assertEqual(s.options["Contrast"],1)
 
     def test_new_image_format(self):
         s = Simulator(); s.set_screen("disk",True); count = len(s.current_dir.children)

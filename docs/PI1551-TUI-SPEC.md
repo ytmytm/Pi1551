@@ -333,7 +333,9 @@ Submenus:
 - Display: `Temp`, `Contrast`, `Dimming`, `Dim time`, `Dim level`, `Orient`,
   `Font` and `Scroll`. Temp controls only the header; Status still shows TEMP.
   Dim time is in seconds (0/OFF disables automatic dimming), Dim level is
-  absolute OLED contrast 0..255. The timeout is measured since the last UI
+  idle brightness 0..255; zero sends DISPLAY OFF, and any UI input wakes the
+  panel. Active Contrast is restricted to 1..255 (startup zero is clamped to 1;
+  Load settings rejects zero). The timeout is measured since the last UI
   input and begins dimming when Dim time expires. Labels omit LCD, while the
   existing `LCDName`/`i2cLcd...` configuration keys remain compatible;
 - Encoder: the only runtime item is `Reverse ON/OFF`; encoder presence/enabling is a
@@ -355,9 +357,24 @@ Font uses the existing `i2cLcdUseCBMChar` (0 ASCII, 1 C64), and Scroll uses
 `scrollHighlightRate` in seconds per character step. There are no independent
 `oledFont` or `oledScroll` values; obsolete entries are ignored and preserved
 as unrelated settings. Scroll cycles 0.05/0.10/0.20/0.35/0.50/1.00 seconds.
-Dim time cycles 0/5/10/30/60/120/300 seconds, Dim level cycles
-0/8/16/32/64/127/255, and Duration cycles 0/50/100/250/500/1000/2000/5000 ms.
+The Scroll row keeps its label and speed stationary, followed by a scrolling
+`Scrolling preview 0123456789` demo using the selected speed.
+Dim time cycles 0/5/10/30/60/120/300 seconds. Contrast cycles
+1/2/4/8/12/16/24/32/48/64/80/96/112/127/144/160/176/192/208/224/240/255.
+Dim level cycles 0/1/2/4/8/10/12/16/24/32/48/64/80/96/112/127/144/160/176/192/208/224/240/255.
+Duration cycles 0/50/100/250/500/1000/2000/5000 ms.
 Custom file values within supported ranges remain valid until changed.
+
+Runtime application: Reverse affects the next decoded encoder step, without
+reinitializing GPIO or losing quadrature state. Display options apply on the
+next frame (up to 100 ms); idle dimming waits for Dim time. Device number,
+RAMBOard, idle trap, host reset policy, tape motor policy and sound settings
+are read live or applied by the settings adapter. Lowercase changes the next
+directory listing supplied to the computer, not SD filenames on the OLED.
+Skip spinup affects the next ROM spinup delay; Reset path and Auto mount the
+next respected host reset (Auto mount also applies at boot). New image Type
+affects the next created image, never converts a mounted disk. These
+event-dependent settings do not force a reset, remount or file creation.
 
 The buzzer uses the board's fixed SOUND output, GPIO13 (physical pin 33).
 GPIO18 belongs to the TCBM data bus and GPIO19 is cassette READ. Neither is

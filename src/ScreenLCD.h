@@ -42,6 +42,7 @@ public:
 	void ClearInit(RGBA colour);
 
 	void SetContrast(u8 value);
+	void SetPower(bool on);
 	void DrawMenu(const oled::Frame& frame, bool cbmFont, int orientation);
 
 	void ScrollArea(u32 x1, u32 y1, u32 x2, u32 y2);

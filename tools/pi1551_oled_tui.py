@@ -198,6 +198,7 @@ class Simulator:
         if self.cursor < self.offset: self.offset = self.cursor
         if self.cursor >= self.offset + visible: self.offset = self.cursor - visible + 1
     def move(self, direction: int) -> None:
+        if self.options["Encoder reverse"]: direction = -direction
         if self.screen == "flip":
             if not self.fliplist: self.open_browser("No fliplist — browser"); return
             if self.cursor == 0:
@@ -396,12 +397,12 @@ class Simulator:
     def change_setting(self, item: str) -> None:
         if item == "Device number": self.device = 9 if self.device == 8 else 8
         elif item in self.options and isinstance(self.options[item], bool): self.options[item] = not self.options[item]
-        elif item == "Contrast": self.options[item] = 32 if self.options[item] == 255 else 255
+        elif item == "Contrast": self.options[item] = self.next_choice(self.options[item], [1,2,4,8,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255])
         elif item == "Orient": self.options["Orientation"] = "rotated" if self.options["Orientation"] == "normal" else "normal"
         elif item == "Font": self.options["i2cLcdUseCBMChar"] = not self.options["i2cLcdUseCBMChar"]
         elif item == "Scroll": self.options["scrollHighlightRate"] = self.next_choice(self.options["scrollHighlightRate"], [0.05,0.10,0.20,0.35,0.50,1.00])
         elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,30,60,120,300])
-        elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,8,16,32,64,127,255])
+        elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,1,2,4,8,10,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255])
         elif item == "Duration": self.options[item] = self.next_choice(self.options[item], [0,50,100,250,500,1000,2000,5000])
         elif item == "Mode": self.options["soundOnGPIO"] = not self.options["soundOnGPIO"]
         elif item == "Reset": self.options[item] = "IGNORE" if self.options[item] == "REACT" else "REACT"
@@ -494,6 +495,7 @@ class Simulator:
         if self.disk and self.activity == "mounted": self.track = 1.0 if self.track > 35 else self.track + .1; self.activity = "idle" if self.options["Idle trap"] else "run"
         self.update_scroll()
     def selected_name(self) -> str:
+        if self.screen == "display" and self.items()[self.cursor] == "Scroll": return "Scrolling preview 0123456789"
         if self.screen == "flip" and self.active_media in self.fliplist: return self.active_media.name
         if self.screen == "rom" and 0 < self.cursor <= len(self.ROMS): return self.ROMS[self.cursor - 1]
         if self.screen == "tape" and self.tape: return self.tape.name
@@ -506,6 +508,7 @@ class Simulator:
             if 0 < self.cursor <= len(entries): return self.browser_name(entries[self.cursor - 1])
         return ""
     def scroll_prefix(self) -> str:
+        if self.screen == "display" and self.items()[self.cursor] == "Scroll": return "Scroll " + self.display_value("Scroll") + " "
         if self.screen == "browser":
             entries = self.browser_items()
             if 0 < self.cursor <= len(entries): return self.browser_prefix(entries[self.cursor - 1])
@@ -631,7 +634,10 @@ class UI:
                 item = values[index]
                 submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound"}
                 suffix = " " + sim.display_value(item) if sim.display_value(item) and not submenu else ""
-                self.line(2 + row, item + suffix, index == sim.cursor)
+                label = item + suffix
+                if sim.screen == "display" and item == "Scroll":
+                    label += " " + sim.scrolling("Scrolling preview 0123456789", index == sim.cursor)
+                self.line(2 + row, label, index == sim.cursor)
         h = self.s.getmaxyx()[0]; self.text(h - 3, 2, "Message: " + sim.message, curses.color_pair(3)); self.text(h - 2, 2, "←→ encoder   Enter select   i Insert   b Back   r RESET   m MOTOR   q quit")
 
 def run(stdscr: curses.window) -> None:

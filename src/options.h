@@ -98,7 +98,7 @@ public:
 	inline unsigned int I2CLcdAddress() const { return i2cLcdAddress; }
 	inline unsigned int I2CScan() const { return i2cScan; }
 	inline unsigned int I2CLcdFlip() const { return i2cLcdFlip; }
-	inline unsigned int I2CLcdOnContrast() const { return i2cLcdOnContrast; }
+	inline unsigned int I2CLcdOnContrast() const { return i2cLcdOnContrast < 1 ? 1 : i2cLcdOnContrast > 255 ? 255 : i2cLcdOnContrast; }
 	inline unsigned int I2CLcdDimContrast() const { return i2cLcdDimContrast; }
 	inline unsigned int I2CLcdDimTime() const { return i2cLcdDimTime; }
 	inline unsigned int I2cLcdUseCBMChar() const { return i2cLcdUseCBMChar; }

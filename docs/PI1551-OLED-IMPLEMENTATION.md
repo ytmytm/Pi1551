@@ -154,3 +154,11 @@ OLED contrast changes send only command 0x81 and its brightness byte for both
 SSD1306 and SH1106; VCOMH remains as initialized by the driver. Native I2C tests
 check this separation and the actual firmware dimming path at the configured
 timeout, waking on UI input, plus Dimming OFF and Dim time 0/OFF.
+Dim level 0 sends DISPLAY OFF (0xAE); input wakes it with DISPLAY ON (0xAF).
+Active contrast is clamped to at least 1, and runtime settings load rejects 0.
+ASCII and missing-chargen fallback use the existing native CGA 8x8 font rather
+than dropping alternate scanlines from VGA 8x16. C64 chargen remains native
+8x8. Initialization uses page mode 0x02 for SSD1306 and omits the unsupported
+addressing-mode command on SH1106. Both retain 64-line multiplex/COM geometry.
+Encoder pins remain fixed, with runtime inversion applied to decoded rotation
+events; button events and the decoder's in-progress quadrature state are unchanged.

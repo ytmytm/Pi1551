@@ -19,6 +19,7 @@
 
 #include "options.h"
 #include "OledSettings.h"
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -410,7 +411,7 @@ int Options::Runtime(oled::Setting id) const
     case Setting::ResetPath: return onResetChangeToStartingFolder;
     case Setting::Lowercase: return lowercaseBrowseModeFilenames;
     case Setting::SD2IEC: return !disableSD2IECCommands;
-    case Setting::Contrast: return i2cLcdOnContrast;
+    case Setting::Contrast: return I2CLcdOnContrast();
     case Setting::Dimming: return oledDimming;
     case Setting::Orient: return i2cLcdFlip;
     case Setting::Font: return i2cLcdUseCBMChar;
@@ -441,7 +442,7 @@ void Options::SetRuntime(oled::Setting id, int value)
     case Setting::ResetPath: onResetChangeToStartingFolder = value; break;
     case Setting::Lowercase: lowercaseBrowseModeFilenames = value; break;
     case Setting::SD2IEC: disableSD2IECCommands = !value; break;
-    case Setting::Contrast: i2cLcdOnContrast = value; break;
+    case Setting::Contrast: i2cLcdOnContrast = std::max(1, std::min(255, value)); break;
     case Setting::Dimming: oledDimming = value; break;
     case Setting::Orient: i2cLcdFlip = value; break;
     case Setting::Font: i2cLcdUseCBMChar = value; break;

@@ -226,7 +226,9 @@ std::vector<Menu::Row> Menu::Rows() {
             if (id == Setting::Duration) value = Number(v) + "ms";
             if (id == Setting::DimTime) value = v ? Number(v) + "s" : "OFF";
             if (id == Setting::Scroll) { char b[20]; snprintf(b,sizeof(b),"%.2fs", v / 1000.0); value = b; }
-            r.push_back(Row(std::string(items[i].label) + " " + value));
+            if (id == Setting::Scroll)
+                r.push_back(Row("Scroll " + value + " ", "Scrolling preview 0123456789"));
+            else r.push_back(Row(std::string(items[i].label) + " " + value));
         }
         break;
     }
@@ -264,10 +266,10 @@ static int NextChoice(int value, const int* choices, unsigned count) {
 void Menu::ChangeValue(int /*delta*/) {
     Setting id = SelectedSetting(); int v = backend.Get(id);
     if (id == Setting::Device) v = v == 8 ? 9 : 8;
-    else if (id == Setting::Contrast) v = v == 255 ? 32 : 255;
+    else if (id == Setting::Contrast) { const int choices[] = {1,2,4,8,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,22); }
     else if (id == Setting::Scroll) { const int choices[] = {50,100,200,350,500,1000}; v = NextChoice(v,choices,6); }
     else if (id == Setting::DimTime) { const int choices[] = {0,5,10,30,60,120,300}; v = NextChoice(v,choices,7); }
-    else if (id == Setting::DimLevel) { const int choices[] = {0,8,16,32,64,127,255}; v = NextChoice(v,choices,7); }
+    else if (id == Setting::DimLevel) { const int choices[] = {0,1,2,4,8,10,12,16,24,32,48,64,80,96,112,127,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,24); }
     else if (id == Setting::Duration) { const int choices[] = {0,50,100,250,500,1000,2000,5000}; v = NextChoice(v,choices,8); }
     else if (id == Setting::Freq) {
         v = v == 1600 ? 1200 : v == 1200 ? 2000 : 1600;

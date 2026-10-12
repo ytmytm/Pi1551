@@ -56,12 +56,12 @@ SoundOnGPIOFreq = 1200 // Buzzer frequency in Hz.
 
 // Settings -> Display. OLED layout is always 16 columns x 8 rows on 128x64.
 DisplayTemperature = 1 // Temp ON/OFF controls the header; Status always shows TEMP.
-i2cLcdOnContrast = 127
+i2cLcdOnContrast = 127 // Active brightness 1..255; zero is clamped to 1 at startup.
 oledDimming = 1
 i2cLcdDimTime = 30 // Seconds since last UI input; 0 disables automatic dimming.
-i2cLcdDimContrast = 10
+i2cLcdDimContrast = 10 // Idle brightness 0..255; 0 switches the panel OFF until input.
 i2cLcdFlip = 0 // 0 = normal, 1 = rotate 180 degrees.
-i2cLcdUseCBMChar = 1 // Font: 1 = C64 chargen, 0 = ASCII; both use 8x8 cells.
+i2cLcdUseCBMChar = 1 // Font: 1 = C64 chargen, 0 = native 8x8 ASCII (also the fallback).
 scrollHighlightRate = 0.10 // Seconds per scroll step; smaller is faster.
 // oledFont and oledScroll are obsolete and ignored; use the two keys above.
 

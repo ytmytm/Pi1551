@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iostream>
 #include <cstring>
+#include <algorithm>
 using namespace oled;
 Options options;
 ROMs roms;
@@ -90,6 +91,9 @@ int main(int argc, char** argv) {
     strcpy(roms.ROMNames[0],"dos1551.bin"); strcpy(roms.ROMNames[2],"other.bin");
     options.SetRuntime(Setting::AutoMount,0); g_tapePlayer = new TapePlayer(); g_tapePlayer->InitializeGPIO();
     ScreenLCD panel; screenLCD = &panel;
+    { char config[] = "i2cLcdOnContrast = 0\n"; options.Process(config); }
+    CHECK(options.I2CLcdOnContrast() == 1); CHECK(options.Runtime(Setting::Contrast) == 1);
+    options.SetRuntime(Setting::Contrast,127);
     screenLCD->Open(128,64,1,1,0x3c,0,LCD_1306_128x64,false);
     Pi1551Oled::Initialize(); CHECK(Pi1551Oled::TestMenu().Path() == "/1551");
     oledCommands.clear(); now = 29900000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
@@ -103,6 +107,14 @@ int main(int argc, char** argv) {
     options.SetRuntime(Setting::Dimming,0); now += 200000;
     oledCommands.clear(); Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
     options.SetRuntime(Setting::Dimming,1);
+    options.SetRuntime(Setting::DimLevel,0); now += 200000;
+    oledCommands.clear(); Pi1551Oled::Service(false); Pi1551Oled::Draw();
+    CHECK(std::find(oledCommands.begin(),oledCommands.end(),0xAE) != oledCommands.end());
+    Press(Key::Left); oledCommands.clear(); Pi1551Oled::Draw();
+    CHECK(std::find(oledCommands.begin(),oledCommands.end(),0xAF) != oledCommands.end());
+    CHECK(LastContrast() == 127);
+    options.SetRuntime(Setting::Contrast,0); CHECK(options.Runtime(Setting::Contrast) == 1);
+    options.SetRuntime(Setting::Contrast,127); options.SetRuntime(Setting::DimLevel,10);
     { char config[] = "AutoMountImage = bad.d64\n"; options.Process(config); }
     options.SetRuntime(Setting::AutoMount,1); Pi1551Oled::HostReset(); CHECK(medium.empty());
     Enter("Menu..."); Enter("Settings"); Enter("Browser");

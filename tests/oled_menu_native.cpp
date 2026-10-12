@@ -6,6 +6,8 @@
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
+#include <algorithm>
+#include <functional>
 using namespace oled;
 #define CHECK(x) do { if (!(x)) throw std::runtime_error(std::string(__func__) + ":" + std::to_string(__LINE__) + " " #x); } while (0)
 struct KernelStub : Backend {
@@ -257,8 +259,15 @@ static void new_runtime_controls() {
     KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Display");
     Enter(m,"Temp"); CHECK(k.Get(Setting::Temp) == 0); CHECK(std::string(m.Render(0).rows[0]).substr(13) == "   ");
     Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 60);
-    Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 16);
+    Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 12);
     Enter(m,"Scroll"); CHECK(k.Get(Setting::Scroll) == 200);
+    Frame preview = m.Render(0); Frame scrolled = m.Render(2000);
+    CHECK(std::string(preview.rows[7]).substr(1,13) == "Scroll 0.20s ");
+    CHECK(std::string(preview.rows[7]) != std::string(scrolled.rows[7]));
+    std::vector<int> brightness;
+    for (unsigned i = 0; i < 22; ++i) { Enter(m,"Contrast"); brightness.push_back(k.Get(Setting::Contrast)); }
+    CHECK(brightness.front() == 1); CHECK(brightness.back() == 255);
+    CHECK(std::adjacent_find(brightness.begin(),brightness.end(),std::greater_equal<int>()) == brightness.end());
     Press(m,Key::Back); Enter(m,"Sound"); Enter(m,"Duration"); CHECK(k.Get(Setting::Duration) == 1000);
     Enter(m,"Mode"); CHECK(k.Get(Setting::SoundMode) == 0);
     Frame sample = m.Render(0); CHECK(std::string(sample.rows[4]).find("Mode SAMPLE") != std::string::npos);
@@ -282,6 +291,8 @@ static void canonical_setting_formats() {
         "scrollHighlightRate = 0.20 // seconds\nNewDiskType = g64");
     CHECK(!ParseRuntimeSettings("scrollHighlightRate = nan",parsed)); CHECK(!ParseRuntimeSettings("NewDiskType = d81",parsed));
     CHECK(!ParseRuntimeSettings("i2cLcdDimContrast = 999",parsed)); CHECK(!ParseRuntimeSettings("soundOnGPIODuration = -1",parsed));
+    CHECK(!ParseRuntimeSettings("i2cLcdOnContrast = 0",parsed));
+    CHECK(ParseRuntimeSettings("i2cLcdOnContrast = 1\ni2cLcdDimContrast = 0",parsed));
     CHECK(ParseRuntimeSettings("oledScroll = 1\noledFont = 1",parsed)); CHECK(parsed.empty());
 }
 int main() {
