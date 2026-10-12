@@ -53,6 +53,7 @@
  interfaces. You must include errno.h, then disable the macro, like this:
  */
 #include <errno.h>
+#include <stddef.h>
 #undef errno
 extern int errno;
 
@@ -141,6 +142,17 @@ int getpid(void)
 int _getpid(void)
 {
 	return 1;
+}
+
+/* This bare-metal target has no operating-system entropy source. Newlib 4.4
+ requests this syscall while linking libstdc++, so fail gracefully rather
+ than leaving the symbol unresolved. */
+int _getentropy(void *buffer, size_t length)
+{
+  (void) buffer;
+  (void) length;
+  errno = ENOSYS;
+  return -1;
 }
 
 /* Query whether output stream is a terminal. For consistency with the other
