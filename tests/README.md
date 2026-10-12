@@ -12,6 +12,12 @@ OLED raster, host-file buffering and the real CD parser with ASan/UBSan. GPIO/I2
 kernel hooks record side effects; a POSIX FatFS shim supports disposable card
 fixtures and injected write/sync/rename failures.
 
+A separate integration test uses the real FatFS and diskio on in-memory
+FAT16/FAT32 SD sectors (not the POSIX f_sync shim). It invokes the production
+menu/adapter Save settings, Load settings and reboot confirmation, then
+remounts to verify file bytes and preserved comments. It checks recovery-file
+blocking, missing-device reboot refusal, initialization and signed I/O errors.
+
 Mixed host/panel tests cover CD parents, exiting emulated/container media,
 SD:/ and 0:/ aliases, changing directory while a submenu is open, LIST/SOLO
 and tape retention, stale return histories and failed unmounts. CD parser tests

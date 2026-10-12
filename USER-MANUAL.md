@@ -336,6 +336,14 @@ reports an error and preserves pending settings; never remove a .tmp/.bak
 recovery file without checking its contents. Disk/image writes and settings
 saving are separate actions.
 
+Read the full scrolling failure message: it now identifies the failed step,
+such as Sync temp failed (with a FatFS result code), Invalid options.txt,
+options.txt.tmp exists or options.txt.bak exists. Existing recovery copies
+block a changed save rather than being overwritten. Inspect them on a PC and
+preserve a copy before deciding what to restore or remove. Reboot errors
+distinguish host/image/media flush, SD sync and unmount failures; the device
+does not restart when those checks fail.
+
 See [the interaction specification](docs/PI1551-TUI-SPEC.md) for exact state
 transitions and [the implementation notes](docs/PI1551-OLED-IMPLEMENTATION.md)
 for native test coverage and hardware limitations.

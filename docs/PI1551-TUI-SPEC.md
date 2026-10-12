@@ -438,7 +438,11 @@ replaces only the value in the last effective definition of a changed option.
 Absent changed options are appended only for non-default values. Untouched
 options (including independent user edits) and duplicate earlier definitions
 remain unchanged. A no-op save performs no writes. A write failure must leave the current runtime state intact and be
-reported. Neither action itself mounts media or resets the device. The TUI
+reported with its failing stage and, where available, FatFS result code.
+Existing options.txt.tmp/options.txt.bak are reported explicitly and retained;
+inspect recovery data instead of silently overwriting it. Reboot reports
+host/image/media flush, SD sync or unmount failure and remains blocked until
+the storage checks succeed. Neither settings action itself mounts media or resets the device. The TUI
 mock only reports these actions using its fake `options-pi1551.txt`; it does
 not read or write a file.
 

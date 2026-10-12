@@ -60,6 +60,21 @@ parser plus kernel-adapter and pure-menu mixed-navigation scenarios.
 
 ## Runtime persistence
 
+FatFS storage barriers use the real diskio CTRL_SYNC implementation. SD
+DoWrite is synchronous and waits for transfer completion/card busy release;
+the glue layer has no pending write queue, so CTRL_SYNC succeeds only for a
+ready initialized device. Missing/failed initialization is not reported ready,
+and negative SD read/write results propagate as errors instead of wrapping
+into a large unsigned success. Unsupported ioctl commands still fail.
+Native FAT16/FAT32 sector tests run the real menu/adapter and FatFS/diskio,
+verify save/load bytes after remount, and exercise reboot's storage barrier.
+Only physical sector access and watchdog/kernel effects are stubbed there.
+
+Settings/reboot failures expose their failing stage instead of a generic
+Save/Reboot failed: temp creation/write/sync/close, backup/install rename,
+invalid options, existing .tmp/.bak, host/image/media flush or SD sync.
+Deferred reboot failure preserves its detailed message after UI rollback.
+
 Load settings reads `/options.txt` on demand through `Options::LoadRuntimeText`, validates recognized runtime values before
 applying them, and uses normal boot defaults for omitted runtime values.
 ROM slot filenames, hardware/model choices and other startup-only values are
