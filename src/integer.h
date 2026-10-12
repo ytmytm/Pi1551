@@ -26,8 +26,14 @@ typedef unsigned short	WORD;
 typedef unsigned short	WCHAR;
 
 /* These types MUST be 32-bit */
+#ifdef PI1551_NATIVE_TEST
+// LP64 desktop hosts must keep the same FatFS field widths as the ARM build.
+typedef int LONG;
+typedef unsigned int DWORD;
+#else
 typedef long			LONG;
 typedef unsigned long	DWORD;
+#endif
 
 /* This type MUST be 64-bit (Remove this for C89 compatibility) */
 typedef unsigned long long QWORD;

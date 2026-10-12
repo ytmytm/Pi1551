@@ -2936,9 +2936,12 @@ bool OledKernelWriteImage()
 bool OledKernelPrepareReboot()
 {
     DiskImage* image = diskCaddy.GetCurrentDisk();
-    if (!m_TCBM_Commands.FinishFiles() || (image && !image->Flush()) || !cbm_image_sync()
-        || disk_ioctl(0, CTRL_SYNC, 0) != RES_OK) return false;
-    return OledKernelUnmount();
+    if (!m_TCBM_Commands.FinishFiles()) { Pi1551Oled::KernelError("Host flush failed"); return false; }
+    if (image && !image->Flush()) { Pi1551Oled::KernelError("Image flush failed"); return false; }
+    if (!cbm_image_sync()) { Pi1551Oled::KernelError("Media sync failed"); return false; }
+    if (disk_ioctl(0, CTRL_SYNC, 0) != RES_OK) { Pi1551Oled::KernelError("SD sync failed"); return false; }
+    if (!OledKernelUnmount()) { Pi1551Oled::KernelError("Unmount failed"); return false; }
+    return true;
 }
 bool OledKernelUnmount()
 {

@@ -18,6 +18,7 @@ bool HostParent(); // mounted image -> containing SD folder; SD folder -> parent
 bool HostRoot();
 void HostRefresh(const char* containerPath = 0);
 std::string MountedPath();
+void KernelError(const char* message); // detailed failure from core 1 kernel hooks
 #ifdef PI1551_NATIVE_TEST
 void TestInput(oled::Key key);
 oled::Menu& TestMenu();

@@ -17,6 +17,13 @@ def run():
         flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
                  "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                  "-ffunction-sections", "-fdata-sections", "-Isrc", "-Iuspi/include"]
+        subprocess.run(flags + ["-O0", "-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+                               "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder", "-fno-sanitize=vptr",
+                               "tests/fatfs_diskio_native.cpp", "src/ff.cpp", "src/diskio.cpp",
+                               "src/Pi1551Oled.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp",
+                               "src/options.cpp", "src/tape_player.cpp", "-Wl,--gc-sections",
+                               "-o", str(build / "fatfs-storage")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "fatfs-storage")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-Werror", "tests/oled_menu_native.cpp", "src/OledMenu.cpp",
                                "src/OledSettings.cpp", "-o", str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run([str(build / "menu")], cwd=ROOT, check=True)

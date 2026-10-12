@@ -21,6 +21,7 @@ extern "C"
 
 //static struct emmc_block_dev *emmc_dev;
 static CEMMCDevice* pEMMC;
+static bool sdInitialized = false;
 static int USBDeviceIndex = -1;
 
 #define SD_BLOCK_SIZE		512
@@ -28,6 +29,7 @@ static int USBDeviceIndex = -1;
 void disk_setEMM(CEMMCDevice* pEMMCDevice)
 {
 	pEMMC = pEMMCDevice;
+	sdInitialized = false;
 }
 
 void disk_setUSB(unsigned deviceIndex)
@@ -40,13 +42,13 @@ int sd_card_init(struct block_device **dev)
 	return 0;
 }
 
-size_t sd_read(uint8_t *buf, size_t buf_size, uint32_t block_no)
+int sd_read(uint8_t *buf, size_t buf_size, uint32_t block_no)
 {
 //	g_pLogger->Write("", LogNotice, "sd_read %d", block_no);
 	return pEMMC->DoRead(buf, buf_size, block_no);
 }
 
-size_t sd_write(uint8_t *buf, size_t buf_size, uint32_t block_no)
+int sd_write(uint8_t *buf, size_t buf_size, uint32_t block_no)
 {
 	return pEMMC->DoWrite(buf, buf_size, block_no);
 }
@@ -87,7 +89,8 @@ DSTATUS disk_status (
 	////	return stat;
 	//}
 	//return STA_NOINIT;
-	return 0;
+	if (pdrv == DEV_MMC) return pEMMC && sdInitialized ? 0 : STA_NOINIT;
+	return pdrv <= USPiMassStorageDeviceAvailable() ? 0 : STA_NOINIT;
 }
 
 
@@ -101,7 +104,6 @@ DSTATUS disk_initialize (
 )
 {
 	//DSTATUS stat;
-	int result;
 
 	switch (pdrv) {
 	////case DEV_RAM :
@@ -112,7 +114,7 @@ DSTATUS disk_initialize (
 	////	return stat;
 
 	case DEV_MMC :
-		result = pEMMC->Initialize();
+		sdInitialized = pEMMC && pEMMC->Initialize();
 
 		// translate the reslut code here
 
@@ -126,7 +128,7 @@ DSTATUS disk_initialize (
 	////	return stat;
 	}
 	//return STA_NOINIT;
-	return 0;
+	return disk_status(pdrv);
 }
 
 
@@ -143,11 +145,13 @@ DRESULT disk_read (
 )
 {
 	//DEBUG_LOG("r pdrv = %d\r\n", pdrv);
+	if (!buff || !count) return RES_PARERR;
+	if (disk_status(pdrv) & STA_NOINIT) return RES_NOTRDY;
 	if (pdrv == 0)
 	{
 		for (UINT s = 0; s < count; ++s)
 		{
-			if (sd_read(buff, SD_BLOCK_SIZE, sector + s) < SD_BLOCK_SIZE)
+			if (sd_read(buff, SD_BLOCK_SIZE, sector + s) != SD_BLOCK_SIZE)
 			{
 				return RES_ERROR;
 			}
@@ -182,11 +186,13 @@ DRESULT disk_write (
 )
 {
 	//DEBUG_LOG("w pdrv = %d\r\n", pdrv);
+	if (!buff || !count) return RES_PARERR;
+	if (disk_status(pdrv) & STA_NOINIT) return RES_NOTRDY;
 	if (pdrv == 0)
 	{
 		for (UINT s = 0; s < count; ++s)
 		{
-			if (sd_write((uint8_t *)buff, SD_BLOCK_SIZE, sector+s) < SD_BLOCK_SIZE)
+			if (sd_write((uint8_t *)buff, SD_BLOCK_SIZE, sector+s) != SD_BLOCK_SIZE)
 			{
 				return RES_ERROR;
 			}
@@ -220,6 +226,12 @@ DRESULT disk_ioctl (
 	void *buff		/* Buffer to send/receive control data */
 )
 {
+	if (cmd == CTRL_SYNC) {
+		// No queued/cache writes exist in this glue layer: SD DoWrite waits
+		// for transfer-complete (including card busy), USB waits for its CSW.
+		// FatFS has written its own buffers before reaching this barrier.
+		return disk_status(pdrv) & STA_NOINIT ? RES_NOTRDY : RES_OK;
+	}
 	//DRESULT res;
 	//int result;
 

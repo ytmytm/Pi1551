@@ -321,14 +321,14 @@ void Menu::Select() {
     } else if (view == View::Settings) {
         static const View targets[] = {View::ROM, View::Drive, View::TapeSettings, View::BrowserSettings, View::Display, View::Encoder, View::Sound};
         if (cursor <= 7) Open(targets[cursor - 1]);
-        else if (cursor == 8) message = backend.LoadSettings() ? "Settings loaded" : "Load failed";
-        else message = backend.SaveSettings() ? "Settings saved" : "Save failed";
+        else if (cursor == 8) message = backend.LoadSettings() ? "Settings loaded" : backend.Error();
+        else message = backend.SaveSettings() ? "Settings saved" : backend.Error();
     } else if (view == View::Notice) Back();
     else if (view == View::ROM) {
         if (Rows()[cursor].active) Back();
         else if (!backend.SelectROM(cursor - 1)) message = "ROM failed";
     } else if (view == View::Reboot) {
-        if (cursor == 1) Back(); else if (!backend.Reboot()) message = "Reboot failed";
+        if (cursor == 1) Back(); else if (!backend.Reboot()) message = backend.Error();
     } else if (view == View::Tape) {
         if (cursor == 2) Browse(false, true);
         else if (cursor == 3) backend.EjectTape();

@@ -92,6 +92,11 @@ static bool ValidMedia(const std::string& path) {
 class KernelBackend : public oled::Backend {
     std::map<oled::Setting, int> baseline;
 public:
+    bool Failure(const char* operation, FRESULT result = FR_OK) {
+        char code[20]; error = operation;
+        if (result != FR_OK) { snprintf(code,sizeof(code)," (%u)",(unsigned)result); error += code; }
+        return false;
+    }
     void CaptureBaseline() {
         for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i)
             baseline[(oled::Setting)i] = Get((oled::Setting)i);
@@ -183,21 +188,24 @@ public:
         return ValidMedia(path);
     }
     bool LoadSettings() override {
+        error.clear();
         std::string text;
         Options candidate = options;
-        if (!ReadText("/options.txt", text) || !candidate.LoadRuntimeText(text)) return false;
-        if (candidate.Runtime(oled::Setting::Sound) && !candidate.SoundOnGPIO() && !OledKernelSampleAvailable()) return false;
+        if (!ReadText("/options.txt", text)) return Failure("Read settings failed");
+        if (!candidate.LoadRuntimeText(text)) return Failure("Invalid options.txt");
+        if (candidate.Runtime(oled::Setting::Sound) && !candidate.SoundOnGPIO() && !OledKernelSampleAvailable()) return Failure("Sample unavailable");
         for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i)
             options.SetRuntime((oled::Setting)i, candidate.Runtime((oled::Setting)i));
         OledKernelApplySettings(); CaptureBaseline(); return true;
     }
     bool SaveSettings() override {
+        error.clear();
         std::string text; FILINFO f;
         FRESULT exists = f_stat("/options.txt", &f);
-        if (exists != FR_OK && exists != FR_NO_FILE) return false;
-        if (exists == FR_OK && !ReadText("/options.txt", text)) return false;
+        if (exists != FR_OK && exists != FR_NO_FILE) return Failure("Stat settings failed",exists);
+        if (exists == FR_OK && !ReadText("/options.txt", text)) return Failure("Read settings failed");
         std::map<oled::Setting,int> parsed, changes, defaults;
-        if (!oled::ParseRuntimeSettings(text, parsed)) return false;
+        if (!oled::ParseRuntimeSettings(text, parsed)) return Failure("Invalid options.txt");
         Options bootDefaults;
         for (unsigned i = 0; i < (unsigned)oled::Setting::Count; ++i) {
             oled::Setting id = (oled::Setting)i;
@@ -208,17 +216,25 @@ public:
         if (updated == text) { CaptureBaseline(); return true; }
         text = updated;
         // Never truncate the original: sync a new file, then retain it as a backup.
-        if (f_stat("/options.txt.tmp", &f) == FR_OK || f_stat("/options.txt.bak", &f) == FR_OK) return false;
-        FIL out; if (f_open(&out, "/options.txt.tmp", FA_WRITE | FA_CREATE_NEW) != FR_OK) return false;
-        UINT n = 0; bool ok = f_write(&out, text.data(), text.size(), &n) == FR_OK && n == text.size();
-        if (ok) ok = f_sync(&out) == FR_OK;
-        if (f_close(&out) != FR_OK) ok = false;
+        if (f_stat("/options.txt.tmp", &f) == FR_OK) return Failure("options.txt.tmp exists");
+        if (f_stat("/options.txt.bak", &f) == FR_OK) return Failure("options.txt.bak exists");
+        FIL out; FRESULT result = f_open(&out, "/options.txt.tmp", FA_WRITE | FA_CREATE_NEW);
+        if (result != FR_OK) return Failure("Create temp failed",result);
+        UINT n = 0; result = f_write(&out, text.data(), text.size(), &n);
+        bool ok = result == FR_OK && n == text.size();
+        if (result != FR_OK) Failure("Write temp failed",result);
+        else if (!ok) Failure("Short settings write");
+        if (ok) { result = f_sync(&out); ok = result == FR_OK; if (!ok) Failure("Sync temp failed",result); }
+        result = f_close(&out);
+        if (result != FR_OK) { if (ok) Failure("Close temp failed",result); ok = false; }
         if (!ok) { f_unlink("/options.txt.tmp"); return false; }
-        if (exists == FR_OK && f_rename("/options.txt", "/options.txt.bak") != FR_OK) { f_unlink("/options.txt.tmp"); return false; }
-        if (f_rename("/options.txt.tmp", "/options.txt") != FR_OK) {
+        if (exists == FR_OK && (result = f_rename("/options.txt", "/options.txt.bak")) != FR_OK) {
+            f_unlink("/options.txt.tmp"); return Failure("Backup rename failed",result);
+        }
+        if ((result = f_rename("/options.txt.tmp", "/options.txt")) != FR_OK) {
             if (exists == FR_OK && f_rename("/options.txt.bak", "/options.txt") == FR_OK)
                 f_unlink("/options.txt.tmp");
-            return false;
+            return Failure("Install settings failed",result);
         }
         if (exists == FR_OK) f_unlink("/options.txt.bak");
         CaptureBaseline();
@@ -230,8 +246,9 @@ public:
     bool WriteProtected() override { return OledKernelWriteProtected(); }
     void WriteProtect(bool value) override { OledKernelWriteProtect(value); }
     bool Reboot() override {
+        error.clear();
         if (realTime) { pendingReboot = true; return true; }
-        if (!OledKernelPrepareReboot()) return false;
+        if (!OledKernelPrepareReboot()) { if (error.empty()) error = "Flush before reboot failed"; return false; }
         Reboot_Pi(); return true;
     }
 };
@@ -276,7 +293,8 @@ bool InputPending() { return readIndex != writeIndex; }
 void CompleteTransition() {
     realTime = false;
     bool ok = true;
-    if (pendingReboot) { pendingReboot = false; ok = backend.Reboot(); }
+    std::string failure;
+    if (pendingReboot) { pendingReboot = false; ok = backend.Reboot(); if (!ok) failure = backend.Error(); }
     else if (pendingUnmount) { pendingUnmount = false; ok = OledKernelUnmount(); }
     else if (!pendingMount.empty()) {
         std::string p = pendingMount; pendingMount.clear(); ok = OledKernelMount(p.c_str());
@@ -288,7 +306,7 @@ void CompleteTransition() {
     }
     if (!ok) {
         if (checkpoint) { delete menu; menu = checkpoint; checkpoint = 0; }
-        menu->Notify("Media/write error");
+        menu->Notify(failure.empty() ? "Media/write error" : failure);
     }
     delete checkpoint; checkpoint = 0;
 }
@@ -370,6 +388,7 @@ void HostRefresh(const char* containerPath) {
     else menu->Refresh(); // directory listing changed, not the selected UI view
 }
 std::string MountedPath() { return menu ? menu->Mounted() : ""; }
+void KernelError(const char* message) { error = message; }
 #ifdef PI1551_NATIVE_TEST
 void TestInput(oled::Key key) { Enqueue(key); }
 oled::Menu& TestMenu() { return *menu; }
