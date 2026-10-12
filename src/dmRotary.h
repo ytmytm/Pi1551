@@ -49,6 +49,14 @@ typedef enum {
     RotateNegative = 4      // counter-clockwise rotation
 } rotary_result_t;
 
+// Apply runtime direction without changing the decoder's quadrature state.
+inline rotary_result_t RotaryDirection(rotary_result_t result, bool reverse)
+{
+    if (reverse && result == RotateNegative) return RotatePositive;
+    if (reverse && result == RotatePositive) return RotateNegative;
+    return result;
+}
+
 
 //------------------------------------------------------------------------------
 // RotaryPin

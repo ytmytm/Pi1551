@@ -70,7 +70,7 @@ unsigned TCBM_Bus::gplev0;
 RotaryEncoder TCBM_Bus::rotaryEncoder;
 bool TCBM_Bus::rotaryEncoderEnable;
 //ROTARY: Added for rotary encoder inversion (Issue#185) - 08/13/2020 by Geo...
-bool TCBM_Bus::rotaryEncoderInvert;
+volatile bool TCBM_Bus::rotaryEncoderInvert;
 volatile bool TCBM_Bus::rotaryDiskStepNext = false;
 volatile bool TCBM_Bus::rotaryDiskStepPrev = false;
 u8 TCBM_Bus::lastDirA = 0xff; // force initial programming of pin functions
@@ -186,6 +186,7 @@ void TCBM_Bus::ReadGPIOUserInput(unsigned gpioLevel, u32 sampleUs)
 		//       original processing logic to do it's work.
 		//
 		rotary_result_t rotaryResult = TCBM_Bus::rotaryEncoder.Poll(gpioLevel, sampleUs);
+		rotaryResult = RotaryDirection(rotaryResult, rotaryEncoderInvert);
 		switch (rotaryResult)
 		{
 
