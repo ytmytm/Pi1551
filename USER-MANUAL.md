@@ -263,6 +263,26 @@ TAPE --- --% M- or TAPE --- --% --; a loaded tape at the beginning has
 ALWAYS override) even without a tape; PLAY stays pressed from load until
 eject, including EOF.
 
+### Computer CD Commands And The Panel
+
+Commodore command-channel navigation updates the OLED as well as the file
+source. CD into a folder shows Browser. CD selecting an image mounts it and
+shows Fliplist using the same SOLO/LIST rules as panel selection.
+
+CD.. or CD followed by the Commodore left-arrow character (often written
+CD<- or CD_) exits a mounted image into its containing SD folder. Send it
+again to go up one SD folder. This applies to D64/G64 emulation and to
+D71/D80/D81/D82/PRG containers, including images selected from a fliplist.
+At SD root, a parent command stays there. CD/ selects the SD root; CD//
+selects /1551. A host directory change also leaves any open OLED submenu;
+Back cannot restore an obsolete view and remount media unexpectedly.
+
+An explicit LIST survives the host's exit; a temporary SOLO image does not.
+TAP stays loaded. A plain directory refresh does not interrupt the current
+submenu. Failed image flush/unmount keeps the mounted medium and reports an
+error. The panel's folder header and the computer's subsequent directory
+listing refer to the same directory after the change.
+
 ### Runtime Settings And Actions
 
 Drive settings affect the device number, idle trap, RAM expansion, spinup

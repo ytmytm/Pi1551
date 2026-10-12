@@ -8,9 +8,16 @@ make test-oled-native
 
 It runs headless TUI checks and compiles the production menu, kernel adapter,
 settings parser, head-step audio controller, TAP player, D64/G64/PRG code,
-OLED raster and host-file buffering with ASan/UBSan. GPIO/I2C and
+OLED raster, host-file buffering and the real CD parser with ASan/UBSan. GPIO/I2C and
 kernel hooks record side effects; a POSIX FatFS shim supports disposable card
-fixtures and injected write/sync/rename failures. See
+fixtures and injected write/sync/rename failures.
+
+Mixed host/panel tests cover CD parents, exiting emulated/container media,
+SD:/ and 0:/ aliases, changing directory while a submenu is open, LIST/SOLO
+and tape retention, stale return histories and failed unmounts. CD parser tests
+use real image mounting; only unrelated HDMI/volume-list output is stubbed.
+
+See
 [PI1551-OLED-IMPLEMENTATION.md](../docs/PI1551-OLED-IMPLEMENTATION.md) for coverage,
 architecture and hardware-test limits.
 

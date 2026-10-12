@@ -44,6 +44,20 @@ SD operations and explicit tape/ROM/settings actions can pause drive execution;
 the native suite verifies behavior and ownership boundaries, not GPIO deadlines
 or compatibility with every physical loader. HDMI is not the menu target.
 
+Host navigation is dispatched separately for directory adoption, parent,
+root and refresh. The menu adopts the host's cwd directly instead of invoking
+the panel Browse path (which used lastMounted and preserved a stale return
+target). Host parent exits media into its containing directory, or climbs the
+SD directory when nothing is mounted. It clears SOLO, retains LIST/TAP and
+invalidates obsolete menu history. SD:/ and 0:/ paths are canonicalized so
+the protocol and menu refer to the same media. A plain refresh keeps menu focus.
+The EXIT_CD ROM trap is consumed before SimulateIECBegin clears pendingPopDir.
+Host callbacks reset the adapter's realTime flag because the kernel has
+already left emulation: unmount/flush is immediate and failures cannot leave
+the UI advertising an unmount that has only been queued. CD container exits
+defer teardown to this handler. Native tests execute the actual shared CD
+parser plus kernel-adapter and pure-menu mixed-navigation scenarios.
+
 ## Runtime persistence
 
 Load settings reads `/options.txt` on demand through `Options::LoadRuntimeText`, validates recognized runtime values before

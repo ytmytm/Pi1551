@@ -80,8 +80,8 @@ Datasette spool model. At the end it may show `100%`, which still fits the
 The third OLED row is always selectable. It reads `Menu...` in `SOLO` and
 `Menu... LIST` in `LIST`; only the list-building mode needs an explicit
 indicator. The list count is omitted in Browser. The five rows below it list
-SD entries. The current path is retained internally and shown in the
-terminal-only menu tree; it does not consume an OLED row.
+SD entries. The full path is retained internally and shown in the
+terminal-only menu tree; the status header shows only its last component.
 
 The currently browsed SD directory is also the virtual file-list source seen
 by the computer. Enter and Insert on a directory both enter it and update this
@@ -160,6 +160,33 @@ selected medium; the previously unmounted SOLO image is not implicitly added.
 
 There is deliberately no `[Use this dir]` entry. Enter and Insert provide the
 directory operations without spending an OLED row on a synthetic item.
+
+### Computer CD commands and panel synchronization
+
+Computer commands and panel navigation share one mounted-medium state and
+one SD directory source. CD into an SD folder selects Browser, unmounts any
+active medium after flushing it and discards obsolete submenu/Back targets.
+CD selecting media uses the same SOLO/LIST rules as panel Enter and updates
+the SD source to the containing directory. D64/G64 starts emulation;
+D71/D80/D81/D82/PRG remains a mounted file container in Fliplist.
+
+CD.. and CD<- (the Commodore left-arrow/PETSCII underscore form) leave a
+mounted image for its containing SD directory, not that directory's parent.
+The next parent command climbs one SD level. At SD root it stays at root.
+CD/ goes to the volume root; CD// goes to the /1551 starting folder.
+An external exit clears temporary SOLO media but retains an explicit LIST;
+it does not eject TAP. Old UI history cannot remount an image behind the
+computer's back. A flush failure retains the mounted image and reports an
+error rather than advertising a successful unmount.
+
+Refresh without navigation updates the directory listing while preserving
+the current submenu. Refresh of an already mounted container does not mount
+it again or duplicate its fliplist entry. FatFS SD:/ and 0:/ prefixes are
+normalized to the panel's / paths. The kernel consumes a ROM-trapped parent
+command before restarting the TCBM state machine, so it cannot be lost or
+applied twice. Host callbacks run outside the emulation microsecond loop.
+The native tests cover these interactions; the TUI does not yet expose an
+interactive Commodore command-channel console.
 
 ### Fliplist view
 
