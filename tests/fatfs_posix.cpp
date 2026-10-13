@@ -124,6 +124,7 @@ extern "C" FRESULT f_stat(const TCHAR* path, FILINFO* info) {
         memset(info, 0, sizeof(*info)); info->fsize = st.st_size;
         info->fattrib = S_ISDIR(st.st_mode) ? AM_DIR : 0;
         const char* base = strrchr(path, '/'); base = base ? base + 1 : path;
+        if (base[0] == '.' && base[1] != '\0') info->fattrib |= AM_HID;
         strncpy(info->fname, base, sizeof(info->fname) - 1);
     }
     return FR_OK;

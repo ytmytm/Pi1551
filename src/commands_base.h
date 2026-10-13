@@ -176,7 +176,10 @@ protected:
 	virtual void LoadFile();
 	virtual void SaveFile();
 
-	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType);
+	void AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType,
+		const char* typeName = 0, bool hidden = false);
+	void AddTimestampDirectoryEntry(Channel& channel, const FILINFO& filInfo, const char* name,
+		u16 blocks, int fileType, bool longFormat);
 	void AppendCbmImageDirLine(Channel& channel, const u8* rawEntry);
 	virtual void LoadDirectory();
 	void LoadCbmImageDirectory();
@@ -205,6 +208,7 @@ protected:
 	void Rename(void);
 	void Scratch(void);
 	void Position(void);
+	void GetPartitionInfo(void);
 	void ChangeDevice(void);
 
 	void Memory(void);
@@ -277,6 +281,8 @@ protected:
 	u8 imageListingMode;
 
 	char errorMessage[64];
+	u8 errorLength;
+	u8 currentDeviceIndex;
 };
 
 #endif // COMMANDS_BASE_H

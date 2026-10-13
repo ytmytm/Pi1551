@@ -62,10 +62,14 @@ struct CDProbe : Commands_Base {
         return channel.open;
     }
     u32 TestChannelPosition(u8 number) const { return channels[number].file.fptr; }
-    std::vector<u8> Listing() {
-        output.clear(); SetCommand("$"); Commands_Base::LoadDirectory(); return output;
+    std::vector<u8> Listing(const char* query = "$") {
+        output.clear(); SetCommand(query); Commands_Base::LoadDirectory(); return output;
     }
+    std::vector<u8> Status() { output.clear(); SendError(); return output; }
 };
+static bool Contains(const std::vector<u8>& data, const char* text) {
+    return std::search(data.begin(), data.end(), text, text + strlen(text)) != data.end();
+}
 static unsigned CountNear(const std::vector<u8>& data, const char* name, const char* type) {
     unsigned count = 0;
     for (size_t i = 0; i + strlen(name) < data.size(); ++i) {
@@ -116,5 +120,15 @@ int main(int argc,char** argv) {
     command.Execute("XI2"); listing = command.Listing();
     CHECK(CountNear(listing, "A.D64", "PRG") == 1); CHECK(CountNear(listing, "A.D64", "DIR") == 1);
     command.Execute("XI1");
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI");
+    CHECK(Contains(command.Listing("$:SUB*=D"), "SUB"));
+    CHECK(!Contains(command.Listing("$:SUB*=P"), "SUB"));
+    FIL hidden{}; CHECK(f_open(&hidden, ".secret", FA_CREATE_ALWAYS | FA_WRITE) == FR_OK); CHECK(f_close(&hidden) == FR_OK);
+    CHECK(!Contains(command.Listing(), ".SECRET")); CHECK(Contains(command.Listing("$*=H"), ".SECRET"));
+    CHECK(Contains(command.Listing("$=T"), "/"));
+    numberOfUSBMassStorageDevices = 2;
+    listing = command.Listing("$=P"); CHECK(Contains(listing, "SD")); CHECK(Contains(listing, "USB01")); CHECK(Contains(listing, "FAT"));
+    listing = command.Listing("$=P:USB02"); CHECK(!Contains(listing, "USB01")); CHECK(Contains(listing, "USB02"));
+    command.Execute("G-P"); std::vector<u8> status = command.Status();
+    CHECK(status.size() == 31); CHECK(status[0] == 1); CHECK(status[2] == 0); CHECK(!memcmp(&status[3], "SD", 2));
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI/directory filters/$=P/G-P");
 }

@@ -289,6 +289,10 @@ in browser mode:
 | `XS` | Disable and clear the current swap list without deleting its LST file. |
 | `P` + channel byte + up to four little-endian offset bytes | Seek an open regular file (or a file inside a mounted container) to a 0-based 32-bit byte position. Omitted high bytes are zero. |
 | `XI0`, `XI1`, `XI2` | Show mountable images as PRG, as DIR, or twice (PRG and DIR). Pi1551 deliberately defaults to `XI1` (DIR); the setting lasts until reboot and `XW` is not supported. |
+| `$:pattern=type` | Filter browser-directory listings with `*` and `?`. Types `P`, `S`, `U`, `R`, and directory types `B`/`D` are accepted; `=H` includes hidden FAT entries. |
+| `$=T[:pattern[=type,L,N]]` | Return FAT timestamps in CMD short form, or long form with `L`; `N` applies the other filters but uses the normal listing format. Date-range predicates are not implemented. |
+| `$=P[:pattern]` | List Pi1551 storage targets as partitions: `SD`, then `USB01`, `USB02`, ...; every entry is reported as `FAT`. |
+| `G-P` + optional binary partition byte | Return the 30-byte CMD-compatible partition information record plus carriage return. With no byte or `$ff`, report the current target; Pi1551 partition 0 is SD and 1+ are USB targets. |
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

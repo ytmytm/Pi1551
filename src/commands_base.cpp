@@ -106,6 +106,7 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 		case ERROR_73_DOSVERSION:
 			Tcbm2sdProtocol::FormatDosVersionStatus(errorMessage, sizeof(errorMessage),
 				PI_DRIVE_NAME, versionMajor, versionMinor, track, sector);
+			errorLength = static_cast<u8>(strlen(errorMessage));
 			return;
 		break;
 		case ERROR_30_SYNTAX_ERROR:
@@ -132,6 +133,7 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 		break;
 	}
 	snprintf(errorMessage, sizeof(errorMessage)-1, "%02d,%s,%02d,%02d\r", errorCode, msg, track, sector);
+	errorLength = static_cast<u8>(strlen(errorMessage));
 }
 
 static inline bool IsDirectory(FILINFO& filInfo)
@@ -162,6 +164,7 @@ void Commands_Base::Channel::Close()
 Commands_Base::Commands_Base()
 {
 	deviceID = 8;
+	currentDeviceIndex = 0;
 	mountedImagePath[0] = 0;
 	swapListPath[0] = 0;
 	Reset();
@@ -700,6 +703,70 @@ static bool MatchCbmPattern(const char* pattern, const char* name)
 	return MatchCbmPatternRecursive(pattern, strlen(pattern), name, strlen(name), 0, 0);
 }
 
+struct DirectoryQuery
+{
+	char pattern[256];
+	char type;
+	bool includeHidden;
+	bool timestamps;
+	bool longTimestamps;
+	bool suppressTimestamps;
+	bool partitions;
+};
+
+static DirectoryQuery ParseDirectoryQuery(const u8* command)
+{
+	DirectoryQuery query = {{'*', 0}, 0, false, false, false, false, false};
+	if (!command || command[0] != '$') return query;
+
+	const char* text = reinterpret_cast<const char*>(command) + 1;
+	if (strncasecmp(text, "=P", 2) == 0)
+	{
+		query.partitions = true;
+		text += 2;
+	}
+	else if (strncasecmp(text, "=T", 2) == 0)
+	{
+		query.timestamps = true;
+		text += 2;
+	}
+	while (isdigit(*text & 0x7f)) ++text;
+	if (*text == ':') ++text;
+	if (!*text) return query;
+
+	strncpy(query.pattern, text, sizeof(query.pattern) - 1);
+	query.pattern[sizeof(query.pattern) - 1] = 0;
+	char* options = strrchr(query.pattern, '=');
+	if (options)
+	{
+		*options++ = 0;
+		if (!query.pattern[0]) strcpy(query.pattern, "*");
+		for (char* option = options; *option; ++option)
+		{
+			char value = static_cast<char>(toupper(*option & 0x7f));
+			if (value == 'H') query.includeHidden = true;
+			else if (value == 'L') query.longTimestamps = true;
+			else if (value == 'N') query.suppressTimestamps = true;
+			else if (!query.type && (value == 'P' || value == 'S' || value == 'U'
+				|| value == 'R' || value == 'B' || value == 'D')) query.type = value;
+		}
+	}
+	return query;
+}
+
+static bool DirectoryEntryMatches(const DirectoryQuery& query, const FILINFO& info, int fileType)
+{
+	bool hidden = (info.fattrib & AM_HID) != 0 || info.fname[0] == '.';
+	if (hidden && !query.includeHidden) return false;
+	if (!MatchCbmPattern(query.pattern, info.fname)) return false;
+	if (query.type == 'B' || query.type == 'D') return fileType == 6;
+	if (query.type == 'P') return fileType == 2;
+	if (query.type == 'S') return fileType == 1;
+	if (query.type == 'U') return fileType == 3;
+	if (query.type == 'R') return fileType == 4;
+	return true;
+}
+
 bool Commands_Base::Enter(DIR& dir, FILINFO& filInfo)
 {
 	filInfoSelectedImage = filInfo;
@@ -799,16 +866,12 @@ bool Commands_Base::SendBuffer(Channel& channel, bool eoi)
 
 void Commands_Base::SendError()
 {
-	int len = strlen(errorMessage);
-	int index = 0;
-	bool finalByte;
-	do
+	int len = errorLength;
+	for (int index = 0; index < len; ++index)
 	{
-		finalByte = index == len;
-		if (WriteSerialPortByte(errorMessage[index++], finalByte))
+		if (WriteSerialPortByte(errorMessage[index], index + 1 == len))
 			break;
 	}
-	while (!finalByte);
 }
 
 u8 Commands_Base::GetFilenameCharacter(u8 value)
@@ -819,7 +882,8 @@ u8 Commands_Base::GetFilenameCharacter(u8 value)
 	return ascii2petscii(value);
 }
 
-void Commands_Base::AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType)
+void Commands_Base::AddDirectoryEntry(Channel& channel, const char* name, u16 blocks, int fileType,
+	const char* typeName, bool hidden)
 {
 	u8* data = channel.buffer + channel.cursor;
 	const u32 dirEntryLength = DIRECTORY_ENTRY_SIZE;
@@ -872,11 +936,45 @@ void Commands_Base::AddDirectoryEntry(Channel& channel, const char* name, u16 bl
 	index += CBM_NAME_LENGTH;
 	index++;
 
+	const u8* type = typeName ? reinterpret_cast<const u8*>(typeName) : filetypes + fileType * 3;
 	for (i = 0; i < 3; ++i)
 	{
-		data[index++] = filetypes[fileType * 3 + i];
+		data[index++] = type[i];
 	}
+	if (hidden && index + 2 < static_cast<int>(dirEntryLength))
+		data[index + 1] = 'H';
 	channel.cursor += dirEntryLength;
+}
+
+void Commands_Base::AddTimestampDirectoryEntry(Channel& channel, const FILINFO& filInfo,
+	const char* name, u16 blocks, int fileType, bool longFormat)
+{
+	u8 line[64];
+	memset(line, ' ', sizeof(line));
+	size_t index = 0;
+	line[index++] = 1; line[index++] = 1;
+	line[index++] = blocks & 0xff; line[index++] = blocks >> 8;
+	char displayName[17] = {};
+	for (size_t i = 0; i < 16 && name[i]; ++i)
+		displayName[i] = static_cast<char>(GetFilenameCharacter(name[i]));
+	unsigned year = 1980 + ((filInfo.fdate >> 9) & 0x7f);
+	unsigned month = (filInfo.fdate >> 5) & 0x0f;
+	unsigned day = filInfo.fdate & 0x1f;
+	unsigned hour24 = (filInfo.ftime >> 11) & 0x1f;
+	unsigned minute = (filInfo.ftime >> 5) & 0x3f;
+	unsigned hour12 = hour24 % 12; if (!hour12) hour12 = 12;
+	char text[60];
+	if (longFormat)
+		snprintf(text, sizeof(text), "    \"%-16s\" %.3s %02u/%02u/%02u %02u.%02u %s",
+			displayName, reinterpret_cast<const char*>(filetypes + fileType * 3),
+			month, day, year % 100, hour12, minute, hour24 >= 12 ? "PM" : "AM");
+	else
+		snprintf(text, sizeof(text), "    \"%-16s\" %c %02u/%02u %02u.%02u %c",
+			displayName, filetypes[fileType * 3], month, day, hour12, minute,
+			hour24 >= 12 ? 'P' : 'A');
+	size_t length = std::min(strlen(text), sizeof(line) - index - 1);
+	memcpy(line + index, text, length); index += length; line[index++] = 0;
+	AppendDirectoryStream(channel, line, index);
 }
 
 static bool IsDirectoryListingDiskImage(const char* fname)
@@ -931,10 +1029,30 @@ void Commands_Base::LoadDirectory()
 	FRESULT res;
 
 	Channel& channel = channels[0];
+	DirectoryQuery query = ParseDirectoryQuery(channels[15].buffer);
 
 	SetHeaderVersion();
 	memcpy(channel.buffer, DirectoryHeader, sizeof(DirectoryHeader));
 	channel.cursor = sizeof(DirectoryHeader);
+
+	if (query.partitions)
+	{
+		for (int partition = 0; partition <= numberOfUSBMassStorageDevices; ++partition)
+		{
+			char name[17];
+			if (partition == 0) strcpy(name, "sd");
+			else snprintf(name, sizeof(name), "usb%02d", partition);
+			if (!MatchCbmPattern(query.pattern, name)) continue;
+			if (!channel.CanFit(DIRECTORY_ENTRY_SIZE)) SendBuffer(channel, false);
+			AddDirectoryEntry(channel, name, static_cast<u16>(partition), 2, "FAT");
+		}
+		SendBuffer(channel, false);
+		channel.buffer[0] = 0; channel.buffer[1] = 0; channel.cursor = 2;
+		channel.filInfo.fsize = channel.bytesSent + channel.cursor;
+		channel.fileSize = static_cast<u32>(channel.filInfo.fsize);
+		SendBuffer(channel, true);
+		return;
+	}
 
 	FileBrowser::BrowsableList::Entry entry;
 	std::vector<FileBrowser::BrowsableList::Entry> entries;
@@ -952,7 +1070,10 @@ void Commands_Base::LoadDirectory()
 			{
 				res = f_readdir(&dir, &entry.filImage);
 				ext = strrchr(entry.filImage.fname, '.');
-				if (res == FR_OK && entry.filImage.fname[0] != 0 && !(ext && strcasecmp(ext, ".png") == 0) && (entry.filImage.fname[0] != '.'))
+				bool dotEntry = entry.filImage.fname[0] == '.' &&
+					(entry.filImage.fname[1] == 0 || (entry.filImage.fname[1] == '.' && entry.filImage.fname[2] == 0));
+				if (res == FR_OK && entry.filImage.fname[0] != 0 && !dotEntry
+					&& !(ext && strcasecmp(ext, ".png") == 0))
 					entries.push_back(entry);
 			} while (res == FR_OK && entry.filImage.fname[0] != 0);
 			f_closedir(&dir);
@@ -966,19 +1087,24 @@ void Commands_Base::LoadDirectory()
 		FILINFO* filInfo = &entries[i].filImage;
 		const char* fileName = filInfo->fname;
 
-		if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
-			SendBuffer(channel, false);
-
-		if (BrowserDirectoryEntryType(filInfo, imageListingMode) == 6)
-			AddDirectoryEntry(channel, fileName, 0, 6);
-		else
-			AddDirectoryEntry(channel, fileName, static_cast<u16>(1 + filInfo->fsize / 254), 2);
-
+		int types[2] = {BrowserDirectoryEntryType(filInfo, imageListingMode), -1};
 		if (imageListingMode == 2 && IsDirectoryListingDiskImage(fileName))
+			types[1] = 6;
+		for (unsigned typeIndex = 0; typeIndex < 2 && types[typeIndex] >= 0; ++typeIndex)
 		{
-			if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
-				SendBuffer(channel, false);
-			AddDirectoryEntry(channel, fileName, 0, 6);
+			int type = types[typeIndex];
+			if (!DirectoryEntryMatches(query, *filInfo, type)) continue;
+			u16 blocks = type == 6 ? 0 : static_cast<u16>(1 + filInfo->fsize / 254);
+			if (query.timestamps && !query.suppressTimestamps)
+			{
+				if (!channel.CanFit(64)) SendBuffer(channel, false);
+				AddTimestampDirectoryEntry(channel, *filInfo, fileName, blocks, type, query.longTimestamps);
+			}
+			else
+			{
+				if (!channel.CanFit(DIRECTORY_ENTRY_SIZE)) SendBuffer(channel, false);
+				AddDirectoryEntry(channel, fileName, blocks, type, 0, (filInfo->fattrib & AM_HID) != 0);
+			}
 		}
 	}
 
@@ -1215,6 +1341,7 @@ void Commands_Base::ChangeDevice(void)
 		if (deviceIndex == 0)
 		{
 			SwitchDrive("SD:");
+			currentDeviceIndex = 0;
 			displayingDevices = false;
 			updateAction = DEVICE_SWITCHED;
 		}
@@ -1223,6 +1350,7 @@ void Commands_Base::ChangeDevice(void)
 			char USBDriveId[16];
 			sprintf(USBDriveId, "USB%02d:", deviceIndex);
 			SwitchDrive(USBDriveId);
+			currentDeviceIndex = static_cast<u8>(deviceIndex);
 			displayingDevices = false;
 			updateAction = DEVICE_SWITCHED;
 		}
@@ -1400,6 +1528,35 @@ void Commands_Base::Position(void)
 		? static_cast<u32>(f_size(&target.file) - position) : 0;
 }
 
+void Commands_Base::GetPartitionInfo(void)
+{
+	Channel& command = channels[15];
+	if (command.cursor < 3 || command.buffer[1] != '-' || toupper(command.buffer[2]) != 'P')
+	{
+		Error(ERROR_31_SYNTAX_ERROR);
+		return;
+	}
+
+	u8 partition = command.cursor > 3 && command.buffer[3] != 0xff
+		? command.buffer[3] : currentDeviceIndex;
+	memset(errorMessage, 0, 31);
+	errorMessage[30] = '\r';
+	errorLength = 31;
+	if (partition > numberOfUSBMassStorageDevices) return;
+
+	errorMessage[0] = 1;
+	errorMessage[1] = static_cast<char>(0xe2);
+	errorMessage[2] = partition;
+	memset(errorMessage + 3, 0xa0, 16);
+	char name[17];
+	if (partition == 0) strcpy(name, "SD");
+	else snprintf(name, sizeof(name), "USB%02u", partition);
+	memcpy(errorMessage + 3, name, std::min<size_t>(strlen(name), 16));
+	errorMessage[27] = static_cast<char>(0xff);
+	errorMessage[28] = static_cast<char>(0xff);
+	errorMessage[29] = static_cast<char>(0xff);
+}
+
 void Commands_Base::User(void)
 {
 	Channel& channel = channels[15];
@@ -1538,7 +1695,7 @@ void Commands_Base::ProcessCommand(void)
 				Error(ERROR_31_SYNTAX_ERROR);
 			break;
 			case 'G':
-				Error(ERROR_31_SYNTAX_ERROR);
+				GetPartitionInfo();
 			break;
 			case 'I':
 				// Initialise
@@ -2235,7 +2392,7 @@ void Commands_Base::Listen()
 
 		// TODO: Should not do this - should use command length to test for the end of a command
 		if (!channel.WriteFull())
-			channel.buffer[channel.cursor++] = 0;
+			channel.buffer[channel.cursor] = 0;
 	}
 	else
 	{
