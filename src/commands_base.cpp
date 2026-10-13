@@ -173,6 +173,8 @@ Commands_Base::Commands_Base()
 	lowercaseBrowseModeFilenames = false;
 	newDiskType = DiskImage::D64;
 	imageListingMode = 1;
+	wildcardMatchTail = true;
+	extensionHiding = false;
 }
 
 void Commands_Base::ClearPendingImageSelection()
@@ -698,9 +700,15 @@ static bool MatchCbmPatternRecursive(const char* pattern, size_t patternLen, con
 	}
 }
 
-static bool MatchCbmPattern(const char* pattern, const char* name)
+static bool MatchCbmPattern(const char* pattern, const char* name, bool matchTail = true)
 {
-	return MatchCbmPatternRecursive(pattern, strlen(pattern), name, strlen(name), 0, 0);
+	size_t length = strlen(pattern);
+	if (!matchTail)
+	{
+		const char* star = strchr(pattern, '*');
+		if (star) length = static_cast<size_t>(star - pattern + 1);
+	}
+	return MatchCbmPatternRecursive(pattern, length, name, strlen(name), 0, 0);
 }
 
 struct DirectoryQuery
@@ -754,11 +762,12 @@ static DirectoryQuery ParseDirectoryQuery(const u8* command)
 	return query;
 }
 
-static bool DirectoryEntryMatches(const DirectoryQuery& query, const FILINFO& info, int fileType)
+static bool DirectoryEntryMatches(const DirectoryQuery& query, const FILINFO& info, int fileType,
+	const char* displayName, bool wildcardMatchTail)
 {
 	bool hidden = (info.fattrib & AM_HID) != 0 || info.fname[0] == '.';
 	if (hidden && !query.includeHidden) return false;
-	if (!MatchCbmPattern(query.pattern, info.fname)) return false;
+	if (!MatchCbmPattern(query.pattern, displayName, wildcardMatchTail)) return false;
 	if (query.type == 'B' || query.type == 'D') return fileType == 6;
 	if (query.type == 'P') return fileType == 2;
 	if (query.type == 'S') return fileType == 1;
@@ -836,7 +845,16 @@ bool Commands_Base::FindFirst(DIR& dir, const char* matchstr, FILINFO& filInfo)
 	{
 		if (!(filInfo.fname[0] == '.' && (filInfo.fname[1] == 0 || (filInfo.fname[1] == '.' && filInfo.fname[2] == 0))))
 		{
-			if (MatchCbmPattern(pattern, filInfo.fname))
+			char visibleName[256];
+			strncpy(visibleName, filInfo.fname, sizeof(visibleName) - 1);
+			visibleName[sizeof(visibleName) - 1] = 0;
+			if (extensionHiding)
+			{
+				char* extension = strrchr(visibleName, '.');
+				if (extension && (!strcasecmp(extension, ".prg") || !strcasecmp(extension, ".seq")
+					|| !strcasecmp(extension, ".usr") || !strcasecmp(extension, ".rel"))) *extension = 0;
+			}
+			if (MatchCbmPattern(pattern, visibleName, wildcardMatchTail))
 				return true;
 		}
 
@@ -990,12 +1008,28 @@ static bool IsDirectoryListingDiskImage(const char* fname)
 		|| strcasecmp(ext, ".d82") == 0;
 }
 
-static int BrowserDirectoryEntryType(const FILINFO* filInfo, u8 imageListingMode)
+static int HiddenExtensionFileType(const char* name)
+{
+	const char* extension = strrchr(name, '.');
+	if (!extension) return -1;
+	if (!strcasecmp(extension, ".prg")) return 2;
+	if (!strcasecmp(extension, ".seq")) return 1;
+	if (!strcasecmp(extension, ".usr")) return 3;
+	if (!strcasecmp(extension, ".rel")) return 4;
+	return -1;
+}
+
+static int BrowserDirectoryEntryType(const FILINFO* filInfo, u8 imageListingMode, bool extensionHiding)
 {
 	if (filInfo->fattrib & AM_DIR)
 		return 6;
 	if (imageListingMode == 1 && IsDirectoryListingDiskImage(filInfo->fname))
 		return 6;
+	if (extensionHiding)
+	{
+		int type = HiddenExtensionFileType(filInfo->fname);
+		if (type >= 0) return type;
+	}
 	return 2;
 }
 
@@ -1087,23 +1121,31 @@ void Commands_Base::LoadDirectory()
 		FILINFO* filInfo = &entries[i].filImage;
 		const char* fileName = filInfo->fname;
 
-		int types[2] = {BrowserDirectoryEntryType(filInfo, imageListingMode), -1};
+		char displayName[256];
+		strncpy(displayName, fileName, sizeof(displayName) - 1);
+		displayName[sizeof(displayName) - 1] = 0;
+		if (extensionHiding && HiddenExtensionFileType(displayName) >= 0)
+		{
+			char* extension = strrchr(displayName, '.');
+			if (extension) *extension = 0;
+		}
+		int types[2] = {BrowserDirectoryEntryType(filInfo, imageListingMode, extensionHiding), -1};
 		if (imageListingMode == 2 && IsDirectoryListingDiskImage(fileName))
 			types[1] = 6;
 		for (unsigned typeIndex = 0; typeIndex < 2 && types[typeIndex] >= 0; ++typeIndex)
 		{
 			int type = types[typeIndex];
-			if (!DirectoryEntryMatches(query, *filInfo, type)) continue;
+			if (!DirectoryEntryMatches(query, *filInfo, type, displayName, wildcardMatchTail)) continue;
 			u16 blocks = type == 6 ? 0 : static_cast<u16>(1 + filInfo->fsize / 254);
 			if (query.timestamps && !query.suppressTimestamps)
 			{
 				if (!channel.CanFit(64)) SendBuffer(channel, false);
-				AddTimestampDirectoryEntry(channel, *filInfo, fileName, blocks, type, query.longTimestamps);
+				AddTimestampDirectoryEntry(channel, *filInfo, displayName, blocks, type, query.longTimestamps);
 			}
 			else
 			{
 				if (!channel.CanFit(DIRECTORY_ENTRY_SIZE)) SendBuffer(channel, false);
-				AddDirectoryEntry(channel, fileName, blocks, type, 0, (filInfo->fattrib & AM_HID) != 0);
+				AddDirectoryEntry(channel, displayName, blocks, type, 0, (filInfo->fattrib & AM_HID) != 0);
 			}
 		}
 	}
@@ -1609,6 +1651,11 @@ void Commands_Base::User(void)
 void Commands_Base::Extended(void)
 {
 	Channel& channel = channels[15];
+	if (channel.cursor == 1)
+	{
+		ExtendedStatus();
+		return;
+	}
 
 	switch (toupper(channel.buffer[1]))
 	{
@@ -1624,10 +1671,29 @@ void Commands_Base::Extended(void)
 			else
 				Error(ERROR_31_SYNTAX_ERROR);
 		break;
+		case '*':
+			if (channel.cursor == 3 && (channel.buffer[2] == '+' || channel.buffer[2] == '-'))
+				wildcardMatchTail = channel.buffer[2] == '+';
+			else
+				Error(ERROR_31_SYNTAX_ERROR);
+		break;
+		case 'E':
+			if (channel.cursor == 3 && (channel.buffer[2] == '+' || channel.buffer[2] == '-'))
+				extensionHiding = channel.buffer[2] == '+';
+			else
+				Error(ERROR_31_SYNTAX_ERROR);
+		break;
 		default:
 			Error(ERROR_31_SYNTAX_ERROR);
 		break;
 	}
+}
+
+void Commands_Base::ExtendedStatus(void)
+{
+	snprintf(errorMessage, sizeof(errorMessage), "03,I%u:E%c:*%c,%02u,00\r",
+		imageListingMode, extensionHiding ? '+' : '-', wildcardMatchTail ? '+' : '-', deviceID);
+	errorLength = static_cast<u8>(strlen(errorMessage));
 }
 
 void Commands_Base::SwapList(void)

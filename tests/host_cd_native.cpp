@@ -130,5 +130,16 @@ int main(int argc,char** argv) {
     listing = command.Listing("$=P:USB02"); CHECK(!Contains(listing, "USB01")); CHECK(Contains(listing, "USB02"));
     command.Execute("G-P"); std::vector<u8> status = command.Status();
     CHECK(status.size() == 31); CHECK(status[0] == 1); CHECK(status[2] == 0); CHECK(!memcmp(&status[3], "SD", 2));
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI/directory filters/$=P/G-P");
+    FIL typed{};
+    CHECK(f_open(&typed, "alpha.prg", FA_CREATE_ALWAYS | FA_WRITE) == FR_OK); CHECK(f_close(&typed) == FR_OK);
+    CHECK(f_open(&typed, "alphabet.seq", FA_CREATE_ALWAYS | FA_WRITE) == FR_OK); CHECK(f_close(&typed) == FR_OK);
+    listing = command.Listing("$:A*.PRG"); CHECK(Contains(listing, "ALPHA.PRG")); CHECK(!Contains(listing, "ALPHABET.SEQ"));
+    command.Execute("X*-"); CHECK(!command.GetWildcardMatchTail());
+    listing = command.Listing("$:A*.PRG"); CHECK(Contains(listing, "ALPHA.PRG")); CHECK(Contains(listing, "ALPHABET.SEQ"));
+    command.Execute("XE+"); CHECK(command.GetExtensionHiding());
+    listing = command.Listing("$*=S"); CHECK(CountNear(listing, "ALPHABET", "SEQ") == 1); CHECK(!Contains(listing, ".SEQ"));
+    command.Execute("X"); status = command.Status();
+    CHECK(Contains(status, "I1:E+:*-,08,00"));
+    command.Execute("XE-"); command.Execute("X*+");
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI/filters/$=P/G-P/X*/XE/X");
 }

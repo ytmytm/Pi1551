@@ -293,6 +293,9 @@ in browser mode:
 | `$=T[:pattern[=type,L,N]]` | Return FAT timestamps in CMD short form, or long form with `L`; `N` applies the other filters but uses the normal listing format. Date-range predicates are not implemented. |
 | `$=P[:pattern]` | List Pi1551 storage targets as partitions: `SD`, then `USB01`, `USB02`, ...; every entry is reported as `FAT`. |
 | `G-P` + optional binary partition byte | Return the 30-byte CMD-compatible partition information record plus carriage return. With no byte or `$ff`, report the current target; Pi1551 partition 0 is SD and 1+ are USB targets. |
+| `X*+`, `X*-` | Enable modern 1581-style matching of text after `*`, or use classic matching that ignores everything after the first `*`. Default: `X*+`. |
+| `XE+`, `XE-` | Enable or disable hiding `.PRG`, `.SEQ`, `.USR`, and `.REL` extensions in listings and filename matching; the extension becomes the Commodore file type. Default: `XE-`. |
+| `X` | Report volatile extended settings on the error channel (`I` image mode, `E` extension hiding, `*` wildcard mode, and device number). |
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

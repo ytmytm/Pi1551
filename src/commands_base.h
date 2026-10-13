@@ -99,6 +99,8 @@ public:
 	const char* GetLastOpenPath() const { return lastOpenPath; }
 	const char* GetSwapListPath() const { return swapListPath; }
 	u8 GetImageListingMode() const { return imageListingMode; }
+	bool GetWildcardMatchTail() const { return wildcardMatchTail; }
+	bool GetExtensionHiding() const { return extensionHiding; }
 
 	void SetMountedDiskImagePath(const char* path);
 	static bool PathUsesQuasiMountOnly(const char* path);
@@ -215,6 +217,7 @@ protected:
 	void User(void);
 	void Extended(void);
 	void SwapList(void);
+	void ExtendedStatus(void);
 
 	void ProcessCommand(void);
 
@@ -279,6 +282,8 @@ protected:
 	bool lowercaseBrowseModeFilenames;
 	DiskImage::DiskType newDiskType;
 	u8 imageListingMode;
+	bool wildcardMatchTail;
+	bool extensionHiding;
 
 	char errorMessage[64];
 	u8 errorLength;
