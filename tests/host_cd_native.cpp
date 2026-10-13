@@ -12,11 +12,13 @@ void Reboot_Pi() {}
 void SwitchDrive(const char* drive) { switchedDrive = drive; }
 void DisplayMessage(int,int,bool,const char*,u32,u32) {}
 extern "C" void SetACTLed(int) {}
+extern "C" unsigned TimerGetTicks(void) { return 0; }
 void FileBrowser::RefreshDevicesEntries(std::vector<BrowsableList::Entry>&,bool) {}
 extern "C" FRESULT f_getfree(const TCHAR*,DWORD*,FATFS**) { return FR_DISK_ERR; }
 extern void NativeFatFSRoot(const std::string& root);
 struct CDProbe : Commands_Base {
     std::vector<u8> output;
+    u32 ticks = 0;
     void SimulateIECBegin() override {}
     UpdateAction SimulateIECUpdate() override { return updateAction; }
     bool WriteSerialPortByte(u8 byte,bool) override { output.push_back(byte); return false; }
@@ -66,6 +68,8 @@ struct CDProbe : Commands_Base {
         output.clear(); SetCommand(query); Commands_Base::LoadDirectory(); return output;
     }
     std::vector<u8> Status() { output.clear(); SendError(); return output; }
+    void AdvanceSeconds(u32 seconds) { ticks += seconds * 100; }
+    u32 ClockTicks() const override { return ticks; }
 };
 static bool Contains(const std::vector<u8>& data, const char* text) {
     return std::search(data.begin(), data.end(), text, text + strlen(text)) != data.end();
@@ -141,5 +145,17 @@ int main(int argc,char** argv) {
     command.Execute("X"); status = command.Status();
     CHECK(Contains(status, "I1:E+:*-,08,00"));
     command.Execute("XE-"); command.Execute("X*+");
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI/filters/$=P/G-P/X*/XE/X");
+    command.Execute("T-RI"); CHECK(Contains(command.Status(), "31,SYNTAX ERROR"));
+    command.Execute("T-WI2024-02-29T23:59:58"); command.AdvanceSeconds(3); command.Execute("T-RI");
+    status = command.Status(); CHECK(Contains(status, "2024-03-01T00:00:01 FRI\r"));
+    command.Execute("T-RA"); CHECK(Contains(command.Status(), "FRI. 03/01/24 12:00:01 AM\r"));
+    command.Execute("T-RD"); status = command.Status(); CHECK(status.size() == 9); CHECK(status[1] == 124); CHECK(status[2] == 3);
+    command.Execute("T-RB"); status = command.Status(); CHECK(status.size() == 9); CHECK(status[1] == 0x24); CHECK(status[2] == 0x03);
+    const u8 decimalTime[] = {'T','-','W','D', 0,125,12,31,11,59,58,1}; command.Execute(decimalTime, sizeof(decimalTime));
+    command.Execute("T-RI"); CHECK(Contains(command.Status(), "2025-12-31T23:59:58 WED\r"));
+    command.Execute("T-WAMON. 01/05/26 02:03:04 PM"); command.Execute("T-RI");
+    CHECK(Contains(command.Status(), "2026-01-05T14:03:04 MON\r"));
+    const u8 bcdTime[] = {'T','-','W','B', 0,0x27,0x07,0x04,0x12,0x34,0x56,0}; command.Execute(bcdTime, sizeof(bcdTime));
+    command.Execute("T-RI"); CHECK(Contains(command.Status(), "2027-07-04T00:34:56 SUN\r"));
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI/filters/$=P/G-P/X*/XE/X/T-R/T-W");
 }

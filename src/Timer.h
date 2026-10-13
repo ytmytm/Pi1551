@@ -37,6 +37,7 @@ extern "C" {
 		void* pParam,
 		void* pContext);
 	void TimerCancelKernelTimer(unsigned hTimer);
+	unsigned TimerGetTicks(void);
 
 #ifdef __cplusplus
 }

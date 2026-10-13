@@ -122,3 +122,8 @@ void TimerCancelKernelTimer(unsigned hTimer)
 	//assert(1 <= hTimer && hTimer <= KERNEL_TIMERS);
 	m_KernelTimer[hTimer-1].m_pHandler = 0;
 }
+
+unsigned TimerGetTicks(void)
+{
+	return Ticks;
+}

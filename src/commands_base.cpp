@@ -24,6 +24,7 @@
 #include "DiskImage.h"
 #include "Petscii.h"
 #include "FileBrowser.h"
+#include "Timer.h"
 #include <string.h>
 #include <strings.h>
 #include <stdio.h>
@@ -175,6 +176,14 @@ Commands_Base::Commands_Base()
 	imageListingMode = 1;
 	wildcardMatchTail = true;
 	extensionHiding = false;
+	clockSet = false;
+	clockBaseTicks = 0;
+	clockBaseSeconds = 0;
+}
+
+u32 Commands_Base::ClockTicks() const
+{
+	return TimerGetTicks();
 }
 
 void Commands_Base::ClearPendingImageSelection()
@@ -1599,6 +1608,168 @@ void Commands_Base::GetPartitionInfo(void)
 	errorMessage[29] = static_cast<char>(0xff);
 }
 
+struct SD2IECTime
+{
+	unsigned year, month, day, hour, minute, second;
+};
+
+static bool IsLeapYear(unsigned year)
+{
+	return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+}
+
+static unsigned DaysInMonth(unsigned year, unsigned month)
+{
+	static const u8 days[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+	if (month < 1 || month > 12) return 0;
+	return days[month - 1] + (month == 2 && IsLeapYear(year));
+}
+
+static bool ValidTime(const SD2IECTime& value)
+{
+	return value.year >= 1980 && value.year <= 2155 && value.month >= 1 && value.month <= 12
+		&& value.day >= 1 && value.day <= DaysInMonth(value.year, value.month)
+		&& value.hour < 24 && value.minute < 60 && value.second < 60;
+}
+
+static u64 TimeToSeconds(const SD2IECTime& value)
+{
+	u64 days = 0;
+	for (unsigned year = 1980; year < value.year; ++year) days += IsLeapYear(year) ? 366 : 365;
+	for (unsigned month = 1; month < value.month; ++month) days += DaysInMonth(value.year, month);
+	days += value.day - 1;
+	return ((days * 24 + value.hour) * 60 + value.minute) * 60 + value.second;
+}
+
+static SD2IECTime SecondsToTime(u64 seconds)
+{
+	SD2IECTime value = {1980, 1, 1, 0, 0, 0};
+	u64 days = seconds / 86400;
+	seconds %= 86400;
+	value.hour = seconds / 3600; seconds %= 3600;
+	value.minute = seconds / 60; value.second = seconds % 60;
+	while (days >= (IsLeapYear(value.year) ? 366u : 365u))
+	{
+		days -= IsLeapYear(value.year) ? 366 : 365;
+		++value.year;
+	}
+	while (days >= DaysInMonth(value.year, value.month))
+	{
+		days -= DaysInMonth(value.year, value.month);
+		++value.month;
+	}
+	value.day = static_cast<unsigned>(days) + 1;
+	return value;
+}
+
+static unsigned DayOfWeek(const SD2IECTime& value)
+{
+	return static_cast<unsigned>((TimeToSeconds(value) / 86400 + 2) % 7); // 1980-01-01 was Tuesday
+}
+
+static u8 ToBCD(unsigned value) { return static_cast<u8>(((value / 10) << 4) | (value % 10)); }
+static unsigned FromBCD(u8 value) { return ((value >> 4) * 10) + (value & 15); }
+
+void Commands_Base::TimeCommand(void)
+{
+	Channel& command = channels[15];
+	if (command.cursor < 4 || command.buffer[1] != '-')
+	{
+		Error(ERROR_30_SYNTAX_ERROR);
+		return;
+	}
+	char operation = static_cast<char>(toupper(command.buffer[2]));
+	char format = static_cast<char>(toupper(command.buffer[3]));
+	if ((operation != 'R' && operation != 'W') || (format != 'A' && format != 'I' && format != 'D' && format != 'B'))
+	{
+		Error(ERROR_30_SYNTAX_ERROR);
+		return;
+	}
+
+	if (operation == 'W')
+	{
+		SD2IECTime value = {};
+		if (format == 'I')
+		{
+			if (command.cursor < 23 || sscanf(reinterpret_cast<char*>(command.buffer) + 4,
+				"%4u-%2u-%2uT%2u:%2u:%2u", &value.year, &value.month, &value.day,
+				&value.hour, &value.minute, &value.second) != 6) value.year = 0;
+		}
+		else if (format == 'A')
+		{
+			char dayName[5] = {}, ampm[3] = {};
+			unsigned year;
+			if (sscanf(reinterpret_cast<char*>(command.buffer) + 4,
+				"%4s %2u/%2u/%2u %2u:%2u:%2u %2s", dayName, &value.month, &value.day,
+				&year, &value.hour, &value.minute, &value.second, ampm) != 8) value.year = 0;
+			else
+			{
+				value.year = year < 80 ? 2000 + year : 1900 + year;
+				if (value.hour < 1 || value.hour > 12) value.year = 0;
+				else value.hour = (value.hour % 12) + (toupper(ampm[0]) == 'P' ? 12 : 0);
+			}
+		}
+		else
+		{
+			if (command.cursor < 12) value.year = 0;
+			else
+			{
+				const u8* bytes = command.buffer + 4;
+				auto number = [format](u8 byte) { return format == 'B' ? FromBCD(byte) : static_cast<unsigned>(byte); };
+				unsigned year = number(bytes[1]);
+				value.year = format == 'B' ? (year < 80 ? 2000 + year : 1900 + year) : 1900 + year;
+				value.month = number(bytes[2]); value.day = number(bytes[3]);
+				unsigned hour = number(bytes[4]); value.minute = number(bytes[5]); value.second = number(bytes[6]);
+				if (hour < 1 || hour > 12) value.year = 0;
+				else value.hour = (hour % 12) + (bytes[7] ? 12 : 0);
+			}
+		}
+		if (!ValidTime(value))
+		{
+			Error(ERROR_31_SYNTAX_ERROR);
+			return;
+		}
+		clockBaseSeconds = TimeToSeconds(value);
+		clockBaseTicks = ClockTicks();
+		clockSet = true;
+		return;
+	}
+
+	if (!clockSet)
+	{
+		Error(ERROR_31_SYNTAX_ERROR);
+		return;
+	}
+	SD2IECTime value = SecondsToTime(clockBaseSeconds
+		+ static_cast<u32>(ClockTicks() - clockBaseTicks) / HZ);
+	unsigned weekday = DayOfWeek(value);
+	static const char* const daysLong[] = {"SUN.","MON.","TUES","WED.","THUR","FRI.","SAT."};
+	static const char* const daysShort[] = {"SUN","MON","TUE","WED","THU","FRI","SAT"};
+	unsigned hour12 = value.hour % 12; if (!hour12) hour12 = 12;
+	if (format == 'A')
+	{
+		snprintf(errorMessage, sizeof(errorMessage), "%s %02u/%02u/%02u %02u:%02u:%02u %s\r",
+			daysLong[weekday], value.month, value.day, value.year % 100, hour12,
+			value.minute, value.second, value.hour >= 12 ? "PM" : "AM");
+		errorLength = static_cast<u8>(strlen(errorMessage));
+	}
+	else if (format == 'I')
+	{
+		snprintf(errorMessage, sizeof(errorMessage), "%04u-%02u-%02uT%02u:%02u:%02u %s\r",
+			value.year, value.month, value.day, value.hour, value.minute, value.second, daysShort[weekday]);
+		errorLength = static_cast<u8>(strlen(errorMessage));
+	}
+	else
+	{
+		u8 result[9] = {static_cast<u8>(weekday), static_cast<u8>(format == 'B' ? value.year % 100 : value.year - 1900),
+			static_cast<u8>(value.month), static_cast<u8>(value.day), static_cast<u8>(hour12),
+			static_cast<u8>(value.minute), static_cast<u8>(value.second), static_cast<u8>(value.hour >= 12), 13};
+		if (format == 'B') for (unsigned i = 1; i <= 6; ++i) result[i] = ToBCD(result[i]);
+		memcpy(errorMessage, result, sizeof(result));
+		errorLength = sizeof(result);
+	}
+}
+
 void Commands_Base::User(void)
 {
 	Channel& channel = channels[15];
@@ -1787,7 +1958,7 @@ void Commands_Base::ProcessCommand(void)
 				Scratch();
 			break;
 			case 'T':
-				Error(ERROR_31_SYNTAX_ERROR);
+				TimeCommand();
 			break;
 			case 'U':
 				User();

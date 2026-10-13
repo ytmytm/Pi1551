@@ -296,13 +296,26 @@ in browser mode:
 | `X*+`, `X*-` | Enable modern 1581-style matching of text after `*`, or use classic matching that ignores everything after the first `*`. Default: `X*+`. |
 | `XE+`, `XE-` | Enable or disable hiding `.PRG`, `.SEQ`, `.USR`, and `.REL` extensions in listings and filename matching; the extension becomes the Commodore file type. Default: `XE-`. |
 | `X` | Report volatile extended settings on the error channel (`I` image mode, `E` extension hiding, `*` wildcard mode, and device number). |
+| `T-RA` / `T-WA...` | Read/write `SUN. 01/20/08 01:23:45 PM` ASCII time. |
+| `T-RI` / `T-WI...` | Read/write the supported ISO form `2008-01-20T13:23:45`; reads append the weekday. |
+| `T-RD` / `T-WD...` | Read/write the nine-byte decimal format (weekday, year since 1900, month, day, 12-hour time, AM/PM, CR). |
+| `T-RB` / `T-WB...` | Read/write the equivalent BCD format, with a modulo-100 year. |
+
+Pi1551 has no battery-backed RTC, but after any valid `T-W` it advances the
+clock from Raspberry Pi's system timer. The value survives drive/bus resets
+while Pi1551 remains powered, but not a power cycle or reboot. Until it is set,
+`T-R` returns `31,SYNTAX ERROR,00,00`. The clock uses elapsed monotonic time and
+does not infer civil time or a timezone from the Raspberry Pi.
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a
 new D64/G64 using the configured `NewDiskType`), `R` (rename), and `S`
-(scratch/delete files). `X?` returns the Pi1551 DOS version. Other sd2iec
-extended commands, partition directories, RTC commands, and raw FAT-sector
-commands are not currently implemented.
+(scratch/delete files). `X?` returns the Pi1551 DOS version. Settings changed
+by `XI`, `XE`, and `X*` are intentionally volatile. `XW` is not implemented,
+so the preferred `XI1` image-as-DIR default cannot be overwritten. Pi1551 also
+intentionally does not implement `XR`, `M-R`/`M-W`/`M-E`, `U1`/`U2`,
+`B-R`/`B-W`/`B-P`, or raw-device `DI`/`DR`/`DW`. Other sd2iec commands should
+be treated as unsupported unless explicitly listed above.
 
 For the complete upstream command language, consult the
 [sd2iec README](https://github.com/thierer/sd2iec) and the expanded

@@ -172,6 +172,7 @@ protected:
 	virtual bool CheckATN(void) { return false; }
 	virtual void OnATNSequenceComplete() {}
 	virtual bool HandleSpecialOpenFile(Channel& channel) { return false; } // Return true if handled
+	virtual u32 ClockTicks() const;
 
 	virtual void Listen();
 	virtual void Talk();
@@ -218,6 +219,7 @@ protected:
 	void Extended(void);
 	void SwapList(void);
 	void ExtendedStatus(void);
+	void TimeCommand(void);
 
 	void ProcessCommand(void);
 
@@ -284,6 +286,9 @@ protected:
 	u8 imageListingMode;
 	bool wildcardMatchTail;
 	bool extensionHiding;
+	bool clockSet;
+	u32 clockBaseTicks;
+	u64 clockBaseSeconds;
 
 	char errorMessage[64];
 	u8 errorLength;
