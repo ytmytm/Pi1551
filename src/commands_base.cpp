@@ -1718,6 +1718,7 @@ void Commands_Base::RMDir(void)
 				f_unlink(filInfo.fname);
 				updateAction = REFRESH;
 			}
+			f_closedir(&dir);
 		}
 		else
 		{

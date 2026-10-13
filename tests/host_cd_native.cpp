@@ -6,8 +6,9 @@
 #include <cstring>
 unsigned versionMajor = 1, versionMinor = 26;
 int numberOfUSBMassStorageDevices = 0;
+static std::string switchedDrive;
 void Reboot_Pi() {}
-void SwitchDrive(const char*) {}
+void SwitchDrive(const char* drive) { switchedDrive = drive; }
 void DisplayMessage(int,int,bool,const char*,u32,u32) {}
 void FileBrowser::RefreshDevicesEntries(std::vector<BrowsableList::Entry>&,bool) {}
 extern "C" FRESULT f_getfree(const TCHAR*,DWORD*,FATFS**) { return FR_DISK_ERR; }
@@ -25,6 +26,20 @@ struct CDProbe : Commands_Base {
     void LoadDirectory() override {}
     UpdateAction Change(const char* path) {
         char text[256]; strcpy(text,path); updateAction = NONE; CD(0,text); return updateAction;
+    }
+    void SetCommand(const char* text) {
+        Channel& channel = channels[15];
+        memset(channel.buffer, 0, sizeof(channel.buffer));
+        channel.cursor = strlen(text);
+        memcpy(channel.buffer, text, channel.cursor);
+    }
+    UpdateAction Folder(const char* text) {
+        SetCommand(text); updateAction = NONE; FolderCommand();
+        return updateAction;
+    }
+    UpdateAction ChangePartition(const char* text) {
+        SetCommand(text); updateAction = NONE; ChangeDevice();
+        return updateAction;
     }
 };
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL host CD:%d %s\n",__LINE__,#x); return 1; } } while(0)
@@ -47,5 +62,9 @@ int main(int argc,char** argv) {
     CHECK(command.Change("A.D64") == Commands_Base::NONE);
     CHECK(std::string(command.GetNameOfImageSelected()) == "a.d64");
     CHECK(std::string(command.GetMountedDiskImagePath()) == "/1551/a.d64");
-    puts("PASS production CD parser: parent aliases, SD roots, deferred container exit");
+    CHECK(command.Folder("MD:newdir") == Commands_Base::REFRESH);
+    FILINFO created{}; CHECK(f_stat("newdir", &created) == FR_OK); CHECK((created.fattrib & AM_DIR) != 0);
+    CHECK(command.Folder("RD:newdir") == Commands_Base::REFRESH); CHECK(f_stat("newdir", &created) == FR_NO_FILE);
+    CHECK(command.ChangePartition("CP0") == Commands_Base::DEVICE_SWITCHED); CHECK(switchedDrive == "SD:");
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP");
 }

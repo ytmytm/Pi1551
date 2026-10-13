@@ -25,7 +25,7 @@ ROM4 = super_dos_ram.bin
 
 // Browser.
 LowercaseBrowseModeFilenames = 0
-DisableSD2IECCommands = 0 // 0 = SD2IEC ON; 1 = SD2IEC OFF
+DisableSD2IECCommands = 0 // 0 = SD2IEC Cmds. ON; 1 = SD2IEC Cmds. OFF
 autoMountEnabled = 1
 // AutoMountImage is resolved under /1551 unless given an absolute path.
 // It accepts a supported disk/container/PRG or a nonempty .lst fliplist.

@@ -139,6 +139,10 @@ extern "C" FRESULT f_getcwd(TCHAR* buffer, UINT length) {
     if (cwd.size() >= length) return FR_INVALID_PARAMETER;
     strcpy(buffer, cwd.c_str()); return FR_OK;
 }
+extern "C" FRESULT f_mkdir(const TCHAR* path) {
+    if (mkdir(Resolve(path).c_str(), 0777) == 0) return FR_OK;
+    return access(Resolve(path).c_str(), F_OK) == 0 ? FR_EXIST : FR_DISK_ERR;
+}
 struct NativeDirectory { PosixDIR* directory; std::string path; };
 static std::map<DIR*, NativeDirectory> directories;
 extern "C" FRESULT f_opendir(DIR* dir, const TCHAR* path) {
@@ -157,7 +161,13 @@ extern "C" FRESULT f_closedir(DIR* dir) {
     if (!directories.count(dir)) return FR_INVALID_OBJECT;
     closedir(directories[dir].directory); directories.erase(dir); return FR_OK;
 }
-extern "C" FRESULT f_unlink(const TCHAR* path) { return unlink(Resolve(path).c_str()) == 0 ? FR_OK : FR_DISK_ERR; }
+extern "C" FRESULT f_unlink(const TCHAR* path) {
+    std::string resolved = Resolve(path);
+    struct stat st;
+    if (stat(resolved.c_str(), &st)) return FR_NO_FILE;
+    int result = S_ISDIR(st.st_mode) ? rmdir(resolved.c_str()) : unlink(resolved.c_str());
+    return result == 0 ? FR_OK : FR_DISK_ERR;
+}
 extern "C" FRESULT f_rename(const TCHAR* from, const TCHAR* to) {
     if (Fail("rename")) return FR_DISK_ERR;
     if (access(Resolve(to).c_str(),F_OK) == 0) return FR_EXIST;

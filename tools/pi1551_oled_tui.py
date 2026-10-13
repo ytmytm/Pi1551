@@ -60,7 +60,7 @@ class Simulator:
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
         "tape_settings": ["..", "Motor ON"],
-        "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC"],
+        "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC Cmds."],
         "display": ["..", "Temp", "Contrast", "Dimming", "Dim time", "Dim level", "Orient", "Font", "Scroll"],
         "encoder": ["..", "Reverse"],
         "disk": ["..", "WProt", "Write image", "New image", "Reset drive"],
@@ -86,7 +86,7 @@ class Simulator:
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
         self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True,
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
-                        "SD2IEC": True, "Contrast": 255, "Dimming": True, "Orientation": "normal",
+                        "SD2IEC Cmds.": True, "Contrast": 255, "Dimming": True, "Orientation": "normal",
                         "scrollHighlightRate": 0.10, "i2cLcdUseCBMChar": True, "Encoder enabled": True, "Encoder reverse": False,
                         "Temp": True, "Dim time": 30, "Dim level": 10, "soundOnGPIO": True, "Duration": 500, "NewDiskType": "D64",
                         "Sound": True, "Freq": "1600 Hz", "Reset": "REACT"}
@@ -156,7 +156,7 @@ class Simulator:
     def display_value(self, item: str) -> str:
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
-          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC": self.on(self.options["SD2IEC"]),
+          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
           "Freq": self.options["Freq"], "Mode": "BUZZER" if self.options["soundOnGPIO"] else "SAMPLE",
           "Duration": f'{self.options["Duration"]}ms', "Temp": self.on(self.options["Temp"]),
           "Dim time": f'{self.options["Dim time"]}s' if self.options["Dim time"] else "OFF", "Dim level": str(self.options["Dim level"]),

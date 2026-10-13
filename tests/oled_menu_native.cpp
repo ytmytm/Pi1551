@@ -71,8 +71,10 @@ static void Choose(Menu& m, const std::string& text) {
     for (unsigned attempt = 0; attempt < 100; ++attempt) {
         Frame f = m.Render(0);
         if (m.CurrentView() == View::Notice) { m.Input(Key::Back); continue; }
-        for (unsigned row = 2; row < 8; ++row)
-            if (f.inverse[row] && std::string(f.rows[row]+1).find(text) == 0) return;
+        for (unsigned row = 2; row < 8; ++row) {
+            std::string rendered(f.rows[row]);
+            if (f.inverse[row] && (rendered.find(text) == 0 || rendered.substr(1).find(text) == 0)) return;
+        }
         m.Input(Key::Right);
     }
     throw std::runtime_error("No selectable row: " + text);
@@ -216,6 +218,12 @@ static void reset_and_settings() {
     Enter(m,"Skip spinup"); CHECK(k.settings[Setting::Spinup] == 1);
     Press(m,Key::Back); Enter(m,"Browser"); k.available = false;
     Frame f = m.Render(0); for (unsigned row = 2; row < 8; ++row) CHECK(std::string(f.rows[row]).find("Auto mount") == std::string::npos);
+    Choose(m,"SD2IEC Cmds."); f = m.Render(0);
+    bool sd2iecLabel = false;
+    for (unsigned row = 2; row < 8; ++row)
+        if (std::string(f.rows[row]) == "SD2IEC Cmds. OFF") sd2iecLabel = true;
+    CHECK(sd2iecLabel);
+    Press(m,Key::Enter); CHECK(k.settings[Setting::SD2IEC] == 1);
     Choose(m,"Reset path"); Press(m,Key::Enter); CHECK(k.settings[Setting::ResetPath] == 0);
     Press(m,Key::Back); Enter(m,"Sound");
     Frame sound = m.Render(0);

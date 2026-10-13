@@ -87,9 +87,9 @@ private:
     struct Position { View view; unsigned cursor, offset; };
     struct Row {
         std::string prefix, name;
-        bool active;
-        Row(const std::string& p, const std::string& n = "", bool a = false)
-            : prefix(p), name(n), active(a) {}
+        bool active, fullWidth;
+        Row(const std::string& p, const std::string& n = "", bool a = false, bool full = false)
+            : prefix(p), name(n), active(a), fullWidth(full) {}
     };
     Backend& backend;
     std::string start, path, mounted, lastMounted, message;

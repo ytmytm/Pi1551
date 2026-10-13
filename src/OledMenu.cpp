@@ -228,7 +228,7 @@ std::vector<Menu::Row> Menu::Rows() {
         struct Item { Setting id; const char* label; };
         static const Item drive[] = {{Setting::Device,"Device number"},{Setting::Idle,"Idle trap"},{Setting::RAM,"RAMBOard"},{Setting::Spinup,"Skip spinup"},{Setting::IgnoreReset,"Reset"}};
         static const Item tape[] = {{Setting::MotorAlways,"Motor ON"}};
-        static const Item browser[] = {{Setting::AutoMount,"Auto mount"},{Setting::ResetPath,"Reset path"},{Setting::Lowercase,"Lowercase"},{Setting::SD2IEC,"SD2IEC"}};
+        static const Item browser[] = {{Setting::AutoMount,"Auto mount"},{Setting::ResetPath,"Reset path"},{Setting::Lowercase,"Lowercase"},{Setting::SD2IEC,"SD2IEC Cmds."}};
         static const Item display[] = {{Setting::Temp,"Temp"},{Setting::Contrast,"Contrast"},{Setting::Dimming,"Dimming"},{Setting::DimTime,"Dim time"},{Setting::DimLevel,"Dim level"},{Setting::Orient,"Orient"},{Setting::Font,"Font"},{Setting::Scroll,"Scroll"}};
         static const Item encoder[] = {{Setting::Reverse,"Reverse"}};
         static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::SoundMode,"Mode"},{Setting::Freq,"Freq"},{Setting::Duration,"Duration"}};
@@ -254,6 +254,8 @@ std::vector<Menu::Row> Menu::Rows() {
             if (id == Setting::Scroll) { char b[20]; snprintf(b,sizeof(b),"%.2fs", v / 1000.0); value = b; }
             if (id == Setting::Scroll)
                 r.push_back(Row("Scroll " + value + " ", "Scrolling preview 0123456789"));
+            else if (id == Setting::SD2IEC)
+                r.push_back(Row(std::string(items[i].label) + " " + value, "", false, true));
             else r.push_back(Row(std::string(items[i].label) + " " + value));
         }
         break;
@@ -420,7 +422,9 @@ Frame Menu::Render(uint32_t ms) {
         if (view == View::Browser || view == View::Fliplist) i = y == 2 ? 0 : offset + y - 2;
         if (i >= rows.size()) continue;
         const Row& row = rows[i]; f.inverse[y] = i == cursor; f.active[y] = row.active;
-        unsigned w = 15 - std::min(15u, (unsigned)row.prefix.size());
+        unsigned indent = row.fullWidth ? 0 : 1;
+        unsigned capacity = 16 - indent;
+        unsigned w = capacity - std::min(capacity, (unsigned)row.prefix.size());
         unsigned pos = 0;
         if (i == cursor && row.name.size() > w) {
             unsigned max = row.name.size() - w;
@@ -431,7 +435,7 @@ Frame Menu::Render(uint32_t ms) {
             else if (ticks > 14 + max) pos = cycle - ticks;
         }
         std::string text = row.prefix + row.name.substr(pos, w);
-        memcpy(f.rows[y] + 1, text.data(), std::min((size_t)15, text.size()));
+        memcpy(f.rows[y] + indent, text.data(), std::min((size_t)capacity, text.size()));
     }
     return f;
 }

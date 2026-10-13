@@ -358,7 +358,7 @@ Submenus:
 - Tape: the visible item is `Motor ON`, with modes `ALWAYS` and `COMP.`.
   `ALWAYS` keeps MOTOR active; `COMP.` follows the computer MOTOR input;
 - Browser: visible items are `Auto mount`, `Reset path`, `Lowercase` and
-  `SD2IEC`; `Auto mount ON` enables the configured `AutoMountImage` (which may
+  `SD2IEC Cmds.`; `Auto mount ON` enables the configured `AutoMountImage` (which may
   be an image or an `.LST`), while `OFF` disables automatic mounting;
   `Reset path ON` returns Browser to the `/1551` starting folder after a
   computer reset, including `Reset IGNORE`; `OFF` preserves the current Browser folder;

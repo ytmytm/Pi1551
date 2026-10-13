@@ -193,7 +193,7 @@ Browser / Fliplist
    │  │  ├─ Auto mount ON/OFF        (valid AutoMountImage required)
    │  │  ├─ Reset path ON/OFF
    │  │  ├─ Lowercase ON/OFF
-   │  │  └─ SD2IEC ON/OFF
+   │  │  └─ SD2IEC Cmds. ON/OFF
    │  ├─ Display
    │  │  ├─ ..
    │  │  ├─ Temp ON/OFF
@@ -263,7 +263,41 @@ TAPE --- --% M- or TAPE --- --% --; a loaded tape at the beginning has
 ALWAYS override) even without a tape; PLAY stays pressed from load until
 eject, including EOF.
 
-### Computer CD Commands And The Panel
+### SD2IEC-Style Browser Commands And The Panel
+
+`SD2IEC Cmds. ON` enables the computer-facing browser-mode file service:
+directory listings, direct file `LOAD`/`SAVE`, and its command channel.
+`OFF` disables that service while leaving OLED browsing available. The name
+means compatibility with a useful subset of the SD2IEC/CMD command vocabulary;
+Pi1551 does not claim to implement the complete sd2iec firmware command set.
+The setting has no effect while a D64 or G64 is running in cycle-exact 1551
+emulation.
+
+The following SD2IEC/CMD-style directory and device commands are implemented
+in browser mode:
+
+| Command | Pi1551 behavior |
+| --- | --- |
+| `CD:path` | Change SD directory, or select a supported image/container. |
+| `CD_`, `CD:_`, `CD..`, `CD:..` | Leave an image or move to the parent SD directory. `_` represents the Commodore left-arrow character. |
+| `CD/` / `CD//` | Select the SD root / the `/1551` starting folder. |
+| `MD:name` | Create a subdirectory relative to the current directory. `MD//name` creates it below the `/1551` starting folder; partition prefixes other than zero are not supported. |
+| `RD:name` | Remove a subdirectory of the current directory. |
+| `CP0` | Select the SD card. |
+| `CP1`, `CP2`, ... | Select the corresponding available USB mass-storage device. This is Pi1551's storage-device mapping, not sd2iec's general partition model. |
+
+The same browser command channel also implements normal file operations used
+by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a
+new D64/G64 using the configured `NewDiskType`), `R` (rename), and `S`
+(scratch/delete files). `X?` returns the Pi1551 DOS version. Other sd2iec
+extended commands, partition directories, RTC commands, and raw FAT-sector
+commands are not currently implemented.
+
+For the complete upstream command language, consult the
+[sd2iec README](https://github.com/thierer/sd2iec) and the expanded
+[C64 OS SD2IEC User's Manual](https://c64os.com/post/sd2iecdocumentation).
+Commands described there should be treated as unsupported unless they are
+explicitly listed above.
 
 Commodore command-channel navigation updates the OLED as well as the file
 source. CD into a folder shows Browser. CD selecting an image mounts it and
@@ -396,7 +430,7 @@ Options not present in the file use built-in defaults from `src/options.cpp`.
 | `StarFileName` | empty | File served for `LOAD"*"` / `DLOAD"*"` style requests. |
 | `AutoBaseName` | `autoname` | Prefix for automatically created disk images. |
 | `NewDiskType` | `d64` | Initial format for Disk -> New image -> Type, D64 or G64. |
-| `DisableSD2IECCommands` | `0` | Disable browser-mode SD2IEC-style commands when set to `1`. |
+| `DisableSD2IECCommands` | `0` | Browser setting `SD2IEC Cmds.` Stored inverted: `0` enables browser-mode file access and its SD2IEC-style command subset; `1` disables the computer-facing service but not OLED browsing. |
 | `LowercaseBrowseModeFilenames` | `0` | Send browser-mode filenames as lowercase. |
 | `IgnoreReset` | `0` | Drive Reset: 0 = REACT, 1 = IGNORE. Does not suppress the independent Reset path action. |
 | `QuickBoot` | `0` | Skip startup delay/logo pause when set to `1`. |
