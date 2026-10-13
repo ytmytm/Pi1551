@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 unsigned versionMajor = 1, versionMinor = 26;
 int numberOfUSBMassStorageDevices = 0;
 static std::string switchedDrive;
@@ -15,9 +16,10 @@ void FileBrowser::RefreshDevicesEntries(std::vector<BrowsableList::Entry>&,bool)
 extern "C" FRESULT f_getfree(const TCHAR*,DWORD*,FATFS**) { return FR_DISK_ERR; }
 extern void NativeFatFSRoot(const std::string& root);
 struct CDProbe : Commands_Base {
+    std::vector<u8> output;
     void SimulateIECBegin() override {}
     UpdateAction SimulateIECUpdate() override { return updateAction; }
-    bool WriteSerialPortByte(u8,bool) override { return true; }
+    bool WriteSerialPortByte(u8 byte,bool) override { output.push_back(byte); return false; }
     void ReadBrowseMode() override {}
     bool IsReset() override { return false; }
     void Listen() override {}
@@ -60,7 +62,20 @@ struct CDProbe : Commands_Base {
         return channel.open;
     }
     u32 TestChannelPosition(u8 number) const { return channels[number].file.fptr; }
+    std::vector<u8> Listing() {
+        output.clear(); SetCommand("$"); Commands_Base::LoadDirectory(); return output;
+    }
 };
+static unsigned CountNear(const std::vector<u8>& data, const char* name, const char* type) {
+    unsigned count = 0;
+    for (size_t i = 0; i + strlen(name) < data.size(); ++i) {
+        if (memcmp(&data[i], name, strlen(name))) continue;
+        size_t end = std::min(data.size(), i + 32);
+        for (size_t j = i; j + 3 <= end; ++j)
+            if (!memcmp(&data[j], type, 3)) { ++count; break; }
+    }
+    return count;
+}
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL host CD:%d %s\n",__LINE__,#x); return 1; } } while(0)
 int main(int argc,char** argv) {
     CHECK(argc == 2); NativeFatFSRoot(argv[1]); CHECK(f_chdir("/1551") == FR_OK);
@@ -94,5 +109,12 @@ int main(int argc,char** argv) {
     CHECK(command.OpenTestChannel(2, "a.d64"));
     const u8 position[] = {'P', 2, 0x34, 0x12}; command.Execute(position, sizeof(position));
     CHECK(command.TestChannelPosition(2) == 0x1234);
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P");
+    CHECK(command.GetImageListingMode() == 1);
+    std::vector<u8> listing = command.Listing(); CHECK(CountNear(listing, "A.D64", "DIR") == 1);
+    command.Execute("XI0"); CHECK(command.GetImageListingMode() == 0);
+    listing = command.Listing(); CHECK(CountNear(listing, "A.D64", "PRG") == 1);
+    command.Execute("XI2"); listing = command.Listing();
+    CHECK(CountNear(listing, "A.D64", "PRG") == 1); CHECK(CountNear(listing, "A.D64", "DIR") == 1);
+    command.Execute("XI1");
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P/XI");
 }

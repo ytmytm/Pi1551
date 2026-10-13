@@ -98,6 +98,7 @@ public:
 	bool FinishFiles(); // flush buffered host writes and close files before a full reboot
 	const char* GetLastOpenPath() const { return lastOpenPath; }
 	const char* GetSwapListPath() const { return swapListPath; }
+	u8 GetImageListingMode() const { return imageListingMode; }
 
 	void SetMountedDiskImagePath(const char* path);
 	static bool PathUsesQuasiMountOnly(const char* path);
@@ -273,6 +274,7 @@ protected:
 	bool displayingDevices;
 	bool lowercaseBrowseModeFilenames;
 	DiskImage::DiskType newDiskType;
+	u8 imageListingMode;
 
 	char errorMessage[64];
 };

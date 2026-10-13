@@ -169,6 +169,7 @@ Commands_Base::Commands_Base()
 	displayingDevices = false;
 	lowercaseBrowseModeFilenames = false;
 	newDiskType = DiskImage::D64;
+	imageListingMode = 1;
 }
 
 void Commands_Base::ClearPendingImageSelection()
@@ -891,11 +892,11 @@ static bool IsDirectoryListingDiskImage(const char* fname)
 		|| strcasecmp(ext, ".d82") == 0;
 }
 
-static int BrowserDirectoryEntryType(const FILINFO* filInfo)
+static int BrowserDirectoryEntryType(const FILINFO* filInfo, u8 imageListingMode)
 {
 	if (filInfo->fattrib & AM_DIR)
 		return 6;
-	if (IsDirectoryListingDiskImage(filInfo->fname))
+	if (imageListingMode == 1 && IsDirectoryListingDiskImage(filInfo->fname))
 		return 6;
 	return 2;
 }
@@ -968,10 +969,17 @@ void Commands_Base::LoadDirectory()
 		if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
 			SendBuffer(channel, false);
 
-		if (BrowserDirectoryEntryType(filInfo) == 6)
+		if (BrowserDirectoryEntryType(filInfo, imageListingMode) == 6)
 			AddDirectoryEntry(channel, fileName, 0, 6);
 		else
 			AddDirectoryEntry(channel, fileName, static_cast<u16>(1 + filInfo->fsize / 254), 2);
+
+		if (imageListingMode == 2 && IsDirectoryListingDiskImage(fileName))
+		{
+			if (!channel.CanFit(DIRECTORY_ENTRY_SIZE))
+				SendBuffer(channel, false);
+			AddDirectoryEntry(channel, fileName, 0, 6);
+		}
 	}
 
 	SendBuffer(channel, false);
@@ -1452,6 +1460,12 @@ void Commands_Base::Extended(void)
 		break;
 		case 'S':
 			SwapList();
+		break;
+		case 'I':
+			if (channel.cursor == 3 && channel.buffer[2] >= '0' && channel.buffer[2] <= '2')
+				imageListingMode = channel.buffer[2] - '0';
+			else
+				Error(ERROR_31_SYNTAX_ERROR);
 		break;
 		default:
 			Error(ERROR_31_SYNTAX_ERROR);

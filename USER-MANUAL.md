@@ -288,6 +288,7 @@ in browser mode:
 | `XS:name.lst` | Load the named LST swap list and mount its first valid entry, using the same Fliplist behavior as panel selection. |
 | `XS` | Disable and clear the current swap list without deleting its LST file. |
 | `P` + channel byte + up to four little-endian offset bytes | Seek an open regular file (or a file inside a mounted container) to a 0-based 32-bit byte position. Omitted high bytes are zero. |
+| `XI0`, `XI1`, `XI2` | Show mountable images as PRG, as DIR, or twice (PRG and DIR). Pi1551 deliberately defaults to `XI1` (DIR); the setting lasts until reboot and `XW` is not supported. |
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a
