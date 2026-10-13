@@ -3062,11 +3062,16 @@ bool OledKernelNewImage(const char* directory)
 oled::Status OledKernelStatus()
 {
     static unsigned temperature = 0;
+    static bool tapeMotor = false;
     static u32 nextTemperature = 0, nextSpace = 0;
     static std::string size, free;
     u32 now = read32(ARM_SYSTIMER_CLO);
     if ((int)(now - nextTemperature) >= 0) {
         unsigned value; if (GetTemperature(value)) temperature = value / 1000;
+        // MOTOR is an input signal, not a property of a loaded TAP. Keep its
+        // status visible even when the virtual cassette is empty.
+        tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
+            || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
         nextTemperature = now + 1000000;
     }
     if ((int)(now - nextSpace) >= 0) {
@@ -3088,9 +3093,10 @@ oled::Status OledKernelStatus()
     char version[24]; snprintf(version, sizeof(version), "%u.%02u", versionMajor, versionMinor); s.firmware = version;
     if (g_tapePlayer) {
         g_tapePlayer->Tick10ms(); TapeUIState tape; g_tapePlayer->GetUIState(tape);
-        s.tape = tape.isLoaded ? tape.filename : ""; s.motor = tape.motorActive;
+        s.tape = tape.isLoaded ? tape.filename : "";
         s.play = tape.isLoaded; s.counter = tape.tapeCounter; s.percent = tape.percentage;
     }
+    s.motor = tapeMotor;
     return s;
 }
 

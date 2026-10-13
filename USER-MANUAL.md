@@ -261,7 +261,8 @@ Tape status always shows TAPE, counter, percent and M/P flags. No TAP is
 TAPE --- --% M- or TAPE --- --% --; a loaded tape at the beginning has
 000 00%, not missing-file dashes. MOTOR reflects the computer input (or
 ALWAYS override) even without a tape; PLAY stays pressed from load until
-eject, including EOF.
+eject, including EOF. The MOTOR flag refreshes once per second alongside the
+temperature; it is not gated by whether a TAP is loaded.
 
 ### SD2IEC-Style Browser Commands And The Panel
 

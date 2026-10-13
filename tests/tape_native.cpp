@@ -31,6 +31,10 @@ int main(int argc,char** argv) {
     tape.SetMotorAlwaysOn(false); CHECK(!tape.GetMotorActive());
     pins[TAPE_MOTOR_GPIO] = false; tape.Tick10ms(); CHECK(tape.GetMotorActive());
     tape.Eject(); CHECK(!tape.IsLoaded()); CHECK(!tape.GetTapeSenseState()); CHECK(!pins[TAPE_SENSE_GPIO]); CHECK(tape.GetMotorActive());
+    pins[TAPE_MOTOR_GPIO] = true; tape.Tick10ms(); tape.GetUIState(s);
+    CHECK(!s.isLoaded); CHECK(!s.motorActive);
+    pins[TAPE_MOTOR_GPIO] = false; tape.Tick10ms(); tape.GetUIState(s);
+    CHECK(!s.isLoaded); CHECK(s.motorActive);
     CHECK(!tape.SeekCounter(5)); tape.GetUIState(s); CHECK(!s.isLoaded); CHECK(!s.filename[0]);
     CHECK(changes[TAPE_SENSE_GPIO] > 5);
     CHECK(!tape.LoadTap(0)); CHECK(!tape.GetTapeSenseState()); CHECK(tape.GetMotorActive());

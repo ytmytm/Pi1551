@@ -175,6 +175,10 @@ static void insert_last_enter_and_empty_list() {
 static void tape_independent_and_seek() {
     KernelStub k; Menu m(k); k.status.motor = true;
     CHECK(std::string(m.Render(0).rows[1]) == "TAPE --- --% M- ");
+    k.status.motor = false;
+    CHECK(std::string(m.Render(1000).rows[1]) == "TAPE --- --% -- ");
+    k.status.motor = true;
+    CHECK(std::string(m.Render(2000).rows[1]) == "TAPE --- --% M- ");
     CHECK(m.OpenMedia(Entry("/1551/tapes/boulder dash.tap","boulder dash.tap")));
     CHECK(k.status.play); CHECK(k.status.motor);
     CHECK(m.OpenMedia(Image("d64"))); CHECK(k.status.counter == 0);
