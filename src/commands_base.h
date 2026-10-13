@@ -62,6 +62,7 @@ public:
 		REFRESH,
 		DEVICEID_CHANGED,
 		DEVICE_SWITCHED,
+		SWAP_LIST_CLEARED,
 		RESET
 	};
 
@@ -95,6 +96,7 @@ public:
 	void ClearPendingImageSelection();
 	bool FinishFiles(); // flush buffered host writes and close files before a full reboot
 	const char* GetLastOpenPath() const { return lastOpenPath; }
+	const char* GetSwapListPath() const { return swapListPath; }
 
 	void SetMountedDiskImagePath(const char* path);
 	static bool PathUsesQuasiMountOnly(const char* path);
@@ -205,6 +207,7 @@ protected:
 	void Memory(void);
 	void User(void);
 	void Extended(void);
+	void SwapList(void);
 
 	void ProcessCommand(void);
 
@@ -261,6 +264,7 @@ protected:
 	FILINFO filInfoSelectedImage;
 	char lastOpenPath[256];
 	char mountedImagePath[256];
+	char swapListPath[256];
 
 	const char* starFileName;
 

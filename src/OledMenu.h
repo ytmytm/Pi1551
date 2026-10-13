@@ -82,6 +82,7 @@ public:
     bool ListMode() const { return listMode; }
     const std::string& Message() const { return message; }
     void MountFailed();
+    void DisableList();
     void Notify(const std::string& text) { message = text; }
 private:
     struct Position { View view; unsigned cursor, offset; };

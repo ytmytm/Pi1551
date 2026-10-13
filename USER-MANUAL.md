@@ -285,6 +285,8 @@ in browser mode:
 | `RD:name` | Remove a subdirectory of the current directory. |
 | `CP0` | Select the SD card. |
 | `CP1`, `CP2`, ... | Select the corresponding available USB mass-storage device. This is Pi1551's storage-device mapping, not sd2iec's general partition model. |
+| `XS:name.lst` | Load the named LST swap list and mount its first valid entry, using the same Fliplist behavior as panel selection. |
+| `XS` | Disable and clear the current swap list without deleting its LST file. |
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

@@ -10,6 +10,7 @@ static std::string switchedDrive;
 void Reboot_Pi() {}
 void SwitchDrive(const char* drive) { switchedDrive = drive; }
 void DisplayMessage(int,int,bool,const char*,u32,u32) {}
+extern "C" void SetACTLed(int) {}
 void FileBrowser::RefreshDevicesEntries(std::vector<BrowsableList::Entry>&,bool) {}
 extern "C" FRESULT f_getfree(const TCHAR*,DWORD*,FATFS**) { return FR_DISK_ERR; }
 extern void NativeFatFSRoot(const std::string& root);
@@ -41,6 +42,10 @@ struct CDProbe : Commands_Base {
         SetCommand(text); updateAction = NONE; ChangeDevice();
         return updateAction;
     }
+    UpdateAction Execute(const char* text) {
+        SetCommand(text); updateAction = NONE; ProcessCommand();
+        return updateAction;
+    }
 };
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL host CD:%d %s\n",__LINE__,#x); return 1; } } while(0)
 int main(int argc,char** argv) {
@@ -66,5 +71,11 @@ int main(int argc,char** argv) {
     FILINFO created{}; CHECK(f_stat("newdir", &created) == FR_OK); CHECK((created.fattrib & AM_DIR) != 0);
     CHECK(command.Folder("RD:newdir") == Commands_Base::REFRESH); CHECK(f_stat("newdir", &created) == FR_NO_FILE);
     CHECK(command.ChangePartition("CP0") == Commands_Base::DEVICE_SWITCHED); CHECK(switchedDrive == "SD:");
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP");
+    CHECK(command.Execute("XS:list.lst") == Commands_Base::IMAGE_SELECTED);
+    CHECK(std::string(command.GetSwapListPath()) == "list.lst");
+    CHECK(std::string(command.GetNameOfImageSelected()) == "list.lst");
+    command.ClearPendingImageSelection();
+    CHECK(command.Execute("XS") == Commands_Base::SWAP_LIST_CLEARED);
+    CHECK(std::string(command.GetSwapListPath()).empty());
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS");
 }

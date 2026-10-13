@@ -3185,6 +3185,9 @@ void emulator()
                 options.SetRuntime(oled::Setting::Device, m_TCBM_Commands.GetDeviceId());
                 GlobalSetDeviceID(m_TCBM_Commands.GetDeviceId());
                 break;
+            case TCBM_Commands::SWAP_LIST_CLEARED:
+                Pi1551Oled::HostClearList();
+                break;
             default: break;
             }
             // Active transfers retain the original fast poll cadence.
@@ -3350,6 +3353,9 @@ void emulator()
 						case IEC_Commands::DEVICE_SWITCHED:
 							DEBUG_LOG("DECIVE_SWITCHED\r\n");
 							fileBrowser->DeviceSwitched();
+							break;
+						case IEC_Commands::SWAP_LIST_CLEARED:
+							fileBrowser->ClearSelections();
 							break;
 						default:
 							break;

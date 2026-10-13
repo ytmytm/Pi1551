@@ -12,6 +12,7 @@ bool TransitionPending();
 bool InputPending();
 void CompleteTransition(); // core 1, after leaving the real-time loop
 void HostReset();
+void HostClearList();
 void HostSelection(const char* path);
 bool HostDirectory(); // adopt cwd already changed by the host
 bool HostParent(); // mounted image -> containing SD folder; SD folder -> parent

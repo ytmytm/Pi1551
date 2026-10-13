@@ -160,6 +160,7 @@ Commands_Base::Commands_Base()
 {
 	deviceID = 8;
 	mountedImagePath[0] = 0;
+	swapListPath[0] = 0;
 	Reset();
 	starFileName = 0;
 	displayingDevices = false;
@@ -1405,10 +1406,42 @@ void Commands_Base::Extended(void)
 		case '?':
 			Error(ERROR_73_DOSVERSION);
 		break;
+		case 'S':
+			SwapList();
+		break;
 		default:
 			Error(ERROR_31_SYNTAX_ERROR);
 		break;
 	}
+}
+
+void Commands_Base::SwapList(void)
+{
+	Channel& channel = channels[15];
+	if (channel.cursor == 2)
+	{
+		swapListPath[0] = '\0';
+		updateAction = SWAP_LIST_CLEARED;
+		return;
+	}
+
+	char filename[256];
+	ParseName(reinterpret_cast<const char*>(channel.buffer) + 2, filename, true, true);
+	FILINFO filInfo = {};
+	const char* extension = strrchr(filename, '.');
+	if (filename[0] == '\0' || !extension || strcasecmp(extension, ".lst") != 0
+		|| f_stat(filename, &filInfo) != FR_OK || IsDirectory(filInfo))
+	{
+		Error(ERROR_62_FILE_NOT_FOUND);
+		return;
+	}
+
+	strncpy(swapListPath, filename, sizeof(swapListPath) - 1);
+	swapListPath[sizeof(swapListPath) - 1] = '\0';
+	strncpy(selectedImageName, filename, sizeof(selectedImageName) - 1);
+	selectedImageName[sizeof(selectedImageName) - 1] = '\0';
+	filInfoSelectedImage = filInfo;
+	updateAction = IMAGE_SELECTED;
 }
 
 void Commands_Base::ProcessCommand(void)

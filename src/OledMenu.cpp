@@ -128,6 +128,11 @@ void Menu::Clear() {
     history.clear();
     if (view != View::Browser) history.push_back(Position{View::Browser, 1, 0});
 }
+void Menu::DisableList() {
+    flip.clear(); listMode = false;
+    if (view == View::Fliplist) { view = View::Browser; cursor = 1; offset = 0; }
+    Clamp(); scrollReset = true;
+}
 void Menu::Back() {
     if (view == View::Notice) message.clear();
     if (editing) { editing = false; return; }

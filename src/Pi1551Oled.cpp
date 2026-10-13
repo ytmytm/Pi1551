@@ -346,6 +346,11 @@ void HostReset() {
     if (!backend.Get(oled::Setting::IgnoreReset) && backend.Get(oled::Setting::AutoMount) && backend.AutoMountAvailable())
         HostSelection(Absolute(options.GetAutoMountImageName(), DEFAULT_BROWSE_DIR).c_str());
 }
+void HostClearList() {
+    if (!menu) return;
+    realTime = false;
+    menu->DisableList();
+}
 void HostSelection(const char* name) {
     if (!menu || !name || !name[0]) return;
     realTime = false;

@@ -76,6 +76,7 @@ def run():
                                "-Wno-type-limits", "-Wno-unused-parameter", "-fno-sanitize=vptr",
                                "tests/host_cd_native.cpp", "tests/fatfs_posix.cpp", "src/commands_base.cpp",
                                "src/cbm_diskimage.cpp", "src/tcbm2sd_protocol.cpp", "src/DiskImage.cpp",
+                               "src/gcr.cpp", "src/prot.cpp", str(build / "lz.o"),
                                "-Wl,--gc-sections", "-o", str(build / "host-cd")], cwd=ROOT, check=True)
         subprocess.run([str(build / "host-cd"), str(card)], cwd=ROOT, check=True)
 
