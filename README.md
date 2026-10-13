@@ -180,7 +180,7 @@ Browser / Fliplist -> Menu...
 │  ├─ ROM: .., configured ROM1..ROM7 filenames
 │  ├─ Drive: .., Device number, Idle trap, RAMBOard, Skip spinup, Reset
 │  ├─ Tape: .., Motor ON ALWAYS/COMP.
-│  ├─ Browser: .., Auto mount, Reset path, Lowercase, SD2IEC
+│  ├─ Browser: .., Auto mount, Reset path, Lowercase, SD2IEC Cmds.
 │  ├─ Display: .., Temp, Contrast, Dimming, Dim time, Dim level, Orient, Font, Scroll
 │  ├─ Encoder: .., Reverse
 │  ├─ Sound: .., Sound, Mode SAMPLE/BUZZER, Freq, Duration
