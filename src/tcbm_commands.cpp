@@ -897,7 +897,7 @@ void TCBM_Commands::PrepareDirectoryResponse(u8 channel, bool fastMode)
     captureChannel = channel;
     captureLength = 0;
 
-    Commands_Base::LoadDirectory();
+    Commands_Base::LoadDirectory(ch.command);
 
     captureOutput = false;
 

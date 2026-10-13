@@ -67,6 +67,13 @@ struct CDProbe : Commands_Base {
     std::vector<u8> Listing(const char* query = "$") {
         output.clear(); SetCommand(query); Commands_Base::LoadDirectory(); return output;
     }
+    std::vector<u8> ListingFromOpenCommand(const char* query) {
+        output.clear(); SetCommand("I"); // An unrelated command must not replace the LOAD filename.
+        Channel& channel = channels[0];
+        memset(channel.command, 0, sizeof(channel.command));
+        strncpy(reinterpret_cast<char*>(channel.command), query, sizeof(channel.command) - 1);
+        Commands_Base::LoadDirectory(channel.command); return output;
+    }
     std::vector<u8> Status() { output.clear(); SendError(); return output; }
     void AdvanceSeconds(u32 seconds) { ticks += seconds * 100; }
     u32 ClockTicks() const override { return ticks; }
@@ -131,6 +138,7 @@ int main(int argc,char** argv) {
     CHECK(Contains(command.Listing("$=T"), "/"));
     numberOfUSBMassStorageDevices = 2;
     listing = command.Listing("$=P"); CHECK(Contains(listing, "SD")); CHECK(Contains(listing, "USB01")); CHECK(Contains(listing, "FAT"));
+    listing = command.ListingFromOpenCommand("$=P"); CHECK(Contains(listing, "SD")); CHECK(Contains(listing, "USB01")); CHECK(!Contains(listing, "A.D64"));
     listing = command.Listing("$=P:USB02"); CHECK(!Contains(listing, "USB01")); CHECK(Contains(listing, "USB02"));
     command.Execute("G-P"); std::vector<u8> status = command.Status();
     CHECK(status.size() == 31); CHECK(status[0] == 1); CHECK(status[2] == 0); CHECK(!memcmp(&status[3], "SD", 2));

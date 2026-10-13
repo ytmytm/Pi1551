@@ -301,6 +301,12 @@ in browser mode:
 | `T-RD` / `T-WD...` | Read/write the nine-byte decimal format (weekday, year since 1900, month, day, 12-hour time, AM/PM, CR). |
 | `T-RB` / `T-WB...` | Read/write the equivalent BCD format, with a modulo-100 year. |
 
+For example, `LOAD"$=P",8` followed by `LIST` shows `SD` and any attached
+`USB01`, `USB02`, ... targets as `FAT` entries; it is not the ordinary file
+listing. Use the configured device number if it is not 8. Directory filters
+such as `LOAD"$:*.PRG",8` are likewise part of the `LOAD` filename, not
+commands sent to channel 15.
+
 Pi1551 has no battery-backed RTC, but after any valid `T-W` it advances the
 clock from Raspberry Pi's system timer. The value survives drive/bus resets
 while Pi1551 remains powered, but not a power cycle or reboot. Until it is set,

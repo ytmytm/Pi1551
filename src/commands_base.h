@@ -185,6 +185,7 @@ protected:
 		u16 blocks, int fileType, bool longFormat);
 	void AppendCbmImageDirLine(Channel& channel, const u8* rawEntry);
 	virtual void LoadDirectory();
+	void LoadDirectory(const u8* command);
 	void LoadCbmImageDirectory();
 	void AppendDirectoryStream(Channel& channel, const u8* data, size_t length);
 	void OpenFile();

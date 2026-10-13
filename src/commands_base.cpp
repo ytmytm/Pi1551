@@ -1061,6 +1061,11 @@ struct greater
 
 void Commands_Base::LoadDirectory()
 {
+	LoadDirectory(channels[15].buffer);
+}
+
+void Commands_Base::LoadDirectory(const u8* command)
+{
 	if (cbm_image_is_mounted())
 	{
 		LoadCbmImageDirectory();
@@ -1072,7 +1077,7 @@ void Commands_Base::LoadDirectory()
 	FRESULT res;
 
 	Channel& channel = channels[0];
-	DirectoryQuery query = ParseDirectoryQuery(channels[15].buffer);
+	DirectoryQuery query = ParseDirectoryQuery(command);
 
 	SetHeaderVersion();
 	memcpy(channel.buffer, DirectoryHeader, sizeof(DirectoryHeader));
