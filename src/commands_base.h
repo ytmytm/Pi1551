@@ -46,6 +46,7 @@
 #define ERROR_39_FILE_NOT_FOUND 39
 #define ERROR_62_FILE_NOT_FOUND 62
 #define ERROR_63_FILE_EXISTS 63
+#define ERROR_70_NO_CHANNEL 70
 #define ERROR_73_DOSVERSION 73
 #define ERROR_74_DRlVE_NOT_READY 74
 
@@ -202,6 +203,7 @@ protected:
 	void New(void);
 	void Rename(void);
 	void Scratch(void);
+	void Position(void);
 	void ChangeDevice(void);
 
 	void Memory(void);

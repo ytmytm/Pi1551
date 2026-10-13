@@ -124,6 +124,9 @@ void Commands_Base::Error(u8 errorCode, u8 track, u8 sector)
 		case ERROR_63_FILE_EXISTS:
 			msg = "FILE EXISTS";
 		break;
+		case ERROR_70_NO_CHANNEL:
+			msg = "NO CHANNEL";
+		break;
 		default:
 			DEBUG_LOG("EC=%d?\r\n", errorCode);
 		break;
@@ -1348,6 +1351,47 @@ void Commands_Base::Scratch(void)
 	}
 }
 
+void Commands_Base::Position(void)
+{
+	Channel& command = channels[15];
+	if (command.cursor < 2 || command.cursor > 6)
+	{
+		Error(ERROR_31_SYNTAX_ERROR);
+		return;
+	}
+
+	u8 channelNumber = command.buffer[1];
+	if (channelNumber >= 15 || !channels[channelNumber].open)
+	{
+		Error(ERROR_70_NO_CHANNEL);
+		return;
+	}
+
+	u32 position = 0;
+	for (u32 i = 2; i < command.cursor; ++i)
+		position |= static_cast<u32>(command.buffer[i]) << ((i - 2) * 8);
+
+	Channel& target = channels[channelNumber];
+	if (target.imageFile)
+	{
+		SetCbmImageChannelPosition(channelNumber, position);
+		target.bytesSent = 0;
+		target.fileSize = GetCbmImageChannelFileSize(channelNumber) > position
+			? GetCbmImageChannelFileSize(channelNumber) - position : 0;
+		return;
+	}
+
+	if (f_lseek(&target.file, position) != FR_OK)
+	{
+		Error(ERROR_70_NO_CHANNEL);
+		return;
+	}
+	target.cursor = 0;
+	target.bytesSent = 0;
+	target.fileSize = f_size(&target.file) > position
+		? static_cast<u32>(f_size(&target.file) - position) : 0;
+}
+
 void Commands_Base::User(void)
 {
 	Channel& channel = channels[15];
@@ -1492,7 +1536,7 @@ void Commands_Base::ProcessCommand(void)
 				New();
 			break;
 			case 'P':
-				Error(ERROR_31_SYNTAX_ERROR);
+				Position();
 			break;
 			case 'R':
 				Rename();

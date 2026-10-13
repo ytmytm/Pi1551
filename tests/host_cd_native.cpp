@@ -46,6 +46,20 @@ struct CDProbe : Commands_Base {
         SetCommand(text); updateAction = NONE; ProcessCommand();
         return updateAction;
     }
+    void Execute(const u8* data, size_t length) {
+        Channel& channel = channels[15];
+        memset(channel.buffer, 0, sizeof(channel.buffer));
+        memcpy(channel.buffer, data, length); channel.cursor = length;
+        updateAction = NONE; ProcessCommand();
+    }
+    bool OpenTestChannel(u8 number, const char* path) {
+        Channel& channel = channels[number];
+        channel.Close();
+        channel.open = f_open(&channel.file, path, FA_READ) == FR_OK;
+        channel.imageFile = false; channel.writing = false;
+        return channel.open;
+    }
+    u32 TestChannelPosition(u8 number) const { return channels[number].file.fptr; }
 };
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL host CD:%d %s\n",__LINE__,#x); return 1; } } while(0)
 int main(int argc,char** argv) {
@@ -77,5 +91,8 @@ int main(int argc,char** argv) {
     command.ClearPendingImageSelection();
     CHECK(command.Execute("XS") == Commands_Base::SWAP_LIST_CLEARED);
     CHECK(std::string(command.GetSwapListPath()).empty());
-    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS");
+    CHECK(command.OpenTestChannel(2, "a.d64"));
+    const u8 position[] = {'P', 2, 0x34, 0x12}; command.Execute(position, sizeof(position));
+    CHECK(command.TestChannelPosition(2) == 0x1234);
+    puts("PASS production SD2IEC commands: CD/MD/RD/CP/XS/P");
 }
