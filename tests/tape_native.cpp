@@ -21,6 +21,11 @@ int main(int argc,char** argv) {
     FILE* file = fopen(argv[1],"rb"); CHECK(file != 0); fseek(file,0,SEEK_END); info.fsize = ftell(file); fclose(file);
     CHECK(tape.LoadTap(&info)); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     TapeUIState s; tape.GetUIState(s); CHECK(s.tapeCounter == 0); CHECK(s.percentage == 0);
+    CHECK(s.isLoaded); CHECK(s.isPlaying);
+    CHECK(tape.Stop()); tape.GetUIState(s); CHECK(!s.isPlaying);
+    CHECK(!tape.GetTapeSenseState()); CHECK(!pins[TAPE_SENSE_GPIO]);
+    CHECK(tape.Play()); tape.GetUIState(s); CHECK(s.isPlaying);
+    CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     CHECK(tape.GetMotorActive());
     pins[TAPE_MOTOR_GPIO] = true; tape.Tick10ms(); CHECK(!tape.GetMotorActive()); CHECK(tape.GetTapeSenseState());
     CHECK(tape.SeekCounter(25)); tape.GetUIState(s); CHECK(s.tapeCounter == 25); CHECK(s.currentPulseIndex > 0);
@@ -38,6 +43,12 @@ int main(int argc,char** argv) {
     CHECK(!tape.SeekCounter(5)); tape.GetUIState(s); CHECK(!s.isLoaded); CHECK(!s.filename[0]);
     CHECK(changes[TAPE_SENSE_GPIO] > 5);
     CHECK(!tape.LoadTap(0)); CHECK(!tape.GetTapeSenseState()); CHECK(tape.GetMotorActive());
-    puts("PASS actual TAP parser, seek, rewind, eject and GPIO effects");
+    options.SetRuntime(oled::Setting::TapeAutoplay,0);
+    CHECK(tape.LoadTap(&info)); tape.GetUIState(s);
+    CHECK(s.isLoaded); CHECK(!s.isPlaying); CHECK(!tape.GetTapeSenseState());
+    CHECK(tape.Play()); tape.GetUIState(s); CHECK(s.isPlaying);
+    CHECK(tape.Stop()); tape.GetUIState(s); CHECK(!s.isPlaying);
+    tape.Eject(); CHECK(!tape.IsLoaded());
+    puts("PASS actual TAP parser, independent play/stop, autoplay, seek, rewind, eject and GPIO effects");
     return 0;
 }
