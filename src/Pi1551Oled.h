@@ -8,6 +8,8 @@ void PollInput(); // core 0 only
 void ObserveHostReset(bool asserted); // core 0: raw RESET, independent of drive policy
 void Draw(); // core 0 only, including all I2C traffic
 void Service(bool emulating); // core 1 only
+void BeginLiveRender(); // core 1, before entering the time-critical loop
+void FinishLiveRender(); // core 1, after leaving the time-critical loop
 bool TransitionPending();
 bool InputPending();
 void CompleteTransition(); // core 1, after leaving the real-time loop

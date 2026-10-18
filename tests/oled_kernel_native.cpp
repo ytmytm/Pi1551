@@ -156,8 +156,19 @@ int main(int argc, char** argv) {
     options.SetRuntime(Setting::Contrast,127);
     screenLCD->Open(128,64,1,1,0x3c,0,LCD_1306_128x64,false);
     Pi1551Oled::Initialize(); CHECK(Pi1551Oled::TestMenu().Path() == "/1551");
-    oledCommands.clear(); now = 29900000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
-    oledCommands.clear(); now = 30000000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 10);
+    now += 100000;
+    Pi1551Oled::BeginLiveRender();
+    oledCommands.clear();
+    Pi1551Oled::Draw(); // core 0 renders and displays without core 1 service
+    CHECK(!oledCommands.empty());
+    oledCommands.clear(); now += 100000;
+    Pi1551Oled::Draw(); CHECK(oledCommands.empty()); // unchanged live frame needs no I2C
+    Pi1551Oled::TestInput(Key::Right);
+    Pi1551Oled::Draw(); CHECK(Pi1551Oled::InputPending());
+    Pi1551Oled::FinishLiveRender();
+    Pi1551Oled::Service(false); CHECK(!Pi1551Oled::InputPending());
+    oledCommands.clear(); now = 30100000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 127);
+    oledCommands.clear(); now = 30200000; Pi1551Oled::Service(false); Pi1551Oled::Draw(); CHECK(LastContrast() == 10);
     for (unsigned char command : oledCommands) CHECK(command != 0xDB);
     Press(Key::Right); oledCommands.clear(); Pi1551Oled::Draw(); CHECK(LastContrast() == 127); // input wakes panel
     options.SetRuntime(Setting::DimTime,0); now += 40000000;

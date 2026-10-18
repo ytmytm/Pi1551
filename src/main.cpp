@@ -2408,6 +2408,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	RPI_SetGpioHi(RPI_GPIO1);
 #endif
 
+	Pi1551Oled::BeginLiveRender();
 	ctBefore = read32(ARM_SYSTIMER_CLO);
 
 	while (exitReason == EXIT_UNKNOWN)
@@ -2421,8 +2422,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			if ((int)(now - nextIdleSleepPollUs) < 0)
 				continue;
 			nextIdleSleepPollUs = now + PI1551_IDLE_SLEEP_POLL_US;
-			Pi1551Oled::Service(true);
-			if (Pi1551Oled::TransitionPending()) { exitReason = EXIT_KEYBOARD; break; }
+			if (Pi1551Oled::InputPending()) { exitReason = EXIT_KEYBOARD; break; }
 
 			TCBM_Bus::ReadEmulationMode1551();
 			if (options.IdleSleep() && !g_oledWakeCpu && !Pi1551IdleSleep::HostNeedsWake(idleSleepingData, idleSleepingDav,
@@ -2451,8 +2451,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (slowUiTick)
 		{
 			uiPollCountdown = PI1551_UI_POLL_CYCLES;
-			Pi1551Oled::Service(true);
-			if (Pi1551Oled::TransitionPending()) { exitReason = EXIT_KEYBOARD; break; }
+			if (Pi1551Oled::InputPending()) { exitReason = EXIT_KEYBOARD; break; }
 			Pi1551EmulationCommands commands;
 			TakePi1551Commands(commands);
 			exitEmulation = commands.exitEmulation;
@@ -3030,15 +3029,16 @@ oled::Status OledKernelStatus()
     static u32 nextTemperature = 0, nextSpace = 0;
     static std::string size, free;
     u32 now = read32(ARM_SYSTIMER_CLO);
+    bool live = emulating == EMULATING_1551;
     // Refresh the motor indication on every status read, whether or not a TAP
     // is loaded. Motor ON is a configured state as well as a GPIO state.
     tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
         || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
-    if ((int)(now - nextTemperature) >= 0) {
+    if (!live && (int)(now - nextTemperature) >= 0) {
         unsigned value; if (GetTemperature(value)) temperature = value / 1000;
         nextTemperature = now + 1000000;
     }
-    if ((int)(now - nextSpace) >= 0) {
+    if (!live && (int)(now - nextSpace) >= 0) {
         FATFS* fs; DWORD clusters;
         if (f_getfree("0:", &clusters, &fs) == FR_OK) {
             char b[32];
@@ -3050,9 +3050,12 @@ oled::Status OledKernelStatus()
         nextSpace = now + 5000000;
     }
     oled::Status s;
-    s.emulating = emulating == EMULATING_1551;
-    s.halfTrack = pi1551.drive.Track(); s.idle = s.emulating && g_pi1551UiSnapshot.idleSleeping;
-    s.led = s.emulating && pi1551.drive.IsLEDOn(); s.temperature = temperature;
+    s.emulating = live;
+    Pi1551UiSnapshot snapshot = {};
+    if (live) ReadPi1551UiSnapshot(snapshot);
+    s.halfTrack = live ? snapshot.track : pi1551.drive.Track();
+    s.idle = live && snapshot.valid && snapshot.idleSleeping;
+    s.led = live && snapshot.valid && snapshot.led; s.temperature = temperature;
     s.sdSize = size; s.sdFree = free; s.rom = roms.GetSelectedROMName();
     char version[24]; snprintf(version, sizeof(version), "%u.%02u", versionMajor, versionMinor); s.firmware = version;
     if (g_tapePlayer) {
@@ -3083,6 +3086,9 @@ void emulator()
         if (emulating == EMULATING_1551)
         {
             EXIT_TYPE reason = Emulate1551(fileBrowser);
+			Pi1551Oled::FinishLiveRender();
+            if (reason == EXIT_KEYBOARD && Pi1551Oled::InputPending())
+                Pi1551Oled::Service(false);
             // Do not clear media/list or rewind the independent tape on a UI
             // transition. Flush/mount happens outside the microsecond loop.
             if (Pi1551Oled::TransitionPending())
@@ -3104,6 +3110,10 @@ void emulator()
                     emulating = EMULATING_1551;
                     g_oledResumeCpu = true;
                 }
+            }
+            else if (reason == EXIT_KEYBOARD && emulating == EMULATING_1551)
+            {
+                g_oledResumeCpu = true;
             }
             else
             {

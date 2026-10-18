@@ -36,6 +36,11 @@ static volatile unsigned readIndex = 0, writeIndex = 0;
 static oled::Key events[64]; // single producer core0, single consumer core1
 static bool pressed[3] = {};
 static bool realTime = false;
+static bool liveRenderActive = false;
+static uint32_t nextLiveRender = 0;
+static oled::Frame lastLiveFrame = {};
+static bool lastLiveFrameValid = false;
+static bool lastLiveDim = false;
 static std::string pendingMount;
 static oled::Menu* checkpoint = 0;
 static bool pendingUnmount = false, pendingReboot = false;
@@ -43,6 +48,10 @@ static bool pendingBrowserReset = false, hostResetDown = false;
 static bool pendingSoundPreview = false;
 static volatile uint32_t lastAction = 0;
 static std::string error;
+struct DrawActivity {
+    DrawActivity() { __atomic_store_n(&liveRenderActive, true, __ATOMIC_RELEASE); }
+    ~DrawActivity() { __atomic_store_n(&liveRenderActive, false, __ATOMIC_RELEASE); }
+};
 static void Barrier() { Pi1551Barrier(); }
 static void Enqueue(oled::Key key) {
     unsigned next = (writeIndex + 1) % 64;
@@ -322,8 +331,8 @@ void CompleteTransition() {
 }
 void Service(bool emulating) {
     if (!menu) return;
+    __atomic_store_n(&realTime, emulating, __ATOMIC_RELEASE);
     OledKernelServiceSoundPreview();
-    realTime = emulating;
     // While a medium transition is queued, leave the real-time loop before taking another event.
     while (readIndex != writeIndex && !TransitionPending()) {
         Barrier(); oled::Key key = events[readIndex]; readIndex = (readIndex + 1) % 64;
@@ -333,14 +342,51 @@ void Service(bool emulating) {
         else menu->Input(key);
         if (!TransitionPending()) { delete checkpoint; checkpoint = 0; }
     }
+    if (emulating) return;
     static uint32_t next = 0; uint32_t now = Pi1551Clock();
     if ((int32_t)(now - next) < 0) return;
     next = now + 100000;
     oled::Frame fresh = menu->Render(now / 1000);
     frameLock.Acquire(); frame = fresh; frameReady = true; frameLock.Release();
 }
+void BeginLiveRender() {
+    nextLiveRender = Pi1551Clock();
+    lastLiveFrameValid = false;
+    frameLock.Acquire(); frameReady = false; frameLock.Release();
+    __atomic_store_n(&realTime, true, __ATOMIC_RELEASE);
+    // Complete any browse frame already in flight before emulation starts.
+    while (__atomic_load_n(&liveRenderActive, __ATOMIC_ACQUIRE)) Pi1551Barrier();
+}
+void FinishLiveRender() {
+    __atomic_store_n(&realTime, false, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&liveRenderActive, __ATOMIC_ACQUIRE)) Pi1551Barrier();
+}
 void Draw() {
-    if (!menu || !screenLCD || !frameReady) return;
+    if (!menu || !screenLCD) return;
+    DrawActivity activity;
+    uint32_t now = Pi1551Clock();
+    if (__atomic_load_n(&realTime, __ATOMIC_ACQUIRE)) {
+        if ((int32_t)(now - nextLiveRender) < 0) return;
+        if (__atomic_load_n(&realTime, __ATOMIC_ACQUIRE)) {
+            nextLiveRender = now + 100000;
+            oled::Frame fresh = menu->Render(now / 1000);
+            bool dim = options.Runtime(oled::Setting::Dimming) &&
+                options.I2CLcdDimTime() != 0 &&
+                (uint32_t)(Pi1551Clock() - lastAction) / 1000000 >= options.I2CLcdDimTime();
+            bool changed = !lastLiveFrameValid || memcmp(&fresh, &lastLiveFrame, sizeof(fresh)) != 0;
+            if (changed || dim != lastLiveDim) {
+                screenLCD->SetContrast(dim ? options.I2CLcdDimContrast() : std::max(1u, options.I2CLcdOnContrast()));
+                screenLCD->SetPower(!dim || options.I2CLcdDimContrast() != 0);
+                if (changed || (lastLiveDim && !dim))
+                    screenLCD->DrawMenu(fresh, options.Runtime(oled::Setting::Font), options.I2CLcdFlip());
+                lastLiveFrame = fresh;
+                lastLiveFrameValid = true;
+                lastLiveDim = dim;
+            }
+            return;
+        }
+    }
+    if (!frameReady) return;
     oled::Frame fresh; frameLock.Acquire(); fresh = frame; frameReady = false; frameLock.Release();
     bool dim = options.Runtime(oled::Setting::Dimming) &&
         options.I2CLcdDimTime() != 0 &&
