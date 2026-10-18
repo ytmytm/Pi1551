@@ -158,10 +158,11 @@ Browser / Fliplist
    ├─ Tape
    │  ├─ ..
    │  ├─ 1:<loaded TAP filename>    (or just 1: when empty; scrolls)
-   │  ├─ Load TAP...
-   │  ├─ Eject TAP
-   │  ├─ Rewind
-   │  └─ Go to counter
+   │  ├─ Play / Stop                (only when TAP is loaded; toggles with state)
+   │  ├─ Load TAP...                (only when no TAP is loaded)
+   │  ├─ Eject TAP                  (only when TAP is loaded)
+   │  ├─ Rewind                     (only when TAP is loaded)
+   │  └─ Go to counter              (only when TAP is loaded)
    │     ├─ ..
    │     └─ TARGET 000..999
    ├─ Disk
@@ -187,7 +188,8 @@ Browser / Fliplist
    │  │  └─ Reset REACT/IGNORE
    │  ├─ Tape
    │  │  ├─ ..
-   │  │  └─ Motor ON ALWAYS/COMP.
+   │  │  ├─ Motor ON ALWAYS/COMP.
+   │  │  └─ Autoplay ON/OFF
    │  ├─ Browser
    │  │  ├─ ..
    │  │  ├─ Auto mount ON/OFF        (valid AutoMountImage required)
@@ -369,7 +371,10 @@ missing, empty or invalid files behave as OFF. The toggle applies at boot and
 the next REACT reset, not as an immediate mount command.
 
 Motor ON ALWAYS ignores computer MOTOR for playback; COMP. follows it.
-Load TAP... opens a tape-filtered browser. Eject releases PLAY. Rewind seeks
+Autoplay ON presses PLAY as soon as a TAP is loaded; OFF loads it stopped.
+In the Tape menu, the loaded TAP offers `Play` while stopped and `Stop` while
+playing, between the filename and `Eject TAP`. With no TAP, `Load TAP...`
+opens a tape-filtered browser. Eject releases PLAY. Rewind seeks
 to the beginning; Go to counter changes TARGET by exactly one per encoder
 impulse, click seeks and Back cancels. A tape must be loaded to seek.
 
@@ -549,6 +554,7 @@ All four runtime Sound items trigger the one-second preview described above.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `tapeMotorAlwaysOn` | `1` | `1`: ignore MOTOR input and play immediately, for machines with a 6510 CPU replacement that cannot control MOTOR. `0`: follow MOTOR input on original machines. |
+| `tapeAutoplay` | `1` | `1`: press PLAY automatically when a TAP is loaded. `0`: load TAP stopped; use Tape → Play to start playback. |
 
 ### Drive Timing And Expansion
 

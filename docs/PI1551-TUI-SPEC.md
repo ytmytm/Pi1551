@@ -361,9 +361,9 @@ Submenus:
 - Drive: device number, idle trap, RAMBOard, `Skip spinup` ON/OFF and `Reset`
   `REACT/IGNORE`; `REACT` means host reset pulses are honoured. These labels keep
   both the option and its value visible on the 16-character OLED row;
-- Tape: `Motor ON` selects `ALWAYS` or `COMP.`, and `Tape auto` selects ON/OFF.
+- Tape: `Motor ON` selects `ALWAYS` or `COMP.`, and `Autoplay` selects ON/OFF.
   `ALWAYS` keeps MOTOR active; `COMP.` follows the computer MOTOR input.
-  `Tape auto ON` presses PLAY as a TAP is loaded; OFF loads the TAP stopped;
+  `Autoplay ON` presses PLAY as a TAP is loaded; OFF loads the TAP stopped;
 - Browser: visible items are `Auto mount`, `Reset path`, `Lowercase` and
   `SD2IEC Cmds.`; `Auto mount ON` enables the configured `AutoMountImage` (which may
   be an image or an `.LST`), while `OFF` disables automatic mounting;
