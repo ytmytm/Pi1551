@@ -279,7 +279,7 @@ void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
             ((gplev0 & PIGPIO_MASK_OUT_DEV) ? 0x04 : 0) |
             ((gplev0 & PIGPIO_MASK_OUT_ACK) ? 0x08 : 0);
         u8 portCInput = (portC->GetOutput() & ddrC) |
-            ((portCFromGPIO & 0x8Fu) | (portC->GetInput() & 0x70u)) & (u8)~ddrC;
+            (((portCFromGPIO & 0x8Fu) | (portC->GetInput() & 0x70u)) & (u8)~ddrC);
         portC->SetInput(portCInput);
 
         IOPort* portA = TPI->GetPortA();

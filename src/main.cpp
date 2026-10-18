@@ -436,42 +436,6 @@ void ApplyPi1551ROMSwitchFromUI(unsigned romIndex)
 #endif
 }
 
-// Returns true when browse/disk background input must be ignored (ROM selector foreground).
-static bool Pi1551ROMSelectBrowseUpdate(FileBrowser* fileBrowser)
-{
-	if (!options.RotaryEncoderEnable() || roms.CountValid1551ROMs() <= 1)
-		return false;
-
-	TCBM_Bus::ReadBrowseMode();
-	bool rotaryNext = false;
-	bool rotaryPrev = false;
-	TCBM_Bus::ConsumeRotaryDiskSteps(rotaryNext, rotaryPrev);
-
-	bool applyRom = false;
-	unsigned applyRomIndex = 0;
-	Pi1551ROMSelectPoll(rotaryNext, rotaryPrev, applyRom, applyRomIndex);
-	Pi1551ROMSelectClearConsumedRotaryButtons();
-	if (applyRom || g_romSelect.active)
-		Pi1551ROMSelectAbsorbEnterRelease();
-	if (applyRom)
-	{
-		TCBM_Bus::ClearRotarySynthesizedButtons();
-		ApplyPi1551ROMSwitchFromUI(applyRomIndex);
-		if (fileBrowser)
-		{
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Acquire();
-#endif
-			fileBrowser->RefeshDisplay();
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Release();
-#endif
-		}
-		return true;
-	}
-	return Pi1551ROMSelectBlocksBackgroundInput();
-}
-
 static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfImagesMax)
 {
 	if (Pi1551Oled::Enabled()) { Pi1551Oled::PollInput(); return; }

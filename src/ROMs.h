@@ -30,12 +30,12 @@ class ROMs
 {
 public:
 	ROMs() :
+#if defined(PI1551SUPPORT)
+		ROM1551SlotCount(0),
+#endif
 		currentROMIndex(0),
 		lastManualSelectedROMIndex(0),
 		longestRomNameLen(0)
-#if defined(PI1551SUPPORT)
-		, ROM1551SlotCount(0)
-#endif
 	{
 #if defined(PI1551SUPPORT)
 		for (unsigned i = 0; i < MAX_ROMS; ++i)
