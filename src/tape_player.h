@@ -142,6 +142,7 @@ private:
 	static bool senseLineState;
 	static u64 totalPlaybackTimeUs;  // Total time in microseconds
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
+	static u64 currentPulseOffsetUs;  // Elapsed time within the current pulse after seeking or pausing
 	static char tapFilename[256];
 };
 

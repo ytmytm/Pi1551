@@ -49,6 +49,7 @@ bool TapePlayer::readLineState = true;  // Start with READ line high (hardware i
 bool TapePlayer::senseLineState = false;  // Start with PLAY released (inactive)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
+u64 TapePlayer::currentPulseOffsetUs = 0;
 char TapePlayer::tapFilename[256] = {0};
 volatile bool TapePlayer::editingPulses = false;
 volatile bool TapePlayer::corePulseActive = false;
@@ -75,7 +76,7 @@ void TapePlayer::SetMotorAlwaysOn(bool value)
 void TapePlayer::Eject()
 {
 	PausePlayback(); loaded = false; playing = false; atEnd = false; senseLineState = false;
-	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0;
+	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0; currentPulseOffsetUs = 0;
 	totalPlaybackTimeUs = 0; FreePulseBuffer();
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO); readLineState = true;
@@ -116,7 +117,9 @@ bool TapePlayer::SeekCounter(unsigned counter)
 	PausePlayback();
 	u64 elapsed = 0; size_t index = 0;
 	while (index < pulseCount && elapsed + pulseTimings[index] <= target) elapsed += pulseTimings[index++];
-	currentPulseIndex = index; cumulativePulseTimeUs = elapsed; atEnd = index == pulseCount;
+	currentPulseIndex = index;
+	currentPulseOffsetUs = index < pulseCount ? target - elapsed : 0;
+	cumulativePulseTimeUs = target; atEnd = index == pulseCount;
 	readLineState = (index & 1) == 0;
 	if (readLineState) RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
 	else RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
@@ -206,6 +209,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	playing = false; senseLineState = false;
 	tapFilename[0] = 0;
 	currentPulseIndex = 0;
+	currentPulseOffsetUs = 0;
 	atEnd = false;
 	// Respect configured motor behaviour (always on vs GPIO-driven)
 	Tick10ms();
@@ -239,6 +243,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	{
 		loaded = true;
 		currentPulseIndex = 0;
+		currentPulseOffsetUs = 0;
 		atEnd = false;
 		cumulativePulseTimeUs = 0;
 		tapeLoadGeneration++;
@@ -659,7 +664,12 @@ void TapePlayer::CoreLoop()
 		}
 
 		// Get current half-wave duration
-		u64 intervalUs = pulseTimings[currentPulseIndex];
+		u64 pulseDurationUs = pulseTimings[currentPulseIndex];
+		u64 pulseOffsetUs = currentPulseOffsetUs;
+		currentPulseOffsetUs = 0;
+		if (pulseOffsetUs >= pulseDurationUs)
+			pulseOffsetUs = pulseDurationUs ? pulseDurationUs - 1 : 0;
+		u64 intervalUs = pulseDurationUs - pulseOffsetUs;
 		if (intervalUs == 0)
 			intervalUs = 1;
 
@@ -688,11 +698,9 @@ void TapePlayer::CoreLoop()
 		if (!loaded || !playing || !motorActive || atEnd)
 		{
 			// State changed while waiting; update time for elapsed portion
-			if (lastUpdateUs > 0)
-			{
-				u32 finalElapsedUs = (u32)(read32(ARM_SYSTIMER_CLO) - start);
-				cumulativePulseTimeUs += (finalElapsedUs - lastUpdateUs);
-			}
+			u32 finalElapsedUs = (u32)(read32(ARM_SYSTIMER_CLO) - start);
+			cumulativePulseTimeUs += (finalElapsedUs - lastUpdateUs);
+			currentPulseOffsetUs = pulseOffsetUs + finalElapsedUs;
 			// Re-evaluate outer loop conditions
 			continue;
 		}
@@ -718,6 +726,7 @@ void TapePlayer::CoreLoop()
 			// Short pulse - add all elapsed time at once
 			cumulativePulseTimeUs += finalElapsedUs;
 		}
+		currentPulseOffsetUs = 0;
 		currentPulseIndex++;
 	}
 }

@@ -21,6 +21,15 @@ int main(int argc,char** argv) {
     FILE* file = fopen(argv[1],"rb"); CHECK(file != 0); fseek(file,0,SEEK_END); info.fsize = ftell(file); fclose(file);
     CHECK(tape.LoadTap(&info)); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     TapeUIState s; tape.GetUIState(s); CHECK(s.tapeCounter == 0); CHECK(s.percentage == 0);
+    if (argc == 3 && strcmp(argv[2],"gap67") == 0) {
+        CHECK(s.maxTapeCounter == 67);
+        for (unsigned counter : {65u,66u}) {
+            CHECK(tape.SeekCounter(counter)); tape.GetUIState(s);
+            CHECK(s.tapeCounter == counter);
+        }
+        puts("PASS go-to-counter seeks inside long TAP pulse gaps");
+        return 0;
+    }
     if (argc == 3) {
         CHECK(s.maxTapeCounter == 999);
         CHECK(tape.SeekCounter(999)); CHECK(!tape.AtEnd());
