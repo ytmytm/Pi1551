@@ -37,6 +37,10 @@ def run():
         fixture = build / "seek.tap"
         fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(payload)) + payload)
         subprocess.run([str(build / "tape"), str(fixture)], cwd=ROOT, check=True)
+        long_payload = (b"\0" + (0xFFFFFF).to_bytes(3, "little")) * 50
+        long_fixture = build / "long.tap"
+        long_fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(long_payload)) + long_payload)
+        subprocess.run([str(build / "tape"), str(long_fixture), "long"], cwd=ROOT, check=True)
         subprocess.run(["gcc", "-O1", "-g", "-fsanitize=address,undefined", "-ffunction-sections",
                         "-fdata-sections", "-c", "src/lz.c", "-o", str(build / "lz.o")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",

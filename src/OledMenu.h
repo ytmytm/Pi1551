@@ -20,7 +20,7 @@ struct Entry {
 };
 struct Status {
     bool emulating = false, idle = false, led = false, motor = false, play = false;
-    unsigned halfTrack = 34, temperature = 0, counter = 0, percent = 0;
+    unsigned halfTrack = 34, temperature = 0, counter = 0, counterMax = 999, percent = 0;
     std::string tape, rom, sdSize, sdFree, firmware;
 };
 struct Frame {
@@ -100,7 +100,7 @@ private:
     Position browserReturn;
     bool hasBrowserReturn = false, listMode = false, tapeFilter = false, editing = false;
     View view = View::Browser;
-    unsigned cursor = 1, offset = 0, target = 0;
+    unsigned cursor = 1, offset = 0, target = 0, targetMax = 999;
     uint32_t selectionTime = 0;
     uint32_t headerTime = 0;
     std::string headerKey;

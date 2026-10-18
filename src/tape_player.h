@@ -56,6 +56,7 @@ struct TapeUIState
 	bool atEnd;
 	char filename[256];
 	u32 tapeCounter;  // 3-digit counter (000-999)
+	u32 maxTapeCounter; // Highest reachable counter, capped at 999
 	u32 currentTimeMs;  // Current position in milliseconds
 	u32 totalTimeMs;  // Total tape length in milliseconds
 	u8 percentage;  // Playback percentage (0-100)

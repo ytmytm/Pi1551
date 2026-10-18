@@ -186,12 +186,16 @@ static void tape_independent_and_seek() {
     Device(m); Enter(m,"Tape"); CHECK(m.Cursor() == 1);
     Enter(m,"Stop"); CHECK(!k.status.play);
     Enter(m,"Play"); CHECK(k.status.play);
+    k.status.counterMax = 10;
     Choose(m,"1:"); bool tail = false;
     for (unsigned ms = 0; ms < 16000; ms += 100) if (std::string(m.Render(ms).rows[3]).find("dash.tap") != std::string::npos) tail = true;
     CHECK(tail);
     Enter(m,"Go to counter"); CHECK(m.CurrentView() == View::Seek);
-    Press(m,Key::Right,7); Press(m,Key::Enter); CHECK(k.status.counter == 7); CHECK(m.CurrentView() == View::Tape);
-    Enter(m,"Go to counter"); Press(m,Key::Right,3); Press(m,Key::Back); CHECK(k.status.counter == 7);
+    Press(m,Key::Right,7); CHECK(std::string(m.Render(17000).rows[3]).find("TARGET 007/010") != std::string::npos);
+    Press(m,Key::Enter); CHECK(k.status.counter == 7); CHECK(m.CurrentView() == View::Tape);
+    k.status.counterMax = 8;
+    Enter(m,"Go to counter"); Press(m,Key::Right,5); Press(m,Key::Enter); CHECK(k.status.counter == 8);
+    Enter(m,"Go to counter"); Press(m,Key::Right,3); Press(m,Key::Back); CHECK(k.status.counter == 8);
     Enter(m,"Rewind"); CHECK(k.status.counter == 0);
     Enter(m,"Eject TAP"); CHECK(k.status.tape.empty()); CHECK(!k.status.play); CHECK(k.status.motor);
     Enter(m,"Load TAP..."); CHECK(k.medium.empty()); CHECK(m.CurrentView() == View::Browser);

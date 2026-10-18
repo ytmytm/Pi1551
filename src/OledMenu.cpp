@@ -214,7 +214,7 @@ std::vector<Menu::Row> Menu::Rows() {
         }
         break;
     }
-    case View::Seek: { char b[20]; snprintf(b, sizeof(b), "TARGET %03u", target); r.push_back(Row(b)); break; }
+    case View::Seek: { char b[24]; snprintf(b, sizeof(b), "TARGET %03u/%03u", target, targetMax); r.push_back(Row(b)); break; }
     case View::Disk:
         r.push_back(Row(std::string("WProt ") + On(backend.WriteProtected())));
         r.push_back(Row("Write image")); r.push_back(Row("New image")); r.push_back(Row("Reset drive")); break;
@@ -352,7 +352,7 @@ void Menu::Select() {
             Status s = backend.ReadStatus();
             if (s.tape.empty()) message = "No TAP loaded";
             else if (action == "Rewind") { if (!backend.SeekTape(0)) message = "Seek failed"; }
-            else { target = s.counter; Open(View::Seek); }
+            else { target = s.counter; targetMax = s.counterMax; Open(View::Seek); }
         }
     } else if (view == View::Seek) { if (backend.SeekTape(target)) Back(); else message = "Seek failed"; }
     else if (view == View::Disk) {
@@ -385,7 +385,7 @@ void Menu::Input(Key key) {
         Clamp(); return;
     }
     int delta = key == Key::Left ? -1 : 1;
-    if (view == View::Seek && cursor == 1) { target = std::max(0, std::min(999, (int)target + delta)); return; }
+    if (view == View::Seek && cursor == 1) { target = std::max(0, std::min((int)targetMax, (int)target + delta)); return; }
     if (editing) { ChangeValue(delta); return; }
     unsigned n = Rows().size();
     if (view == View::Fliplist && flip.empty()) { Browse(); return; }

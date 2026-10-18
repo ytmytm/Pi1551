@@ -99,13 +99,20 @@ bool TapePlayer::Stop()
 	Pi1551Wake();
 	return true;
 }
+static u64 TapeCounterAtTimeMs(u64 elapsedMs);
+
 bool TapePlayer::SeekCounter(unsigned counter)
 {
 	if (!loaded || counter > 999) return false;
+	TapeUIState state; GetUIState(state);
+	if (counter > state.maxTapeCounter) counter = state.maxTapeCounter;
 	// Inverse of the VICE spool formula used by GetUIState().
 	const double d = 1.27e-5, r = 1.07e-2, v = 4.76e-2, g = 0.525, pi = 3.1415926535;
 	double turns = counter / g + r / d;
-	u64 target = (u64)(((turns * turns - (r / d) * (r / d)) * d * pi / v) * 1000000.0);
+	u64 maxCounter = TapeCounterAtTimeMs(totalPlaybackTimeUs / 1000);
+	u64 target = (maxCounter <= 999 && counter >= maxCounter)
+		? totalPlaybackTimeUs
+		: (u64)(((turns * turns - (r / d) * (r / d)) * d * pi / v) * 1000000.0);
 	PausePlayback();
 	u64 elapsed = 0; size_t index = 0;
 	while (index < pulseCount && elapsed + pulseTimings[index] <= target) elapsed += pulseTimings[index++];
@@ -116,6 +123,16 @@ bool TapePlayer::SeekCounter(unsigned counter)
 	ResumePlayback(); return true;
 }
 static u32 tapeLoadGeneration = 0;
+
+static u64 TapeCounterAtTimeMs(u64 elapsedMs)
+{
+	const double d = 1.27e-5, r = 1.07e-2, v = 4.76e-2, g = 0.525, pi = 3.1415926535;
+	double t = elapsedMs / 1000.0;
+	double term1 = (v * t) / (d * pi);
+	double term2 = (r * r) / (d * d);
+	double counter = g * (std::sqrt(term1 + term2) - r / d);
+	return static_cast<u64>(counter + 0.5);
+}
 
 // TAP file header structure
 struct TAPHeader
@@ -536,26 +553,11 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 		state.currentTimeMs = (currentTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(currentTimeMs64);
 		state.totalTimeMs = (totalTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(totalTimeMs64);
 		
-		// VICE datasette counter constants (from datasette.h)
-		const double DS_D = 1.27e-5;
-		const double DS_R = 1.07e-2;
-		const double DS_V_PLAY = 4.76e-2;
-		const double DS_G = 0.525;
-		const double PI = 3.1415926535;
-		
-		// Convert time from milliseconds to seconds for formula
-		double t_seconds = currentTimeMs64 / 1000.0;
-		
-		// Calculate counter using VICE's physical model formula
-		// c = g * (sqrt(v*t/(d*pi) + r^2/d^2) - r/d)
-		double term1 = (DS_V_PLAY * t_seconds) / (DS_D * PI);
-		double term2 = (DS_R * DS_R) / (DS_D * DS_D);
-		double sqrt_term = std::sqrt(term1 + term2);
-		double counter_double = DS_G * (sqrt_term - DS_R / DS_D);
-		
 		// Convert to integer and wrap at 1000 (3-digit display: 000-999)
-		u64 counterValue = static_cast<u64>(counter_double + 0.5) % 1000;
+		u64 counterValue = TapeCounterAtTimeMs(currentTimeMs64) % 1000;
 		state.tapeCounter = static_cast<u32>(counterValue);
+		u64 maxCounter = TapeCounterAtTimeMs(totalTimeMs64);
+		state.maxTapeCounter = static_cast<u32>(maxCounter > 999 ? 999 : maxCounter);
 		
 		// Calculate percentage
 		if (totalTimeMs64 > 0)
@@ -572,6 +574,7 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	else
 	{
 		state.tapeCounter = 0;
+		state.maxTapeCounter = 0;
 		state.currentTimeMs = 0;
 		state.totalTimeMs = 0;
 		state.percentage = 0;

@@ -12,7 +12,7 @@ extern "C" void RPI_SetGpioLo(rpi_gpio_pin_t p) { pins[p] = false; ++changes[p];
 extern "C" rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t p) { return pins[p] ? RPI_IO_HI : RPI_IO_LO; }
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL tape:%d %s\n",__LINE__,#x); return 1; } } while(0)
 int main(int argc,char** argv) {
-    CHECK(argc == 2);
+    CHECK(argc == 2 || argc == 3);
     options.SetRuntime(oled::Setting::MotorAlways,0);
     pins[TAPE_MOTOR_GPIO] = false;
     TapePlayer tape; tape.InitializeGPIO(); tape.Tick10ms();
@@ -21,6 +21,13 @@ int main(int argc,char** argv) {
     FILE* file = fopen(argv[1],"rb"); CHECK(file != 0); fseek(file,0,SEEK_END); info.fsize = ftell(file); fclose(file);
     CHECK(tape.LoadTap(&info)); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     TapeUIState s; tape.GetUIState(s); CHECK(s.tapeCounter == 0); CHECK(s.percentage == 0);
+    if (argc == 3) {
+        CHECK(s.maxTapeCounter == 999);
+        CHECK(tape.SeekCounter(999)); CHECK(!tape.AtEnd());
+        puts("PASS long TAP counter range is capped at 999");
+        return 0;
+    }
+    CHECK(s.maxTapeCounter > 0 && s.maxTapeCounter < 999);
     CHECK(s.isLoaded); CHECK(s.isPlaying);
     CHECK(tape.Stop()); tape.GetUIState(s); CHECK(!s.isPlaying);
     CHECK(!tape.GetTapeSenseState()); CHECK(!pins[TAPE_SENSE_GPIO]);
@@ -30,7 +37,8 @@ int main(int argc,char** argv) {
     pins[TAPE_MOTOR_GPIO] = true; tape.Tick10ms(); CHECK(!tape.GetMotorActive()); CHECK(tape.GetTapeSenseState());
     CHECK(tape.SeekCounter(25)); tape.GetUIState(s); CHECK(s.tapeCounter == 25); CHECK(s.currentPulseIndex > 0);
     CHECK(tape.SeekCounter(7)); tape.GetUIState(s); CHECK(s.tapeCounter == 7);
-    CHECK(tape.SeekCounter(999)); CHECK(tape.AtEnd()); tape.Tick10ms(); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
+    CHECK(tape.SeekCounter(999)); tape.GetUIState(s); CHECK(s.tapeCounter == s.maxTapeCounter);
+    CHECK(tape.AtEnd()); tape.Tick10ms(); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     tape.Reset(); tape.GetUIState(s); CHECK(s.tapeCounter == 0); CHECK(!tape.AtEnd());
     tape.SetMotorAlwaysOn(true); CHECK(tape.GetMotorActive());
     tape.SetMotorAlwaysOn(false); CHECK(!tape.GetMotorActive());

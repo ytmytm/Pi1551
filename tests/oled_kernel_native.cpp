@@ -73,7 +73,7 @@ void OledKernelWriteProtect(bool value) { wp = value; }
 void Reboot_Pi() { ++rebootCount; }
 Status OledKernelStatus() {
     Status s; s.emulating = IsEmulated(medium); s.rom = roms.GetSelectedROMName();
-    if (g_tapePlayer) { TapeUIState t; g_tapePlayer->GetUIState(t); s.tape = t.isLoaded ? t.filename : ""; s.motor = t.motorActive; s.play = t.isPlaying; }
+    if (g_tapePlayer) { TapeUIState t; g_tapePlayer->GetUIState(t); s.tape = t.isLoaded ? t.filename : ""; s.motor = t.motorActive; s.play = t.isPlaying; s.counter = t.tapeCounter; s.counterMax = t.maxTapeCounter; }
     return s;
 }
 #define CHECK(x) do { if (!(x)) { std::cerr << "FAIL bridge:" << __LINE__ << " " #x << "\n"; return 1; } } while(0)

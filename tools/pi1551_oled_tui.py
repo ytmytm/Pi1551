@@ -13,6 +13,7 @@ class Node:
     children: list["Node"] = field(default_factory=list)
     detail: str = ""
     size: str = ""
+    counter_max: int = 999
 
 def fake_sd() -> Node:
     games = Node("games", "dir", [
@@ -35,7 +36,7 @@ def fake_sd() -> Node:
     ])
     return Node("/", "dir", [
         Node("1551", "dir", [games, demos, lists,
-            Node("tap", "dir", [Node("Winter Games.tap", "tape"), Node("Boulder Dash.tap", "tape")]),
+            Node("tap", "dir", [Node("Winter Games.tap", "tape", counter_max=143), Node("Boulder Dash.tap", "tape", counter_max=999)]),
             Node("options-pi1551.txt", "config"),
         ]),
         Node("roms", "dir", [Node("dos1551.bin"), Node("dos1551-ram.bin"), Node("super_dos_1551.rom"), Node("custom_fastload.bin")]),
@@ -79,7 +80,7 @@ class Simulator:
         self.flip_mode = "solo"
         self.fliplist: list[Node] = []; self.disk: Optional[Node] = None; self.active_media: Optional[Node] = None
         self.last_flip_media: Optional[Node] = None
-        self.tape: Optional[Node] = None; self.tape_playing = False; self.tape_pos = 0; self.tape_motor = False
+        self.tape: Optional[Node] = None; self.tape_playing = False; self.tape_pos = 0; self.tape_counter_max = 999; self.tape_motor = False
         self.seek_target = 0
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
@@ -168,7 +169,7 @@ class Simulator:
           "D64": self.active_media.name if self.active_media else "---", "TAP": self.tape.name if self.tape else "---",
           "LED": self.on(self.disk is not None and self.activity != "browser"), "MOTOR": self.on(self.motor_active()),
           "PLAY": self.on(self.tape_playing), "TRACK": f"{self.track:04.1f}{'S' if self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "---",
-          "TARGET": f"{self.seek_target:03d}", "TAP FILE": self.tape.name if self.tape else "---",
+          "TARGET": f"{self.seek_target:03d}/{self.tape_counter_max:03d}", "TAP FILE": self.tape.name if self.tape else "---",
           "Contrast": str(self.options["Contrast"]), "Dimming": self.on(self.options["Dimming"]), "Orient": self.options["Orientation"],
           "Font": "C64" if self.options["i2cLcdUseCBMChar"] else "ASCII", "Scroll": f'{self.options["scrollHighlightRate"]:.2f}s',
           "Reverse": self.on(self.options["Encoder reverse"]), "Write protect": self.on(self.write_protect), "WProt": self.on(self.write_protect),
@@ -219,7 +220,7 @@ class Simulator:
             next_index = (index + direction) % len(self.fliplist)
             self.activate_flip_item(self.fliplist[next_index]); self.cursor = next_index + 1; self.ensure_visible(); return
         if self.screen == "tape_seek" and self.cursor == 1:
-            self.seek_target = max(0, min(999, self.seek_target + direction))
+            self.seek_target = max(0, min(self.tape_counter_max, self.seek_target + direction))
             return
         maximum = len(self.browser_items()) if self.screen == "browser" else (len(self.ROMS) if self.screen == "rom" else len(self.items()) - 1)
         if maximum >= 0: self.cursor = max(0, min(maximum, self.cursor + direction)); self.ensure_visible()
@@ -292,7 +293,7 @@ class Simulator:
         self.active_media = node if add_to_fliplist else None
         self.path.append(node); self.browser_source = node; self.disk = None; self.activity = "browser"; self.reset_cursor(); self.message = f"Browser source: {node.name}"
     def load_tape(self, node: Node) -> None:
-        self.tape, self.tape_pos = node, 0; self.tape_playing = self.options["Tape autoplay"]; self.browser_filter = None
+        self.tape, self.tape_pos = node, 0; self.tape_counter_max = min(999, node.counter_max); self.tape_playing = self.options["Tape autoplay"]; self.browser_filter = None
         if self.screen == "browser" and self.previous_screen == "tape": self.set_screen("tape")
         self.message = f"Loaded {node.name}"
     def activate_browser(self) -> None:
