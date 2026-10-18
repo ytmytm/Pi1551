@@ -226,7 +226,6 @@ public:
             if (Get(id) != baseline[id]) changes[id] = Get(id);
         }
         std::string updated = oled::MergeRuntimeSettings(text, changes, defaults);
-        if (updated == text) { CaptureBaseline(); return true; }
         text = updated;
         // Never truncate the original: sync a new file, then replace the user backup.
         if (f_stat("SD:/options.txt.tmp", &f) == FR_OK) return Failure("options.txt.tmp exists");

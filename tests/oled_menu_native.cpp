@@ -317,6 +317,8 @@ static void new_runtime_controls() {
     KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Display");
     Enter(m,"Temp"); CHECK(k.Get(Setting::Temp) == 0); CHECK(std::string(m.Render(0).rows[0]).substr(13) == "   ");
     Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 60);
+    k.settings[Setting::DimTime] = 10; Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 16);
+    k.settings[Setting::DimTime] = 16; Enter(m,"Dim time"); CHECK(k.Get(Setting::DimTime) == 30);
     Enter(m,"Dim level"); CHECK(k.Get(Setting::DimLevel) == 16);
     Enter(m,"Scroll"); CHECK(k.Get(Setting::Scroll) == 200);
     Frame preview = m.Render(0); Frame scrolled = m.Render(2000);

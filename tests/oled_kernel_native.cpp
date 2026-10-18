@@ -146,6 +146,11 @@ static int MixedHostNavigation() {
 static std::string Read(const std::string& path) { std::ifstream f(path); std::ostringstream s; s << f.rdbuf(); return s.str(); }
 int main(int argc, char** argv) {
     CHECK(argc == 2); std::string root = argv[1]; NativeFatFSRoot(root);
+    CHECK(options.Runtime(Setting::DimTime) == 16);
+    CHECK(options.Runtime(Setting::DimLevel) == 16);
+    CHECK(options.Runtime(Setting::Contrast) == 128);
+    CHECK(options.Runtime(Setting::Freq) == 1200);
+    CHECK(options.Runtime(Setting::Duration) == 1000);
     for (unsigned i = 0; i < ROMs::MAX_ROMS; ++i) roms.ROMValid[i] = false;
     roms.ROMValid[0] = true; roms.ROMValid[2] = true;
     strcpy(roms.ROMNames[0],"dos1551.bin"); strcpy(roms.ROMNames[2],"other.bin");
@@ -154,6 +159,7 @@ int main(int argc, char** argv) {
     { char config[] = "i2cLcdOnContrast = 0\n"; options.Process(config); }
     CHECK(options.I2CLcdOnContrast() == 1); CHECK(options.Runtime(Setting::Contrast) == 1);
     options.SetRuntime(Setting::Contrast,127);
+    options.SetRuntime(Setting::DimTime,30); options.SetRuntime(Setting::DimLevel,10);
     screenLCD->Open(128,64,1,1,0x3c,0,LCD_1306_128x64,false);
     Pi1551Oled::Initialize(); CHECK(Pi1551Oled::TestMenu().Path() == "/1551");
     now += 100000;
@@ -249,9 +255,10 @@ int main(int argc, char** argv) {
     Press(Key::Back); Enter("Save settings");
     std::string saved = Read(root+"/options.txt");
     CHECK(saved == "// user order\r\nROM2 = do-not-touch.bin\r\n\tDeViCeID = 9  // drive\r\nunknown = keep\r\nidleSleep = 0 // externally edited");
+    CHECK(Read(root+"/options-backup.txt") == originalOptions);
     Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
     CHECK(saved.find("ROM2 = do-not-touch.bin") != std::string::npos); CHECK(saved.find("unknown = keep") != std::string::npos);
-    CHECK(Read(root+"/options-backup.txt") == originalOptions);
+    CHECK(Read(root+"/options-backup.txt") == saved);
     Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 8); Press(Key::Back);
     NativeFatFSFail("write"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved); CHECK(options.GetDeviceID() == 8);
     NativeFatFSFail("sync"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);

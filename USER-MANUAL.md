@@ -408,21 +408,21 @@ editing the file and restarting; ROM selection is from already loaded slots.
 Load does not reset, remount or save. Save settings updates only values changed
 since boot or the last successful load/save; it retains user order, existing
 comments, unrelated settings, whitespace and line endings. It edits the last
-effective occurrence of a duplicate option, and appends absent changed
-non-default options. No changed values means no rewrite. Failed save/load
-reports an error and preserves pending settings; never remove a .tmp/.bak
-recovery file without checking its contents. Disk/image writes and settings
-saving are separate actions. Load settings and Save settings always use the SD
+effective occurrence of a duplicate option, and appends absent changed options
+with a blank line and an explanatory comment. Every Save action refreshes
+`options-backup.txt` with the exact file contents from immediately before that
+save, including when settings have not changed. No `.bak` file is used. Failed
+save/load reports an error and preserves pending settings. Disk/image writes
+and settings saving are separate actions. Load settings and Save settings always use the SD
 card root, regardless of the currently active device selected at boot or with
 `CP`. The temporary `options.txt.tmp` and `options-backup.txt` files are also
 created on SD. Save settings replaces the previous `options-backup.txt` with
 the options file that existed before the save.
 
 Read the full scrolling failure message: it now identifies the failed step,
-such as Sync temp failed (with a FatFS result code), Invalid options.txt,
-options.txt.tmp exists or options.txt.bak exists. Existing recovery copies
-block a changed save rather than being overwritten. Inspect them on a PC and
-preserve a copy before deciding what to restore or remove. Reboot errors
+such as Sync temp failed (with a FatFS result code), Invalid options.txt or
+options.txt.tmp exists. A previous `options-backup.txt` is replaced on each
+save. Inspect the backup on a PC if you need to recover earlier settings. Reboot errors
 distinguish host/image/media flush, SD sync and unmount failures; the device
 does not restart when those checks fail.
 
@@ -518,10 +518,10 @@ Change slot filenames in options.txt and reboot to load different ROM files.
 | `i2cLcdAddress` | `0x3c` | I2C OLED address. `60` decimal is `0x3c`. |
 | `i2cScan` | `0` | Scan I2C and display found addresses at startup. |
 | `i2cLcdFlip` | `0` | Rotate OLED 180 degrees. |
-| `i2cLcdOnContrast` | `127` | Active brightness 1..255; menu steps 16,32,...,240,255. Startup zero is clamped; runtime load rejects zero. |
+| `i2cLcdOnContrast` | `128` | Active brightness 1..255; menu steps 16,32,...,240,255. Startup zero is clamped; runtime load rejects zero. |
 | `oledDimming` | `1` | Runtime Dimming ON/OFF. |
-| `i2cLcdDimContrast` | `10` | Dim level 0..255; menu steps 0,16,32,...,240,255. Zero powers the OLED off until input. |
-| `i2cLcdDimTime` | `30` | Seconds since last input before dimming; 0/OFF disables the timer. |
+| `i2cLcdDimContrast` | `16` | Dim level 0..255; menu steps 0,16,32,...,240,255. Zero powers the OLED off until input. |
+| `i2cLcdDimTime` | `16` | Seconds since last input before dimming; menu steps include 16; 0/OFF disables the timer. |
 | `i2cLcdUseCBMChar` | `0` | Runtime Font: 0 = ASCII, 1 = cached C64. Both slots are ASCII if chargen failed to load. |
 | `DisplayPNGIcons` | `0` | Show 320x200 PNG files matching disk image names on HDMI. |
 | `GraphIEC` | `0` | Show TCBM and tape signal activity on HDMI. |

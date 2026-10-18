@@ -16,14 +16,16 @@ class TuiControls(unittest.TestCase):
         s = Simulator(); s.set_screen("settings",True); self.click(s,"Display")
         self.assertEqual(s.screen,"display")
         self.assertNotIn("OLED",s.GROUPS["settings"])
+        s.options["Dim time"] = 10; s.options["Dim level"] = 10
         for label in ("Temp","Dim time","Dim level","Font","Scroll"): self.click(s,label)
         self.assertFalse(s.options["Temp"])
-        self.assertEqual(s.options["Dim time"],60); self.assertEqual(s.options["Dim level"],16)
+        self.assertEqual(s.options["Dim time"],16); self.assertEqual(s.options["Dim level"],16)
         self.assertFalse(s.options["i2cLcdUseCBMChar"]); self.assertEqual(s.options["scrollHighlightRate"],0.20)
         self.assertFalse({"oledFont","oledScroll","Font","Scroll rate"} & s.options.keys())
 
     def test_sound_mode(self):
         s = Simulator(); s.set_screen("sound",True)
+        s.options["Duration"] = 500
         self.click(s,"Duration"); self.assertEqual(s.options["Duration"],1000)
         self.assertIn("preview 1s",s.message)
         self.click(s,"Mode"); self.assertEqual(s.items(),["..","Sound","Mode"])

@@ -307,7 +307,7 @@ void Menu::ChangeValue(int /*delta*/) {
     if (id == Setting::Device) v = v == 8 ? 9 : 8;
     else if (id == Setting::Contrast) { const int choices[] = {16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,16); }
     else if (id == Setting::Scroll) { const int choices[] = {50,100,200,350,500,1000}; v = NextChoice(v,choices,6); }
-    else if (id == Setting::DimTime) { const int choices[] = {0,5,10,30,60,120,300}; v = NextChoice(v,choices,7); }
+    else if (id == Setting::DimTime) { const int choices[] = {0,5,10,16,30,60,120,300}; v = NextChoice(v,choices,8); }
     else if (id == Setting::DimLevel) { const int choices[] = {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255}; v = NextChoice(v,choices,17); }
     else if (id == Setting::Duration) { const int choices[] = {0,50,100,250,500,1000,2000,5000}; v = NextChoice(v,choices,8); }
     else if (id == Setting::Freq) {

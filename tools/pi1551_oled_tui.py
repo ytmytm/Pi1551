@@ -87,10 +87,10 @@ class Simulator:
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
         self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True, "Tape autoplay": True,
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
-                        "SD2IEC Cmds.": True, "Contrast": 255, "Dimming": True, "Orientation": "normal",
+                        "SD2IEC Cmds.": True, "Contrast": 128, "Dimming": True, "Orientation": "normal",
                         "scrollHighlightRate": 0.10, "i2cLcdUseCBMChar": True, "Encoder enabled": True, "Encoder reverse": False,
-                        "Temp": True, "Dim time": 30, "Dim level": 10, "soundOnGPIO": True, "Duration": 500, "NewDiskType": "D64",
-                        "Sound": True, "Freq": "1600 Hz", "Reset": "REACT"}
+                        "Temp": True, "Dim time": 16, "Dim level": 16, "soundOnGPIO": True, "Duration": 1000, "NewDiskType": "D64",
+                        "Sound": True, "Freq": "1200 Hz", "Reset": "REACT"}
         self.reset_cursor()
     @property
     def current_dir(self) -> Node: return self.path[-1]
@@ -408,7 +408,7 @@ class Simulator:
         elif item == "Orient": self.options["Orientation"] = "rotated" if self.options["Orientation"] == "normal" else "normal"
         elif item == "Font": self.options["i2cLcdUseCBMChar"] = not self.options["i2cLcdUseCBMChar"]
         elif item == "Scroll": self.options["scrollHighlightRate"] = self.next_choice(self.options["scrollHighlightRate"], [0.05,0.10,0.20,0.35,0.50,1.00])
-        elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,30,60,120,300])
+        elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,16,30,60,120,300])
         elif item == "Dim level": self.options[item] = self.next_choice(self.options[item], [0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255])
         elif item == "Duration": self.options[item] = self.next_choice(self.options[item], [0,50,100,250,500,1000,2000,5000])
         elif item == "Mode": self.options["soundOnGPIO"] = not self.options["soundOnGPIO"]
