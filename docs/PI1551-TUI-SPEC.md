@@ -73,7 +73,7 @@ state is independent of tape presence and disk activity.
 The simulated counter is 000..999 and the percentage is derived from it.
 The firmware derives the counter from actual TAP timing using the existing
 Datasette spool model. At the end it may show `100%`, which still fits the
-16-column row; PLAY remains pressed until eject.
+16-column row; PLAY remains pressed at EOF until Stop or eject.
 
 ## Main views
 
