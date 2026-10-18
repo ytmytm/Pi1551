@@ -9,7 +9,7 @@ namespace oled {
 enum class Key { Left, Right, Enter, Insert, Back, ResetPath };
 enum class View { Browser, Fliplist, Device, Tape, Seek, Disk, Settings,
     ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
-enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways,
+enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways, TapeAutoplay,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
     Scroll, Reverse, Sound, Freq, Temp, DimTime, DimLevel, Duration, SoundMode, NewType, Count };
 struct Entry {
@@ -37,6 +37,7 @@ public:
     virtual bool Unmount() = 0;
     virtual bool ReadList(const std::string& path, std::vector<Entry>& entries) = 0;
     virtual bool LoadTape(const std::string& path) = 0;
+    virtual bool SetTapePlaying(bool playing) { (void)playing; return false; }
     virtual void EjectTape() = 0;
     virtual bool SeekTape(unsigned counter) = 0;
     virtual Status ReadStatus() = 0;

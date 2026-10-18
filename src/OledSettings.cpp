@@ -4,7 +4,7 @@
 #include <stdio.h>
 namespace oled {
 const char* OptionName(Setting id) {
-    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
+    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "tapeAutoplay", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
     return names[(unsigned)id];
 }
 static std::string Lower(std::string s) { for (size_t i = 0; i < s.size(); ++i) s[i] = tolower((unsigned char)s[i]); return s; }

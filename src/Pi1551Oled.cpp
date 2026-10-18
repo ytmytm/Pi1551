@@ -151,6 +151,10 @@ public:
         FILINFO f; if (!g_tapePlayer || f_stat(path.c_str(), &f) != FR_OK || path.size() >= sizeof(f.fname)) return false;
         strcpy(f.fname, path.c_str()); return g_tapePlayer->LoadTap(&f);
     }
+    bool SetTapePlaying(bool play) override {
+        if (!g_tapePlayer) return false;
+        return play ? g_tapePlayer->Play() : g_tapePlayer->Stop();
+    }
     void EjectTape() override { if (g_tapePlayer) g_tapePlayer->Eject(); }
     bool SeekTape(unsigned count) override { return g_tapePlayer && g_tapePlayer->SeekCounter(count); }
     oled::Status ReadStatus() override { return OledKernelStatus(); }

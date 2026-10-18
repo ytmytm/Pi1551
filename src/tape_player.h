@@ -51,6 +51,7 @@ extern "C"
 struct TapeUIState
 {
 	bool isLoaded;
+	bool isPlaying;
 	bool motorActive;
 	bool atEnd;
 	char filename[256];
@@ -93,6 +94,8 @@ public:
 	// Reset playback (start from beginning)
 	void Reset();
 	void Eject();
+	bool Play();
+	bool Stop();
 	bool SeekCounter(unsigned counter);
 	void SetMotorAlwaysOn(bool value);
 
@@ -127,7 +130,7 @@ private:
     static u64* pulseTimings;
     static size_t pulseCount;
     static size_t currentPulseIndex;
-	static volatile bool loaded;
+	static volatile bool loaded, playing;
 	static volatile bool motorActive;
 	static volatile bool motorAlwaysOn;
 	static volatile bool atEnd;

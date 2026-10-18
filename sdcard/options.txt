@@ -42,8 +42,9 @@ NewDiskType = d64 // d64 or g64; the selector starts with this value.
 // Tape: Settings -> Tape -> Motor ON.
 // 1 = ALWAYS, useful for computers that cannot drive MOTOR directly.
 // 0 = COMP., follows GPIO6: LOW = running, HIGH = stopped.
-// PLAY is pressed while a TAP is loaded, including at EOF; Eject releases it.
+// tapeAutoplay = 1 presses PLAY automatically when a TAP is loaded; 0 loads stopped.
 tapeMotorAlwaysOn = 1
+tapeAutoplay = 1
 
 // Settings -> Sound. The SOUND wire is fixed to GPIO13 (physical pin 33).
 // GPIO18 is TCBM data; GPIO19 is tape READ. Neither is selectable for sound.
