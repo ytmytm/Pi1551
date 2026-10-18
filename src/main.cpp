@@ -2369,13 +2369,16 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	bool extraRAM = options.GetExtraRAM();
 	DataBusReadFn dataBusRead = extraRAM ? read6502ExtraRAM_1551 : read6502_1551;
 	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
-	pi1551.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
+	bool resumeCpu = g_oledResumeCpu;
+	g_oledResumeCpu = false;
+	// SetBusFunctions resets the 6502. A fliplist swap must only rebind its
+	// memory callbacks, including when the RAMBOard setting changed in the UI.
+	if (resumeCpu) pi1551.m6502.SetBusFunctionsPreservingState(dataBusRead, dataBusWrite);
+	else pi1551.m6502.SetBusFunctions(dataBusRead, dataBusWrite);
 
 	TCBM_Bus::TPI = &pi1551.TPI;
 	TCBM_Bus::port = pi1551.TPI.GetPortA();
-	bool resumeCpu = g_oledResumeCpu;
-	g_oledResumeCpu = false;
-	if (!resumeCpu) pi1551.Reset(); // an emulated-to-emulated flip retains CPU/TPI state
+	if (!resumeCpu) pi1551.Reset(); // an active OLED session retains CPU/TPI state across image changes
 	TCBM_Bus::RefreshOuts1551();	// sync GPIO to TPI initial state (DDRA=0 -> input+pull-up) before any cycles
 	// Mounting a disk does not rewind the independent tape.
 
@@ -2911,6 +2914,7 @@ bool OledKernelUnmount()
     DiskImage* image = diskCaddy.GetCurrentDisk();
     if (!m_TCBM_Commands.FinishFiles() || (image && !image->Flush()) || !cbm_image_sync()) return false;
     pi1551.drive.Eject();
+    g_oledResumeCpu = false;
     diskCaddy.Empty();
     m_TCBM_Commands.DeactivateCbmImageMode();
     m_TCBM_Commands.SetMountedDiskImagePath(0);
@@ -2930,6 +2934,7 @@ bool OledKernelMount(const char* path)
     {
         DiskCaddy candidate;
         if (!candidate.Insert(&f, g_oledWriteProtect || (f.fattrib & AM_RDO) != 0)) return false;
+        // Replacing an emulated disk must not unmount and reset the 1551 bus.
         if (!prg && emulating == EMULATING_1551 && diskCaddy.GetCurrentDisk()) {
             if (!m_TCBM_Commands.FinishFiles() || !diskCaddy.GetCurrentDisk()->Flush() || !cbm_image_sync()) { candidate.Empty(); return false; }
             diskCaddy.Swap(candidate);
@@ -3122,6 +3127,7 @@ void emulator()
             }
             if (emulating == IEC_COMMANDS)
             {
+                g_oledResumeCpu = false;
                 TCBM_Bus::TPI = 0; TCBM_Bus::port = 0;
                 TCBM_Bus::Reset();
                 m_TCBM_Commands.SimulateIECBegin();

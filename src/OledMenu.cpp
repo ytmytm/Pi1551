@@ -75,6 +75,10 @@ bool Menu::ShowHostBrowser(const std::string& next) {
     return ChangeDirectory(next);
 }
 bool Menu::Activate(const Entry& entry) {
+    // Fliplist cursor movement previews images immediately. Returning to the
+    // already active row (for example after highlighting Menu...) must not
+    // mount the same image again and start a fake eject/insert sequence.
+    if (entry.path == mounted) { lastMounted = mounted; return true; }
     if (!backend.Mount(entry.path)) { message = "Mount failed"; return false; }
     mounted = entry.path; lastMounted = mounted; return true;
 }

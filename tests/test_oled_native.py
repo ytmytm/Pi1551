@@ -17,6 +17,9 @@ def run():
         flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
                  "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                  "-ffunction-sections", "-fdata-sections", "-Isrc", "-Iuspi/include"]
+        subprocess.run(flags + ["-Werror", "-Wno-unused-parameter", "tests/m6502_resume_native.cpp", "src/m6502.cpp",
+                               "-o", str(build / "m6502-resume")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "m6502-resume")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-O0", "-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder", "-fno-sanitize=vptr",
                                "tests/fatfs_diskio_native.cpp", "src/ff.cpp", "src/diskio.cpp",
@@ -74,11 +77,13 @@ def run():
         (card / "1551").mkdir(parents=True)
         (card / "1551" / "sub" / "deep").mkdir(parents=True)
         (card / "1551" / "a.d64").write_bytes(bytes(174848))
+        (card / "1551" / "b.d64").write_bytes(bytes(174848))
         (card / "1551" / "bad.d64").write_bytes(b"broken")
         (card / "1551" / "a.d81").write_bytes(bytes(819200))
         (card / "1551" / "a.prg").write_bytes(b"\x01\x10hello")
         (card / "1551" / "a.tap").write_bytes(fixture.read_bytes())
         (card / "1551" / "list.lst").write_text("a.d64\na.d81\na.prg\na.d64\n")
+        (card / "1551" / "pair.lst").write_text("a.d64\nb.d64\n")
         (card / "options.txt").write_text("deviceID = 8\nROM2 = do-not-touch.bin\nunknown = keep\n")
         subprocess.run([str(build / "bridge"), str(card)], cwd=ROOT, check=True)
         subprocess.run(flags + ["-O0", "-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-reorder",

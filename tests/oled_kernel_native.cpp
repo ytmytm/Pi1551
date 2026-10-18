@@ -232,13 +232,20 @@ int main(int argc, char** argv) {
     { char config[] = "AutoMountImage = a.d64\n"; options.Process(config); }
     Pi1551Oled::HostReset(); CHECK(IsEmulated(medium));
     options.SetRuntime(Setting::AutoMount,0);
-    Pi1551Oled::HostSelection("/1551/a.d64"); CHECK(IsEmulated(medium));
-    Press(Key::Right,true); CHECK(Pi1551Oled::TransitionPending()); Pi1551Oled::CompleteTransition();
+    Pi1551Oled::HostSelection("/1551/pair.lst"); CHECK(IsEmulated(medium));
+    unsigned resetsBeforeFlip = resetCount;
+    Press(Key::Right,false); CHECK(!Pi1551Oled::TransitionPending()); // actual post-EXIT_KEYBOARD dispatcher path
+    CHECK(medium == "/1551/a.d64"); // first row is already mounted
+    Press(Key::Right,false);
+    CHECK(!Pi1551Oled::TransitionPending()); CHECK(medium == "/1551/b.d64");
+    CHECK(resetCount == resetsBeforeFlip); // fliplist navigation never invokes ResetDrive
+    Press(Key::Left,true); CHECK(Pi1551Oled::TransitionPending()); Pi1551Oled::CompleteTransition();
+    CHECK(medium == "/1551/a.d64"); // deferred real-time path also swaps media in place
     failUnmount = true; Press(Key::Enter,true); CHECK(Pi1551Oled::TransitionPending());
     Pi1551Oled::CompleteTransition(); CHECK(IsEmulated(medium)); CHECK(Pi1551Oled::TestMenu().CurrentView() == View::Fliplist);
     CHECK(Pi1551Oled::TestMenu().Mounted() == medium); // failed deferred unmount rolls back UI too
     Pi1551Oled::TestMenu().Render(now/1000); Press(Key::Back); failUnmount = false;
-    Press(Key::Enter,true); Pi1551Oled::CompleteTransition(); CHECK(medium.empty()); CHECK(Pi1551Oled::TestMenu().List().empty());
+    Press(Key::Enter,true); Pi1551Oled::CompleteTransition(); CHECK(medium.empty()); CHECK(Pi1551Oled::TestMenu().List().size() == 2);
     Pi1551Oled::HostSelection("/1551/list.lst"); CHECK(Pi1551Oled::TestMenu().List().size() == 3);
     CHECK(Pi1551Oled::TestMenu().ListMode());
     Press(Key::Right); Press(Key::Right); CHECK(medium == "/1551/a.d81");

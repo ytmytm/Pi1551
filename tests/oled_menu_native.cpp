@@ -17,7 +17,7 @@ struct KernelStub : Backend {
     std::string cwd, medium;
     Status status;
     bool failMount = false, failUnmount = false, failTape = false, available = true, wp = false;
-    int resets = 0, reboots = 0;
+    int resets = 0, reboots = 0, mounts = 0;
     std::vector<Entry> lst;
     KernelStub() {
         sd["/"] = {Entry("/1551","1551",true)};
@@ -36,6 +36,7 @@ struct KernelStub : Backend {
     bool Directory(const std::string& p) override { if (!sd.count(p)) return false; cwd = p; effects.push_back("source:"+p); return true; }
     bool Mount(const std::string& p) override {
         if (failMount) return false;
+        ++mounts;
         medium = p; status.emulating = IsEmulated(p); effects.push_back(std::string(status.emulating ? "emulate:" : "container:")+p); return true;
     }
     bool Unmount() override { if (failUnmount) return false; effects.push_back("unmount:"+medium); medium.clear(); status.emulating = false; return true; }
@@ -122,13 +123,24 @@ static void solo_all_types() {
         KernelStub k; Menu m(k); CHECK(m.OpenMedia(Image(ext)));
         CHECK(m.CurrentView() == View::Fliplist); CHECK(!m.ListMode()); CHECK(m.List().size() == 1); CHECK(m.Cursor() == 0);
         CHECK(k.status.emulating == IsEmulated(Image(ext).path));
-        m.Input(Key::Right); CHECK(m.Cursor() == 1); CHECK(k.medium == Image(ext).path);
+        int mounts = k.mounts;
+        m.Input(Key::Right); CHECK(m.Cursor() == 1); CHECK(k.medium == Image(ext).path); CHECK(k.mounts == mounts);
         m.Input(Key::Left); CHECK(m.Cursor() == 0);
         m.Input(Key::Right); m.Input(Key::Enter);
         CHECK(m.CurrentView() == View::Browser); CHECK(m.Mounted().empty()); CHECK(k.medium.empty()); CHECK(m.List().empty());
         CHECK(!m.ListMode());
         m.Input(Key::Back); m.Input(Key::Back); m.Input(Key::Back); CHECK(m.CurrentView() == View::Browser);
     }
+}
+static void fliplist_skips_reselect_and_switches_d64() {
+    KernelStub k; Menu m(k);
+    k.lst = {Image("d64"), Entry("/1551/disks/b.d64", "b.d64")};
+    CHECK(m.OpenMedia(Entry("/1551/disks/list.lst", "list.lst")));
+    CHECK(k.medium == k.lst[0].path); CHECK(k.mounts == 1);
+    Press(m,Key::Right); // first image row is already active
+    CHECK(k.mounts == 1); CHECK(k.medium == k.lst[0].path);
+    Press(m,Key::Right); // selecting the second D64 changes the medium
+    CHECK(k.mounts == 2); CHECK(k.medium == k.lst[1].path);
 }
 static void host_navigation_replaces_stale_panel_history() {
     KernelStub k; Menu m(k); Enter(m,"[disks]");
@@ -362,7 +374,7 @@ int main() {
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     struct Test { const char* name; void (*run)(); };
-    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
+    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"fliplist same-image and D64 swaps",fliplist_skips_reselect_and_switches_d64},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
     unsigned failures = 0;
     for (const Test& t : tests) try { t.run(); std::cout << "PASS " << t.name << "\n"; } catch (const std::exception& e) { ++failures; std::cerr << "FAIL " << t.name << ": " << e.what() << "\n"; }
     return failures ? 1 : 0;

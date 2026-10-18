@@ -509,6 +509,7 @@ public:
 	M6502() : status(FLAG_CONSTANT), dataBusReadFn(0), dataBusWriteFn(0) {}
 	M6502(void* data, DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) { SetBusFunctions(dataBusReadFn, dataBusWriteFn); }
 	void SetBusFunctions(DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) {this->dataBusReadFn = dataBusReadFn; this->dataBusWriteFn = dataBusWriteFn; status = FLAG_CONSTANT; Reset(); }
+	void SetBusFunctionsPreservingState(DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) { this->dataBusReadFn = dataBusReadFn; this->dataBusWriteFn = dataBusWriteFn; }
 	void Reset(void);
 	void Step(void);
 #ifdef  SUPPORT_RDY_HALTING
