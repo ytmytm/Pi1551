@@ -3496,7 +3496,7 @@ static void LoadOptions()
 	FIL fp;
 	FRESULT res;
 
-	res = f_open(&fp, "options.txt", FA_READ);
+	res = f_open(&fp, "SD:/options.txt", FA_READ);
 	if (res == FR_OK)
 	{
 		u32 bytesRead;

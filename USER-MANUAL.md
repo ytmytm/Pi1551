@@ -308,6 +308,14 @@ listing. Use the configured device number if it is not 8. Directory filters
 such as `LOAD"$:*.PRG",8` are likewise part of the `LOAD` filename, not
 commands sent to channel 15.
 
+USB mass-storage devices are detected and mounted during startup. Connect a
+USB drive before boot; plugging one in later does not add it. After boot, SD is
+the active device when no USB drive was detected. When at least one USB drive
+was detected, `USB01` is active by default. `CP0` switches back to SD, while
+`CP1`, `CP2`, ... select the corresponding mounted USB drives. The selected
+device is the default for ordinary file and directory operations until another
+`CP` command changes it.
+
 Pi1551 has no battery-backed RTC, but after any valid `T-W` it advances the
 clock from Raspberry Pi's system timer. The value survives drive/bus resets
 while Pi1551 remains powered, but not a power cycle or reboot. Until it is set,
@@ -388,8 +396,8 @@ SAMPLE loops the click, BUZZER uses its frequency and configured Duration
 (capped to one second); shorter Duration leaves silence for the rest,
 and OFF or zero Duration is silent. New changes replace the preview.
 
-Load settings rereads /options.txt on demand and applies runtime options,
-replacing unsaved changes. Startup-only fields (hardware/encoder enable,
+Load settings rereads `/options.txt` from the SD card on demand and applies
+runtime options, replacing unsaved changes. Startup-only fields (hardware/encoder enable,
 ROM filenames, ChargenFont, AutoMountImage filename, StarFileName) require
 editing the file and restarting; ROM selection is from already loaded slots.
 Load does not reset, remount or save. Save settings updates only values changed
@@ -399,7 +407,11 @@ effective occurrence of a duplicate option, and appends absent changed
 non-default options. No changed values means no rewrite. Failed save/load
 reports an error and preserves pending settings; never remove a .tmp/.bak
 recovery file without checking its contents. Disk/image writes and settings
-saving are separate actions.
+saving are separate actions. Load settings and Save settings always use the SD
+card root, regardless of the currently active device selected at boot or with
+`CP`. The temporary `options.txt.tmp` and `options-backup.txt` files are also
+created on SD. Save settings replaces the previous `options-backup.txt` with
+the options file that existed before the save.
 
 Read the full scrolling failure message: it now identifies the failed step,
 such as Sync temp failed (with a FatFS result code), Invalid options.txt,
@@ -452,9 +464,12 @@ emulation does not unload an already loaded tape.
 
 ## `options.txt`
 
-`options.txt` lives in the SD card root. The parser accepts `//` line comments
-and `/* ... */` block comments. Values are parsed as decimal by default, but C
-style numeric prefixes such as `0x3c` are accepted for integer values.
+`options.txt` lives in the SD card root. Boot loading, the OLED Load settings
+and Save settings actions, and the save recovery files always use this SD copy,
+even when a USB drive is the active file device. The parser accepts `//` line
+comments and `/* ... */` block comments. Values are parsed as decimal by
+default, but C style numeric prefixes such as `0x3c` are accepted for integer
+values.
 
 Options not present in the file use built-in defaults from `src/options.cpp`.
 
