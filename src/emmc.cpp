@@ -848,41 +848,43 @@ void CEMMCDevice::IssueCommandInt(u32 cmd_reg, u32 argument, int timeout)
 			DEBUG_LOG("Multi block transfer\r\n");
 		}
 #endif
-		TimeoutWait(EMMC_INTERRUPT, wr_irpt | 0x8000, 1, timeout);
-		irpts = read32(EMMC_INTERRUPT);
-		write32(EMMC_INTERRUPT, 0xffff0000 | wr_irpt);
-
-		if ((irpts &(0xffff0000 | wr_irpt)) != wr_irpt)
-		{
-#ifdef EMMC_DEBUG
-			DEBUG_LOG("Error occured whilst waiting for data ready interrupt\r\n");
-#endif
-			m_last_error = irpts & 0xffff0000;
-			m_last_interrupt = irpts;
-
-			return;
-		}
-
-		// Transfer the block
+		// Data-ready is raised once per block. Transfer each block only after
+		// its FIFO-ready interrupt; otherwise a multi-block read consumes FIFO
+		// data before the controller has received the next block.
 		assert(m_block_size <= 1024);		// internal FIFO size of EMMC
-		size_t length = m_block_size * m_blocks_to_transfer;
-
 		assert(((u32) m_buf & 3) == 0);
-		assert((length & 3) == 0);
+		assert((m_block_size & 3) == 0);
 
-		u32 *pData =(u32 *) m_buf;
-		if (is_write)
+		u32 *pData = (u32 *)m_buf;
+		size_t wordsPerBlock = m_block_size / sizeof(u32);
+		for (int block = 0; block < m_blocks_to_transfer; ++block)
 		{
-			for(; length > 0; length -= 4)
+			if (TimeoutWait(EMMC_INTERRUPT, wr_irpt | 0x8000, 1, timeout) < 0)
 			{
-				write32(EMMC_DATA, *pData++);
+				irpts = read32(EMMC_INTERRUPT);
+				write32(EMMC_INTERRUPT, 0xffff0000 | wr_irpt);
+				m_last_error = irpts & 0xffff0000;
+				m_last_interrupt = irpts;
+				return;
 			}
-		}
-		else
-		{
-			for(; length > 0; length -= 4)
+			irpts = read32(EMMC_INTERRUPT);
+			write32(EMMC_INTERRUPT, 0xffff0000 | wr_irpt);
+			if ((irpts &(0xffff0000 | wr_irpt)) != wr_irpt)
 			{
-				*pData++ = read32(EMMC_DATA);
+				m_last_error = irpts & 0xffff0000;
+				m_last_interrupt = irpts;
+				return;
+			}
+
+			if (is_write)
+			{
+				for (size_t word = 0; word < wordsPerBlock; ++word)
+					write32(EMMC_DATA, *pData++);
+			}
+			else
+			{
+				for (size_t word = 0; word < wordsPerBlock; ++word)
+					*pData++ = read32(EMMC_DATA);
 			}
 		}
 

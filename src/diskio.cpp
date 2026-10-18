@@ -149,13 +149,9 @@ DRESULT disk_read (
 	if (disk_status(pdrv) & STA_NOINIT) return RES_NOTRDY;
 	if (pdrv == 0)
 	{
-		for (UINT s = 0; s < count; ++s)
+		if (pEMMC->DoRead(buff, (size_t)count * SD_BLOCK_SIZE, sector) < 0)
 		{
-			if (sd_read(buff, SD_BLOCK_SIZE, sector + s) != SD_BLOCK_SIZE)
-			{
-				return RES_ERROR;
-			}
-			buff += SD_BLOCK_SIZE;
+			return RES_ERROR;
 		}
 		return RES_OK;
 	}
