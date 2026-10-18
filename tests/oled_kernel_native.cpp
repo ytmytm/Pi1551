@@ -73,7 +73,7 @@ void OledKernelWriteProtect(bool value) { wp = value; }
 void Reboot_Pi() { ++rebootCount; }
 Status OledKernelStatus() {
     Status s; s.emulating = IsEmulated(medium); s.rom = roms.GetSelectedROMName();
-    if (g_tapePlayer) { TapeUIState t; g_tapePlayer->GetUIState(t); s.tape = t.isLoaded ? t.filename : ""; s.motor = t.motorActive; s.play = t.isLoaded; }
+    if (g_tapePlayer) { TapeUIState t; g_tapePlayer->GetUIState(t); s.tape = t.isLoaded ? t.filename : ""; s.motor = t.motorActive; s.play = t.isPlaying; s.counter = t.tapeCounter; s.counterMax = t.maxTapeCounter; }
     return s;
 }
 #define CHECK(x) do { if (!(x)) { std::cerr << "FAIL bridge:" << __LINE__ << " " #x << "\n"; return 1; } } while(0)
@@ -233,11 +233,14 @@ int main(int argc, char** argv) {
     Enter("Menu..."); Enter("Settings"); Enter("ROM"); Press(Key::Right); Press(Key::Enter); CHECK(roms.currentROMIndex == 2);
     Press(Key::Enter); Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 9); CHECK(applies >= 2);
     { std::ofstream f(root+"/options.txt",std::ios::binary); f << "// user order\r\nROM2 = do-not-touch.bin\r\n\tDeViCeID = 8  // drive\r\nunknown = keep\r\nidleSleep = 0 // externally edited"; }
+    const std::string originalOptions = Read(root+"/options.txt");
+    { std::ofstream f(root+"/options-backup.txt"); f << "stale backup"; }
     Press(Key::Back); Enter("Save settings");
     std::string saved = Read(root+"/options.txt");
     CHECK(saved == "// user order\r\nROM2 = do-not-touch.bin\r\n\tDeViCeID = 9  // drive\r\nunknown = keep\r\nidleSleep = 0 // externally edited");
     Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
     CHECK(saved.find("ROM2 = do-not-touch.bin") != std::string::npos); CHECK(saved.find("unknown = keep") != std::string::npos);
+    CHECK(Read(root+"/options-backup.txt") == originalOptions);
     Enter("Drive"); Enter("Device number"); CHECK(options.GetDeviceID() == 8); Press(Key::Back);
     NativeFatFSFail("write"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved); CHECK(options.GetDeviceID() == 8);
     NativeFatFSFail("sync"); Enter("Save settings"); CHECK(Read(root+"/options.txt") == saved);
@@ -246,18 +249,28 @@ int main(int argc, char** argv) {
     Enter("Load settings"); CHECK(options.GetDeviceID() == 9);
     CHECK(options.IdleSleep() == 0); // on-demand reload updates runtime values from the current file
     options.SetRuntime(Setting::Freq,1600); Enter("Save settings");
-    CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1600\r\n");
+    const std::string savedWithFreq = saved + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1600\r\n";
+    CHECK(Read(root+"/options.txt") == savedWithFreq);
+    CHECK(Read(root+"/options-backup.txt") == saved);
     options.SetRuntime(Setting::Freq,1200); Enter("Save settings");
-    CHECK(Read(root+"/options.txt") == saved + "\r\nsoundOnGPIOFreq = 1200\r\n"); // existing key stays in place
+    const std::string savedWithFreq1200 = saved + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1200\r\n";
+    CHECK(Read(root+"/options.txt") == savedWithFreq1200); // existing key stays in place
+    CHECK(Read(root+"/options-backup.txt") == savedWithFreq);
     options.SetRuntime(Setting::Scroll,200); options.SetRuntime(Setting::Font,1);
     options.SetRuntime(Setting::Temp,1); options.SetRuntime(Setting::DimTime,60); options.SetRuntime(Setting::DimLevel,8);
     options.SetRuntime(Setting::Duration,250); options.SetRuntime(Setting::SoundMode,1); options.SetRuntime(Setting::NewType,1);
     Enter("Save settings"); std::string controls = Read(root+"/options.txt");
     CHECK(controls.find("scrollHighlightRate = 0.20") != std::string::npos);
+    CHECK(controls.find("\r\n\r\n// Browser scroll interval in seconds.\r\nscrollHighlightRate = 0.20") != std::string::npos);
     CHECK(controls.find("i2cLcdUseCBMChar = 1") != std::string::npos); CHECK(controls.find("NewDiskType = g64") != std::string::npos);
     CHECK(controls.find("oledFont") == std::string::npos && controls.find("oledScroll") == std::string::npos);
+    options.SetRuntime(Setting::TapeAutoplay,0); Enter("Save settings");
+    controls = Read(root+"/options.txt");
+    CHECK(controls.find("\r\n\r\n// Start tape playback automatically when a TAP is loaded.\r\ntapeAutoplay = 0") != std::string::npos);
     options.SetRuntime(Setting::Scroll,100); options.SetRuntime(Setting::Font,0); options.SetRuntime(Setting::NewType,0);
+    options.SetRuntime(Setting::TapeAutoplay,1);
     Enter("Load settings"); CHECK(options.Runtime(Setting::Scroll) == 200); CHECK(options.Runtime(Setting::Font) == 1);
+    CHECK(options.Runtime(Setting::TapeAutoplay) == 0);
     CHECK(options.GetNewDiskType() == DiskImage::G64); CHECK(options.DisplayTemperature() == 1);
     CHECK(options.SoundOnGPIO() == 1); CHECK(options.SoundOnGPIODuration() == 250);
     { std::ofstream f(root+"/options.txt"); f << "deviceID = 8\nsoundOnGPIO = 0\noledSound = 1\n"; }

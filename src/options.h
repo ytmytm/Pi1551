@@ -78,6 +78,7 @@ public:
 	inline unsigned int InvertIECOutputs() const { return invertIECOutputs; }
 	inline unsigned int IgnoreReset() const { return ignoreReset; }
 	inline unsigned int TapeMotorAlwaysOn() const { return tapeMotorAlwaysOn; }
+	inline unsigned int TapeAutoplay() const { return tapeAutoplay; }
 	inline unsigned int SkipMotorSpinUpDelay() const { return skipMotorSpinUpDelay; }
 	inline unsigned int IdleSleep() const { return idleSleep; }
 
@@ -153,6 +154,7 @@ private:
 	unsigned int splitIECLines;
 	unsigned int ignoreReset;
 	unsigned int tapeMotorAlwaysOn;
+	unsigned int tapeAutoplay;
 	unsigned int skipMotorSpinUpDelay;
 	unsigned int idleSleep;
 	unsigned int autoBootFB128;

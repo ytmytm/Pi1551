@@ -4,8 +4,26 @@
 #include <stdio.h>
 namespace oled {
 const char* OptionName(Setting id) {
-    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
+    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "tapeAutoplay", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
     return names[(unsigned)id];
+}
+static const char* OptionComment(Setting id) {
+    static const char* comments[] = {
+        "Drive device number (8 or 9).", "Idle sleep setting.", "RAMBOard memory expansion.",
+        "Skip the drive motor spin-up delay.", "Ignore the computer reset line.",
+        "Tape motor mode: 1 = always on, 0 = follow the computer.",
+        "Start tape playback automatically when a TAP is loaded.",
+        "Mount the configured image automatically at startup/reset.",
+        "Return to the starting folder after reset.", "Show browser filenames in lowercase.",
+        "Enable SD2IEC commands.", "OLED active contrast (1..255).", "Enable OLED dimming.",
+        "Rotate the OLED display by 180 degrees.", "Use the Commodore character set.",
+        "Browser scroll interval in seconds.", "Invert rotary encoder direction.",
+        "Enable OLED sound.", "Sound frequency in Hz.", "Show temperature in the OLED header.",
+        "OLED dim timeout in seconds; 0 disables dimming.", "OLED dim contrast (0..255).",
+        "Sound duration in milliseconds.", "Sound output mode: 1 = buzzer, 0 = sample.",
+        "Default new disk image type: d64 or g64."
+    };
+    return comments[(unsigned)id];
 }
 static std::string Lower(std::string s) { for (size_t i = 0; i < s.size(); ++i) s[i] = tolower((unsigned char)s[i]); return s; }
 static std::string Trim(const std::string& s) {
@@ -95,6 +113,7 @@ bool ParseRuntimeSettings(const std::string& text, std::map<Setting, int>& value
 }
 std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting, int>& changes,
     const std::map<Setting, int>& defaults) {
+    (void)defaults; // Every changed missing option is persisted, including its default value.
     struct Line { std::string body, ending, visible; };
     std::vector<Line> lines;
     std::map<Setting, size_t> last;
@@ -130,9 +149,13 @@ std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting
     for (size_t i = 0; i < lines.size(); ++i) result += lines[i].body + lines[i].ending;
     for (std::map<Setting,int>::const_iterator it = changes.begin(); it != changes.end(); ++it) {
         if (last.count(it->first)) continue;
-        std::map<Setting,int>::const_iterator def = defaults.find(it->first);
-        if (def != defaults.end() && def->second == it->second) continue;
-        if (!result.empty() && result.back() != '\n') result += newline;
+        if (!result.empty()) {
+            if (result.back() != '\n') result += newline;
+            std::string blankLines = newline + newline;
+            if (result.size() < blankLines.size() || result.compare(result.size() - blankLines.size(), blankLines.size(), blankLines) != 0)
+                result += newline;
+        }
+        result += std::string("// ") + OptionComment(it->first) + newline;
         result += std::string(OptionName(it->first)) + " = " + EncodeValue(it->first, it->second) + newline;
     }
     return result;

@@ -60,18 +60,20 @@ The row has a fixed layout:
 
 - no TAP, motor off: `TAPE --- --% --`
 - no TAP, motor on: `TAPE --- --% M-`
-- TAP loaded, motor off: `TAPE 000 00% -P`
-- TAP loaded, motor on: `TAPE 000 00% MP`
+- TAP loaded, stopped, motor off: `TAPE 000 00% --`
+- TAP loaded, stopped, motor on: `TAPE 000 00% M-`
+- TAP playing, motor off: `TAPE 000 00% -P`
+- TAP playing, motor on: `TAPE 000 00% MP`
 
 `M` is the effective tape motor state: always on in `Motor ON ALWAYS`, or the
 live computer input in `Motor ON COMP.`. The `m` key toggles that computer input
 even in `ALWAYS` mode, but cannot turn the effective motor off there. `P` means
-a TAP is loaded; it is asserted for a loaded TAP and released by eject. Motor
+PLAY is pressed; a loaded TAP can be stopped and played independently. Motor
 state is independent of tape presence and disk activity.
 The simulated counter is 000..999 and the percentage is derived from it.
 The firmware derives the counter from actual TAP timing using the existing
 Datasette spool model. At the end it may show `100%`, which still fits the
-16-column row; PLAY remains pressed until eject.
+16-column row; PLAY remains pressed at EOF until Stop or eject.
 
 ## Main views
 
@@ -289,14 +291,17 @@ The current order is:
 ```
 ..
 1:<loaded TAP filename>
-Load TAP...
-Eject TAP
-Rewind
-Go to counter
+Play or Stop (only when loaded)
+Load TAP... (only when empty)
+Eject TAP (only when loaded)
+Rewind (only when loaded)
+Go to counter (only when loaded)
 ```
 
 The filename row shows exactly `1:` when no TAP is loaded. When a TAP is
-loaded it shows its name after the fixed `1:` prefix and scrolls. The
+loaded it shows its name after the fixed `1:` prefix and scrolls. The menu
+shows `Play` or `Stop` according to PLAY state. With no TAP it shows
+`Load TAP...`; eject, rewind and seek only appear while a TAP is loaded. The
 counter and motor are not duplicated here because they are always visible in
 OLED row 1.
 
@@ -304,7 +309,8 @@ OLED row 1.
   filtered to TAP files, starting at the SD root. In `LIST`, entries are kept
   for a later return to Fliplist; a temporary `SOLO` entry is cleared. Back
   returns to Tape; choosing a TAP loads it and returns to Tape;
-- `Eject TAP`: removes the TAP and releases `P`, without changing motor state;
+- `Play` / `Stop`: presses or releases PLAY while keeping the loaded TAP;
+- `Eject TAP`: removes the TAP and releases PLAY, without changing motor state;
 - `Rewind`: sets counter to 000 when a TAP is loaded; otherwise reports
   `No TAP loaded`;
 - `Go to counter`: opens a numeric editor only when a TAP is loaded;
@@ -355,8 +361,9 @@ Submenus:
 - Drive: device number, idle trap, RAMBOard, `Skip spinup` ON/OFF and `Reset`
   `REACT/IGNORE`; `REACT` means host reset pulses are honoured. These labels keep
   both the option and its value visible on the 16-character OLED row;
-- Tape: the visible item is `Motor ON`, with modes `ALWAYS` and `COMP.`.
-  `ALWAYS` keeps MOTOR active; `COMP.` follows the computer MOTOR input;
+- Tape: `Motor ON` selects `ALWAYS` or `COMP.`, and `Tape auto` selects ON/OFF.
+  `ALWAYS` keeps MOTOR active; `COMP.` follows the computer MOTOR input.
+  `Tape auto ON` presses PLAY as a TAP is loaded; OFF loads the TAP stopped;
 - Browser: visible items are `Auto mount`, `Reset path`, `Lowercase` and
   `SD2IEC Cmds.`; `Auto mount ON` enables the configured `AutoMountImage` (which may
   be an image or an `.LST`), while `OFF` disables automatic mounting;
@@ -435,12 +442,13 @@ hardware options remain boot-time settings. `Save settings` persists the
 changed runtime values for future boots. It rereads the current file, preserves
 the user's order, key spelling, whitespace, comments and line endings, and
 replaces only the value in the last effective definition of a changed option.
-Absent changed options are appended only for non-default values. Untouched
+Every absent changed option is appended, including default values. Untouched
 options (including independent user edits) and duplicate earlier definitions
 remain unchanged. A no-op save performs no writes. A write failure must leave the current runtime state intact and be
 reported with its failing stage and, where available, FatFS result code.
-Existing options.txt.tmp/options.txt.bak are reported explicitly and retained;
-inspect recovery data instead of silently overwriting it. Reboot reports
+An existing options.txt.tmp is reported and retained. Each changed save keeps
+the previous `/options.txt` as `/options-backup.txt`, replacing any older
+backup; recover it manually if power fails during the rename sequence. Reboot reports
 host/image/media flush, SD sync or unmount failure and remains blocked until
 the storage checks succeed. Neither settings action itself mounts media or resets the device. The TUI
 mock only reports these actions using its fake `options-pi1551.txt`; it does

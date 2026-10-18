@@ -206,10 +206,15 @@ std::vector<Menu::Row> Menu::Rows() {
     }
     case View::Tape: {
         Status s = backend.ReadStatus();
-        r.push_back(Row("1:", Basename(s.tape))); r.push_back(Row("Load TAP..."));
-        r.push_back(Row("Eject TAP")); r.push_back(Row("Rewind")); r.push_back(Row("Go to counter")); break;
+        r.push_back(Row("1:", Basename(s.tape)));
+        if (s.tape.empty()) r.push_back(Row("Load TAP..."));
+        else {
+            r.push_back(Row(s.play ? "Stop" : "Play"));
+            r.push_back(Row("Eject TAP")); r.push_back(Row("Rewind")); r.push_back(Row("Go to counter"));
+        }
+        break;
     }
-    case View::Seek: { char b[20]; snprintf(b, sizeof(b), "TARGET %03u", target); r.push_back(Row(b)); break; }
+    case View::Seek: { char b[24]; snprintf(b, sizeof(b), "TARGET %03u/%03u", target, targetMax); r.push_back(Row(b)); break; }
     case View::Disk:
         r.push_back(Row(std::string("WProt ") + On(backend.WriteProtected())));
         r.push_back(Row("Write image")); r.push_back(Row("New image")); r.push_back(Row("Reset drive")); break;
@@ -232,13 +237,13 @@ std::vector<Menu::Row> Menu::Rows() {
     default: {
         struct Item { Setting id; const char* label; };
         static const Item drive[] = {{Setting::Device,"Device number"},{Setting::Idle,"Idle trap"},{Setting::RAM,"RAMBOard"},{Setting::Spinup,"Skip spinup"},{Setting::IgnoreReset,"Reset"}};
-        static const Item tape[] = {{Setting::MotorAlways,"Motor ON"}};
+        static const Item tape[] = {{Setting::MotorAlways,"Motor ON"},{Setting::TapeAutoplay,"Autoplay"}};
         static const Item browser[] = {{Setting::AutoMount,"Auto mount"},{Setting::ResetPath,"Reset path"},{Setting::Lowercase,"Lowercase"},{Setting::SD2IEC,"SD2IEC Cmds."}};
         static const Item display[] = {{Setting::Temp,"Temp"},{Setting::Contrast,"Contrast"},{Setting::Dimming,"Dimming"},{Setting::DimTime,"Dim time"},{Setting::DimLevel,"Dim level"},{Setting::Orient,"Orient"},{Setting::Font,"Font"},{Setting::Scroll,"Scroll"}};
         static const Item encoder[] = {{Setting::Reverse,"Reverse"}};
         static const Item sound[] = {{Setting::Sound,"Sound"},{Setting::SoundMode,"Mode"},{Setting::Freq,"Freq"},{Setting::Duration,"Duration"}};
         const Item* items = drive; unsigned n = 5;
-        if (view == View::TapeSettings) { items = tape; n = 1; }
+        if (view == View::TapeSettings) { items = tape; n = 2; }
         if (view == View::BrowserSettings) { items = browser; n = 4; }
         if (view == View::Display) { items = display; n = 8; }
         if (view == View::Encoder) { items = encoder; n = 1; }
@@ -251,6 +256,7 @@ std::vector<Menu::Row> Menu::Rows() {
             if (id == Setting::Freq) value += " Hz";
             if (id == Setting::IgnoreReset) value = v ? "IGNORE" : "REACT";
             if (id == Setting::MotorAlways) value = v ? "ALWAYS" : "COMP.";
+            if (id == Setting::TapeAutoplay) { r.push_back(Row(std::string("Autoplay ") + On(v))); continue; }
             if (id == Setting::Orient) value = v ? "flip" : "normal";
             if (id == Setting::Font) value = v ? "C64" : "ASCII";
             if (id == Setting::SoundMode) value = v ? "BUZZER" : "SAMPLE";
@@ -287,7 +293,7 @@ Setting Menu::SelectedSetting() {
     if (view == View::Display) return display[i];
     if (view == View::Sound) return sound[i];
     if (view == View::Encoder) return Setting::Reverse;
-    if (view == View::TapeSettings) return Setting::MotorAlways;
+    if (view == View::TapeSettings) return i == 0 ? Setting::MotorAlways : Setting::TapeAutoplay;
     static const Setting browser[] = {Setting::AutoMount, Setting::ResetPath, Setting::Lowercase, Setting::SD2IEC};
     if (!backend.AutoMountAvailable()) ++i;
     return browser[i];
@@ -337,13 +343,16 @@ void Menu::Select() {
     } else if (view == View::Reboot) {
         if (cursor == 1) Back(); else if (!backend.Reboot()) message = backend.Error();
     } else if (view == View::Tape) {
-        if (cursor == 2) Browse(false, true);
-        else if (cursor == 3) backend.EjectTape();
-        else if (cursor == 4 || cursor == 5) {
+        std::string action = Rows()[cursor].prefix;
+        if (action == "Load TAP...") Browse(false, true);
+        else if (action == "Play" || action == "Stop") {
+            if (!backend.SetTapePlaying(action == "Play")) message = backend.Error();
+        } else if (action == "Eject TAP") backend.EjectTape();
+        else if (action == "Rewind" || action == "Go to counter") {
             Status s = backend.ReadStatus();
             if (s.tape.empty()) message = "No TAP loaded";
-            else if (cursor == 4) { if (!backend.SeekTape(0)) message = "Seek failed"; }
-            else { target = s.counter; Open(View::Seek); }
+            else if (action == "Rewind") { if (!backend.SeekTape(0)) message = "Seek failed"; }
+            else { target = s.counter; targetMax = s.counterMax; Open(View::Seek); }
         }
     } else if (view == View::Seek) { if (backend.SeekTape(target)) Back(); else message = "Seek failed"; }
     else if (view == View::Disk) {
@@ -376,7 +385,7 @@ void Menu::Input(Key key) {
         Clamp(); return;
     }
     int delta = key == Key::Left ? -1 : 1;
-    if (view == View::Seek && cursor == 1) { target = std::max(0, std::min(999, (int)target + delta)); return; }
+    if (view == View::Seek && cursor == 1) { target = std::max(0, std::min((int)targetMax, (int)target + delta)); return; }
     if (editing) { ChangeValue(delta); return; }
     unsigned n = Rows().size();
     if (view == View::Fliplist && flip.empty()) { Browse(); return; }
@@ -419,7 +428,7 @@ Frame Menu::Render(uint32_t ms) {
         snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
     }
     if (s.tape.empty()) snprintf(b, sizeof(b), "TAPE --- --%% %c-", s.motor ? 'M' : '-');
-    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %cP", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-');
+    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %c%c", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-', s.play ? 'P' : '-');
     memcpy(f.rows[1], b, std::min((size_t)16, strlen(b)));
     std::vector<Row> rows = Rows();
     for (unsigned y = 2; y < 8; ++y) {

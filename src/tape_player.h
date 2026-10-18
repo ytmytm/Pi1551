@@ -51,10 +51,12 @@ extern "C"
 struct TapeUIState
 {
 	bool isLoaded;
+	bool isPlaying;
 	bool motorActive;
 	bool atEnd;
 	char filename[256];
 	u32 tapeCounter;  // 3-digit counter (000-999)
+	u32 maxTapeCounter; // Highest reachable counter, capped at 999
 	u32 currentTimeMs;  // Current position in milliseconds
 	u32 totalTimeMs;  // Total tape length in milliseconds
 	u8 percentage;  // Playback percentage (0-100)
@@ -93,6 +95,8 @@ public:
 	// Reset playback (start from beginning)
 	void Reset();
 	void Eject();
+	bool Play();
+	bool Stop();
 	bool SeekCounter(unsigned counter);
 	void SetMotorAlwaysOn(bool value);
 
@@ -127,7 +131,7 @@ private:
     static u64* pulseTimings;
     static size_t pulseCount;
     static size_t currentPulseIndex;
-	static volatile bool loaded;
+	static volatile bool loaded, playing;
 	static volatile bool motorActive;
 	static volatile bool motorAlwaysOn;
 	static volatile bool atEnd;
@@ -138,6 +142,7 @@ private:
 	static bool senseLineState;
 	static u64 totalPlaybackTimeUs;  // Total time in microseconds
 	static u64 cumulativePulseTimeUs;  // Cumulative time from pulses played (derived from currentPulseIndex)
+	static u64 currentPulseOffsetUs;  // Elapsed time within the current pulse after seeking or pausing
 	static char tapFilename[256];
 };
 

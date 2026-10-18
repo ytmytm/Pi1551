@@ -31,6 +31,62 @@ class TuiControls(unittest.TestCase):
         self.click(s,"Mode"); self.assertIn("Duration",s.items())
         self.assertEqual(s.display_value("Mode"),"BUZZER")
 
+    def test_tape_motor_and_autoplay_matrix(self):
+        fixture = Simulator()
+        tape = fixture.sd.children[0].children[3].children[0]
+        for motor_always in (False, True):
+            for autoplay in (False, True):
+                s = Simulator(); s.set_screen("tape")
+                s.options["Motor override"] = motor_always
+                s.options["Tape autoplay"] = autoplay
+                s.tape_motor = False
+                s.load_tape(tape)
+                self.assertEqual(s.tape_playing, autoplay)
+                self.assertEqual(s.display_value("MOTOR"), "ON" if motor_always else "OFF")
+                self.assertIn("Stop" if autoplay else "Play", s.items())
+                self.assertNotIn("Play" if autoplay else "Stop", s.items())
+                s.tape_motor = True
+                self.assertEqual(s.display_value("MOTOR"), "ON")
+                if not autoplay:
+                    self.click(s, "Play")
+                    self.assertTrue(s.tape_playing)
+                self.click(s, "Stop")
+                self.assertFalse(s.tape_playing)
+                self.assertEqual(s.display_value("PLAY"), "OFF")
+                s.set_screen("tape_settings")
+                self.assertEqual(s.display_value("Motor ON"), "ALWAYS" if motor_always else "COMP.")
+                self.assertEqual(s.display_value("Autoplay"), "ON" if autoplay else "OFF")
+
+    def test_tape_play_stop_are_rendered_between_load_and_eject(self):
+        tape = Simulator().sd.children[0].children[3].children[0]
+        for autoplay, expected in ((False, "Play"), (True, "Stop")):
+            s = Simulator(); s.set_screen("tape")
+            s.options["Tape autoplay"] = autoplay
+            s.load_tape(tape)
+            ui = UI.__new__(UI); ui.sim = s
+            ui.s = type("ScreenStub", (), {"getmaxyx": lambda self: (15, 70)})()
+            ui.text = lambda *args: None
+            ui.frame = lambda: True
+            ui.status_line = lambda *args: None
+            ui.tree = lambda: None
+            rendered = []
+            ui.line = lambda row, value, *args: rendered.append((row, value))
+            with patch("tools.pi1551_oled_tui.curses.color_pair", return_value=0): ui.draw()
+            rows = [value for row, value in rendered if row >= 2]
+            self.assertTrue(rows[1].startswith("1:" + tape.name[:13]))
+            self.assertEqual(rows[2:5], [expected, "Eject TAP", "Rewind"])
+            self.assertEqual(rows[0], "..")
+
+    def test_tape_seek_stops_at_tape_specific_counter_maximum(self):
+        s = Simulator(); s.set_screen("tape")
+        tape = s.sd.children[0].children[3].children[0]
+        s.load_tape(tape); self.click(s, "Go to counter")
+        s.move(500)
+        self.assertEqual(s.seek_target, tape.counter_max)
+        self.assertEqual(s.display_value("TARGET"), f"{tape.counter_max:03d}/{tape.counter_max:03d}")
+        self.click(s, "TARGET")
+        self.assertEqual(s.tape_pos, tape.counter_max)
+
     def test_independent_reset_path_and_folder_header(self):
         for ignore in (False,True):
             for reset_path in (False,True):

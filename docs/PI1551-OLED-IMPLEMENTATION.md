@@ -85,19 +85,22 @@ Save settings rereads the current file and changes only values modified in the
 device since boot or the last successful load/save. Values in untouched
 settings remain as the user currently wrote them, including external edits.
 An existing option keeps its line number, key spelling, indentation, spacing,
-inline comments and line ending; only its numeric value is replaced. Missing
-changed options are appended only when their current value differs from the
-`Options` default. CRLF/LF and the absence of a final newline are preserved;
-appending adds the necessary separator using the file's newline style.
+inline comments and line ending; only its numeric value is replaced. Every
+changed option missing from the file is appended, including values equal to
+the `Options` default. Each appended option gets a blank line and a comment
+that describes it. CRLF/LF and the absence of a final newline are preserved;
+appending uses the file's newline style.
 Duplicate definitions remain intact; only the last (effective) definition is
 changed. A no-op save does not write or rename any files.
 
-When content changes, Save settings writes and synchronizes `/options.txt.tmp`, renames the original
-to `/options.txt.bak`, installs the new file, then removes the backup. Failure
-before installation keeps/restores the original. Unknown options, ROM slots
-and comments are retained. Existing `.tmp`/`.bak` files cause a reported failure rather than
-overwriting recovery material. If power fails between renames, recover the
-original from `.bak` (there is no boot-time automatic recovery yet).
+When content changes, Save settings writes and synchronizes `/options.txt.tmp`,
+removes any existing `/options-backup.txt`, renames the original to
+`/options-backup.txt`, then installs the new file. The backup remains after a
+successful save and is replaced by the previous `options.txt` on the next
+changed save. Failure during installation restores the original when possible;
+if power fails between renames, recover `options-backup.txt` manually. An
+existing `.tmp` file causes a reported failure rather than being overwritten.
+Unknown options, ROM slots and comments are retained.
 
 New runtime options written alongside the existing options are:
 
@@ -106,6 +109,7 @@ New runtime options written alongside the existing options are:
 | `autoMountEnabled` | 0/1; default 1, applies the configured `AutoMountImage` only at boot/processed host reset |
 | `oledDimming` | 0/1; uses the existing dim contrast and timeout |
 | `oledSound` | 0/1; enables head-step audio independently of its mode |
+| `tapeAutoplay` | 0/1; presses PLAY automatically when a TAP is loaded |
 
 Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `ignoreReset`, `tapeMotorAlwaysOn`, `onResetChangeToStartingFolder`,

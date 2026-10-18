@@ -38,6 +38,7 @@ u64* TapePlayer::pulseTimings = nullptr;
 size_t TapePlayer::pulseCount = 0;
 size_t TapePlayer::currentPulseIndex = 0;
 volatile bool TapePlayer::loaded = false;
+volatile bool TapePlayer::playing = false;
 volatile bool TapePlayer::motorActive = true;
 volatile bool TapePlayer::motorAlwaysOn = true;
 volatile bool TapePlayer::atEnd = false;
@@ -48,6 +49,7 @@ bool TapePlayer::readLineState = true;  // Start with READ line high (hardware i
 bool TapePlayer::senseLineState = false;  // Start with PLAY released (inactive)
 u64 TapePlayer::totalPlaybackTimeUs = 0;
 u64 TapePlayer::cumulativePulseTimeUs = 0;
+u64 TapePlayer::currentPulseOffsetUs = 0;
 char TapePlayer::tapFilename[256] = {0};
 volatile bool TapePlayer::editingPulses = false;
 volatile bool TapePlayer::corePulseActive = false;
@@ -73,31 +75,67 @@ void TapePlayer::SetMotorAlwaysOn(bool value)
 }
 void TapePlayer::Eject()
 {
-	PausePlayback(); loaded = false; atEnd = false; senseLineState = false;
-	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0;
+	PausePlayback(); loaded = false; playing = false; atEnd = false; senseLineState = false;
+	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0; currentPulseOffsetUs = 0;
 	totalPlaybackTimeUs = 0; FreePulseBuffer();
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO); readLineState = true;
 	ResumePlayback();
 }
+bool TapePlayer::Play()
+{
+	if (!loaded) return false;
+	playing = true; senseLineState = true;
+	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	Pi1551Wake();
+	return true;
+}
+bool TapePlayer::Stop()
+{
+	if (!loaded) return false;
+	playing = false; senseLineState = false;
+	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
+	readLineState = true;
+	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	Pi1551Wake();
+	return true;
+}
+static u64 TapeCounterAtTimeMs(u64 elapsedMs);
+
 bool TapePlayer::SeekCounter(unsigned counter)
 {
 	if (!loaded || counter > 999) return false;
+	TapeUIState state; GetUIState(state);
+	if (counter > state.maxTapeCounter) counter = state.maxTapeCounter;
 	// Inverse of the VICE spool formula used by GetUIState().
 	const double d = 1.27e-5, r = 1.07e-2, v = 4.76e-2, g = 0.525, pi = 3.1415926535;
 	double turns = counter / g + r / d;
-	u64 target = (u64)(((turns * turns - (r / d) * (r / d)) * d * pi / v) * 1000000.0);
+	u64 maxCounter = TapeCounterAtTimeMs(totalPlaybackTimeUs / 1000);
+	u64 target = (maxCounter <= 999 && counter >= maxCounter)
+		? totalPlaybackTimeUs
+		: (u64)(((turns * turns - (r / d) * (r / d)) * d * pi / v) * 1000000.0);
 	PausePlayback();
 	u64 elapsed = 0; size_t index = 0;
 	while (index < pulseCount && elapsed + pulseTimings[index] <= target) elapsed += pulseTimings[index++];
-	currentPulseIndex = index; cumulativePulseTimeUs = elapsed; atEnd = index == pulseCount;
+	currentPulseIndex = index;
+	currentPulseOffsetUs = index < pulseCount ? target - elapsed : 0;
+	cumulativePulseTimeUs = target; atEnd = index == pulseCount;
 	readLineState = (index & 1) == 0;
 	if (readLineState) RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
 	else RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
-	senseLineState = true; RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 	ResumePlayback(); return true;
 }
 static u32 tapeLoadGeneration = 0;
+
+static u64 TapeCounterAtTimeMs(u64 elapsedMs)
+{
+	const double d = 1.27e-5, r = 1.07e-2, v = 4.76e-2, g = 0.525, pi = 3.1415926535;
+	double t = elapsedMs / 1000.0;
+	double term1 = (v * t) / (d * pi);
+	double term2 = (r * r) / (d * d);
+	double counter = g * (std::sqrt(term1 + term2) - r / d);
+	return static_cast<u64>(counter + 0.5);
+}
 
 // TAP file header structure
 struct TAPHeader
@@ -168,9 +206,10 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 
 	// Close any existing tape
 	loaded = false;
-	senseLineState = false;
+	playing = false; senseLineState = false;
 	tapFilename[0] = 0;
 	currentPulseIndex = 0;
+	currentPulseOffsetUs = 0;
 	atEnd = false;
 	// Respect configured motor behaviour (always on vs GPIO-driven)
 	Tick10ms();
@@ -204,15 +243,15 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	{
 		loaded = true;
 		currentPulseIndex = 0;
+		currentPulseOffsetUs = 0;
 		atEnd = false;
 		cumulativePulseTimeUs = 0;
 		tapeLoadGeneration++;
 		readLineState = true;  // Start with HIGH (output) like cbmtapepi on CBM side, first pulse will toggle to LOW
 		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);  // GPIO high = output high
-		// TAPE_SENSE: PLAY button pressed (active state) when TAP is loaded
-		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
-		senseLineState = true;  // PLAY pressed (active)
+		// A loaded cassette starts in the stopped state unless autoplay is enabled.
+		if (options.TapeAutoplay()) Play();
+		else Stop();
 		
 		// Motor behaviour from options: when always on, start immediately; otherwise wait for GPIO poll
 		Tick10ms();
@@ -296,7 +335,12 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	u64 totalTimeUs = 0;
 	size_t newPulseCount = 0;
 
-    size_t newCapacity = TAPE_MAX_HALFWAVES;
+    // Bound the output by the encoded input size instead of reserving the full
+    // 10M-pulse ceiling for every TAP, including very small files.
+    size_t pulsesPerByte = header.version == 2 ? 1 : 2;
+    size_t newCapacity = dataSize > TAPE_MAX_HALFWAVES / pulsesPerByte
+        ? TAPE_MAX_HALFWAVES
+        : (size_t)dataSize * pulsesPerByte;
     u64* newTimings = (u64*)malloc(newCapacity * sizeof(u64));
     if (!newTimings)
     {
@@ -482,24 +526,8 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 	// motorActive is runtime-configured: always on or GPIO-driven
 	motorActive = motorAlwaysOn ? true : motorHigh;
 
-	// SENSE logic: keep PLAY pressed whenever a tape is loaded and not at end.
-	// Motor state gates playback separately; stopping the motor should not
-	// auto-release PLAY, because the C16 controls motor but expects PLAY to
-	// stay engaged until the tape finishes or is unloaded.
-	if (loaded)
-	{
-		// senseLineState=true: GPIO HIGH → hardware inverts to output LOW → computer sees LOW = active
-		RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
-		senseLineState = true;  // PLAY pressed (active)
-	}
-	else
-	{
-		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
-		RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
-		senseLineState = false;  // PLAY released (inactive)
-	}
-
-	// Wake core 2 so it can react to the new motor/SENSE state
+	// Motor state is independent from tape loading and PLAY.
+	// Wake core 2 so it can react to the new motor state.
 	Pi1551Wake();
 	// CoreLoop() uses motorActive to gate playback.
 }
@@ -507,6 +535,7 @@ void TapePlayer::OnMotorChange(bool motorHigh)
 void TapePlayer::GetUIState(TapeUIState& state) const
 {
 	state.isLoaded = loaded;
+	state.isPlaying = playing;
 	state.motorActive = motorActive;
 	state.atEnd = atEnd;
 	state.loadGeneration = tapeLoadGeneration;
@@ -534,26 +563,11 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 		state.currentTimeMs = (currentTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(currentTimeMs64);
 		state.totalTimeMs = (totalTimeMs64 > maxU32) ? maxU32 : static_cast<u32>(totalTimeMs64);
 		
-		// VICE datasette counter constants (from datasette.h)
-		const double DS_D = 1.27e-5;
-		const double DS_R = 1.07e-2;
-		const double DS_V_PLAY = 4.76e-2;
-		const double DS_G = 0.525;
-		const double PI = 3.1415926535;
-		
-		// Convert time from milliseconds to seconds for formula
-		double t_seconds = currentTimeMs64 / 1000.0;
-		
-		// Calculate counter using VICE's physical model formula
-		// c = g * (sqrt(v*t/(d*pi) + r^2/d^2) - r/d)
-		double term1 = (DS_V_PLAY * t_seconds) / (DS_D * PI);
-		double term2 = (DS_R * DS_R) / (DS_D * DS_D);
-		double sqrt_term = std::sqrt(term1 + term2);
-		double counter_double = DS_G * (sqrt_term - DS_R / DS_D);
-		
 		// Convert to integer and wrap at 1000 (3-digit display: 000-999)
-		u64 counterValue = static_cast<u64>(counter_double + 0.5) % 1000;
+		u64 counterValue = TapeCounterAtTimeMs(currentTimeMs64) % 1000;
 		state.tapeCounter = static_cast<u32>(counterValue);
+		u64 maxCounter = TapeCounterAtTimeMs(totalTimeMs64);
+		state.maxTapeCounter = static_cast<u32>(maxCounter > 999 ? 999 : maxCounter);
 		
 		// Calculate percentage
 		if (totalTimeMs64 > 0)
@@ -570,6 +584,7 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	else
 	{
 		state.tapeCounter = 0;
+		state.maxTapeCounter = 0;
 		state.currentTimeMs = 0;
 		state.totalTimeMs = 0;
 		state.percentage = 0;
@@ -612,7 +627,7 @@ void TapePlayer::CoreLoop()
 		Pi1551Barrier();
 		if (editingPulses) continue;
 		// Wait until we have a valid tape loaded
-		if (!loaded || pulseTimings == nullptr || pulseCount == 0)
+		if (!loaded || !playing || pulseTimings == nullptr || pulseCount == 0)
 		{
 			// Put core into low-power mode until tape is loaded
 			// Core will be woken by SEV when LoadTap() is called
@@ -649,7 +664,12 @@ void TapePlayer::CoreLoop()
 		}
 
 		// Get current half-wave duration
-		u64 intervalUs = pulseTimings[currentPulseIndex];
+		u64 pulseDurationUs = pulseTimings[currentPulseIndex];
+		u64 pulseOffsetUs = currentPulseOffsetUs;
+		currentPulseOffsetUs = 0;
+		if (pulseOffsetUs >= pulseDurationUs)
+			pulseOffsetUs = pulseDurationUs ? pulseDurationUs - 1 : 0;
+		u64 intervalUs = pulseDurationUs - pulseOffsetUs;
 		if (intervalUs == 0)
 			intervalUs = 1;
 
@@ -662,7 +682,7 @@ void TapePlayer::CoreLoop()
 		while ((u32)(read32(ARM_SYSTIMER_CLO) - start) < (u32)intervalUs)
 		{
 			// If tape is unloaded or motor stopped during wait, abort this pulse
-			if (editingPulses || !loaded || !motorActive || atEnd)
+			if (editingPulses || !loaded || !playing || !motorActive || atEnd)
 				break;
 			
 			// For long pulses, update cumulative time periodically to keep counter accurate
@@ -675,14 +695,12 @@ void TapePlayer::CoreLoop()
 		}
 
 		if (editingPulses) continue;
-		if (!loaded || !motorActive || atEnd)
+		if (!loaded || !playing || !motorActive || atEnd)
 		{
 			// State changed while waiting; update time for elapsed portion
-			if (lastUpdateUs > 0)
-			{
-				u32 finalElapsedUs = (u32)(read32(ARM_SYSTIMER_CLO) - start);
-				cumulativePulseTimeUs += (finalElapsedUs - lastUpdateUs);
-			}
+			u32 finalElapsedUs = (u32)(read32(ARM_SYSTIMER_CLO) - start);
+			cumulativePulseTimeUs += (finalElapsedUs - lastUpdateUs);
+			currentPulseOffsetUs = pulseOffsetUs + finalElapsedUs;
 			// Re-evaluate outer loop conditions
 			continue;
 		}
@@ -708,6 +726,7 @@ void TapePlayer::CoreLoop()
 			// Short pulse - add all elapsed time at once
 			cumulativePulseTimeUs += finalElapsedUs;
 		}
+		currentPulseOffsetUs = 0;
 		currentPulseIndex++;
 	}
 }

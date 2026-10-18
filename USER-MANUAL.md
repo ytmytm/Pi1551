@@ -432,6 +432,14 @@ are not USB keyboard shortcuts on the Raspberry Pi.
 Selecting a `.tap` file loads it and asserts the tape SENSE line as if PLAY is
 pressed. The player then emits tape pulses on the READ line.
 
+When the computer controls the motor, `M` on the OLED follows the computer's
+MOTOR line. During a cassette `LOAD`, the Kernal can display `PRESS PLAY ON
+TAPE` while MOTOR is still off: it waits for the tape SENSE line before
+turning the motor on. PLAY, REW, and FF all activate this same SENSE signal,
+so the computer cannot tell which transport key was pressed. Choosing Stop
+releases SENSE, but does not immediately cancel the Kernal's active search or
+load; MOTOR can remain on until that operation finishes.
+
 `tapeMotorAlwaysOn` controls how playback starts:
 
 - `tapeMotorAlwaysOn = 1`: motor is treated as always active. Playback starts

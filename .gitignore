@@ -21,5 +21,6 @@ graphify-out/
 .claude/
 CLAUDE.md
 tests/.build/
+tools/__pycache__/
 src/*.d
 uspi/**/*.d

@@ -143,6 +143,7 @@ Options::Options(void)
 	, splitIECLines(1)
 	, ignoreReset(0)
 	, tapeMotorAlwaysOn(1)
+	, tapeAutoplay(1)
 	, skipMotorSpinUpDelay(0)
 	, idleSleep(1)
 	, autoBootFB128(0)
@@ -238,6 +239,7 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(soundOnGPIOFreq)
 		ELSE_CHECK_DECIMAL_OPTION(ignoreReset)
 		ELSE_CHECK_DECIMAL_OPTION(tapeMotorAlwaysOn)
+		ELSE_CHECK_DECIMAL_OPTION(tapeAutoplay)
 		ELSE_CHECK_DECIMAL_OPTION(skipMotorSpinUpDelay)
 		ELSE_CHECK_DECIMAL_OPTION(idleSleep)
 		ELSE_CHECK_DECIMAL_OPTION(autoMountEnabled)
@@ -407,6 +409,7 @@ int Options::Runtime(oled::Setting id) const
     case Setting::Spinup: return skipMotorSpinUpDelay;
     case Setting::IgnoreReset: return ignoreReset;
     case Setting::MotorAlways: return tapeMotorAlwaysOn;
+    case Setting::TapeAutoplay: return tapeAutoplay;
     case Setting::AutoMount: return autoMountEnabled;
     case Setting::ResetPath: return onResetChangeToStartingFolder;
     case Setting::Lowercase: return lowercaseBrowseModeFilenames;
@@ -438,6 +441,7 @@ void Options::SetRuntime(oled::Setting id, int value)
     case Setting::Spinup: skipMotorSpinUpDelay = value; break;
     case Setting::IgnoreReset: ignoreReset = value; break;
     case Setting::MotorAlways: tapeMotorAlwaysOn = value; break;
+    case Setting::TapeAutoplay: tapeAutoplay = value; break;
     case Setting::AutoMount: autoMountEnabled = value; break;
     case Setting::ResetPath: onResetChangeToStartingFolder = value; break;
     case Setting::Lowercase: lowercaseBrowseModeFilenames = value; break;

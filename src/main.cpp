@@ -436,42 +436,6 @@ void ApplyPi1551ROMSwitchFromUI(unsigned romIndex)
 #endif
 }
 
-// Returns true when browse/disk background input must be ignored (ROM selector foreground).
-static bool Pi1551ROMSelectBrowseUpdate(FileBrowser* fileBrowser)
-{
-	if (!options.RotaryEncoderEnable() || roms.CountValid1551ROMs() <= 1)
-		return false;
-
-	TCBM_Bus::ReadBrowseMode();
-	bool rotaryNext = false;
-	bool rotaryPrev = false;
-	TCBM_Bus::ConsumeRotaryDiskSteps(rotaryNext, rotaryPrev);
-
-	bool applyRom = false;
-	unsigned applyRomIndex = 0;
-	Pi1551ROMSelectPoll(rotaryNext, rotaryPrev, applyRom, applyRomIndex);
-	Pi1551ROMSelectClearConsumedRotaryButtons();
-	if (applyRom || g_romSelect.active)
-		Pi1551ROMSelectAbsorbEnterRelease();
-	if (applyRom)
-	{
-		TCBM_Bus::ClearRotarySynthesizedButtons();
-		ApplyPi1551ROMSwitchFromUI(applyRomIndex);
-		if (fileBrowser)
-		{
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Acquire();
-#endif
-			fileBrowser->RefeshDisplay();
-#if not defined(EXPERIMENTALZERO)
-			core0RefreshingScreen.Release();
-#endif
-		}
-		return true;
-	}
-	return Pi1551ROMSelectBlocksBackgroundInput();
-}
-
 static void ServicePi1551UserInput(unsigned numberOfImages, unsigned numberOfImagesMax)
 {
 	if (Pi1551Oled::Enabled()) { Pi1551Oled::PollInput(); return; }
@@ -3066,12 +3030,12 @@ oled::Status OledKernelStatus()
     static u32 nextTemperature = 0, nextSpace = 0;
     static std::string size, free;
     u32 now = read32(ARM_SYSTIMER_CLO);
+    // Refresh the motor indication on every status read, whether or not a TAP
+    // is loaded. Motor ON is a configured state as well as a GPIO state.
+    tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
+        || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
     if ((int)(now - nextTemperature) >= 0) {
         unsigned value; if (GetTemperature(value)) temperature = value / 1000;
-        // MOTOR is an input signal, not a property of a loaded TAP. Keep its
-        // status visible even when the virtual cassette is empty.
-        tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
-            || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
         nextTemperature = now + 1000000;
     }
     if ((int)(now - nextSpace) >= 0) {
@@ -3094,7 +3058,7 @@ oled::Status OledKernelStatus()
     if (g_tapePlayer) {
         g_tapePlayer->Tick10ms(); TapeUIState tape; g_tapePlayer->GetUIState(tape);
         s.tape = tape.isLoaded ? tape.filename : "";
-        s.play = tape.isLoaded; s.counter = tape.tapeCounter; s.percent = tape.percentage;
+        s.play = tape.isPlaying; s.counter = tape.tapeCounter; s.counterMax = tape.maxTapeCounter; s.percent = tape.percentage;
     }
     s.motor = tapeMotor;
     return s;

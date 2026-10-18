@@ -131,6 +131,7 @@ Common `options.txt` settings:
 | `RotaryEncoderEnable` | Enables the fixed-wiring encoder; ROM selection is under Settings -> ROM. |
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
 | `tapeMotorAlwaysOn` | Keeps TAP playback motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` to follow MOTOR on original machines. |
+| `tapeAutoplay` | Presses PLAY automatically when a TAP is loaded (`1`, default); set to `0` to load it stopped and use Play/Stop in the Tape menu. |
 | `skipMotorSpinUpDelay` | Skips the emulated 1551 motor spin-up delay when set. |
 | `IdleSleep` | Pauses an idle D64 drive at the stock ROM TCBM wait loop to reduce Raspberry Pi power use and temperature. Enabled by default. |
 
@@ -172,14 +173,14 @@ Browser / Fliplist -> Menu...
 ├─ ..
 ├─ Clear list                         (only when the list is nonempty)
 ├─ Browser                            (clear list and unmount)
-├─ Tape: .., 1:<filename>, Load TAP..., Eject TAP, Rewind, Go to counter
+├─ Tape: .., 1:<filename>, Play/Stop (when loaded), Load TAP... (when empty), Eject TAP, Rewind, Go to counter
 ├─ Disk: .., WProt, Write image, New image, Reset drive
 │  └─ New image: .., Type D64/G64, Create image
 ├─ Settings
 │  ├─ ..
 │  ├─ ROM: .., configured ROM1..ROM7 filenames
 │  ├─ Drive: .., Device number, Idle trap, RAMBOard, Skip spinup, Reset
-│  ├─ Tape: .., Motor ON ALWAYS/COMP.
+│  ├─ Tape: .., Motor ON ALWAYS/COMP., Tape auto ON/OFF
 │  ├─ Browser: .., Auto mount, Reset path, Lowercase, SD2IEC Cmds.
 │  ├─ Display: .., Temp, Contrast, Dimming, Dim time, Dim level, Orient, Font, Scroll
 │  ├─ Encoder: .., Reverse

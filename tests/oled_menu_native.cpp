@@ -41,6 +41,7 @@ struct KernelStub : Backend {
     bool Unmount() override { if (failUnmount) return false; effects.push_back("unmount:"+medium); medium.clear(); status.emulating = false; return true; }
     bool ReadList(const std::string&,std::vector<Entry>& e) override { e = lst; return true; }
     bool LoadTape(const std::string& p) override { if (failTape) return false; status.tape = p; status.play = true; status.counter = 0; effects.push_back("play:1"); return true; }
+    bool SetTapePlaying(bool play) override { if (status.tape.empty()) return false; status.play = play; effects.push_back(play ? "play:1" : "play:0"); return true; }
     void EjectTape() override { status.tape.clear(); status.play = false; effects.push_back("play:0"); }
     bool SeekTape(unsigned n) override { if (status.tape.empty()) return false; status.counter = n; effects.push_back("seek:"+std::to_string(n)); return true; }
     Status ReadStatus() override { return status; }
@@ -183,12 +184,18 @@ static void tape_independent_and_seek() {
     CHECK(k.status.play); CHECK(k.status.motor);
     CHECK(m.OpenMedia(Image("d64"))); CHECK(k.status.counter == 0);
     Device(m); Enter(m,"Tape"); CHECK(m.Cursor() == 1);
+    Enter(m,"Stop"); CHECK(!k.status.play);
+    Enter(m,"Play"); CHECK(k.status.play);
+    k.status.counterMax = 10;
     Choose(m,"1:"); bool tail = false;
     for (unsigned ms = 0; ms < 16000; ms += 100) if (std::string(m.Render(ms).rows[3]).find("dash.tap") != std::string::npos) tail = true;
     CHECK(tail);
     Enter(m,"Go to counter"); CHECK(m.CurrentView() == View::Seek);
-    Press(m,Key::Right,7); Press(m,Key::Enter); CHECK(k.status.counter == 7); CHECK(m.CurrentView() == View::Tape);
-    Enter(m,"Go to counter"); Press(m,Key::Right,3); Press(m,Key::Back); CHECK(k.status.counter == 7);
+    Press(m,Key::Right,7); CHECK(std::string(m.Render(17000).rows[3]).find("TARGET 007/010") != std::string::npos);
+    Press(m,Key::Enter); CHECK(k.status.counter == 7); CHECK(m.CurrentView() == View::Tape);
+    k.status.counterMax = 8;
+    Enter(m,"Go to counter"); Press(m,Key::Right,5); Press(m,Key::Enter); CHECK(k.status.counter == 8);
+    Enter(m,"Go to counter"); Press(m,Key::Right,3); Press(m,Key::Back); CHECK(k.status.counter == 8);
     Enter(m,"Rewind"); CHECK(k.status.counter == 0);
     Enter(m,"Eject TAP"); CHECK(k.status.tape.empty()); CHECK(!k.status.play); CHECK(k.status.motor);
     Enter(m,"Load TAP..."); CHECK(k.medium.empty()); CHECK(m.CurrentView() == View::Browser);
@@ -276,9 +283,9 @@ static void settings_preserve_user_layout() {
     changes[Setting::Idle] = 0; expected.replace(expected.find("idleSleep=1"),11,"idleSleep=0");
     CHECK(MergeRuntimeSettings(input,changes,defaults) == expected);
     changes[Setting::Freq] = 1200; defaults[Setting::Freq] = 1200;
-    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected); // missing default must not be added
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1200\r\n");
     changes[Setting::Freq] = 1600;
-    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\nsoundOnGPIOFreq = 1600\r\n");
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1600\r\n");
     changes.clear(); changes[Setting::Device] = 9;
     CHECK(MergeRuntimeSettings("deviceID = 8 // earlier\ndeviceID\t=\t8 # effective",changes) ==
         "deviceID = 8 // earlier\ndeviceID\t=\t9 # effective");
