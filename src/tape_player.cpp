@@ -330,7 +330,12 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	u64 totalTimeUs = 0;
 	size_t newPulseCount = 0;
 
-    size_t newCapacity = TAPE_MAX_HALFWAVES;
+    // Bound the output by the encoded input size instead of reserving the full
+    // 10M-pulse ceiling for every TAP, including very small files.
+    size_t pulsesPerByte = header.version == 2 ? 1 : 2;
+    size_t newCapacity = dataSize > TAPE_MAX_HALFWAVES / pulsesPerByte
+        ? TAPE_MAX_HALFWAVES
+        : (size_t)dataSize * pulsesPerByte;
     u64* newTimings = (u64*)malloc(newCapacity * sizeof(u64));
     if (!newTimings)
     {
