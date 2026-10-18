@@ -276,9 +276,9 @@ static void settings_preserve_user_layout() {
     changes[Setting::Idle] = 0; expected.replace(expected.find("idleSleep=1"),11,"idleSleep=0");
     CHECK(MergeRuntimeSettings(input,changes,defaults) == expected);
     changes[Setting::Freq] = 1200; defaults[Setting::Freq] = 1200;
-    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected); // missing default must not be added
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1200\r\n");
     changes[Setting::Freq] = 1600;
-    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\nsoundOnGPIOFreq = 1600\r\n");
+    CHECK(MergeRuntimeSettings(input,changes,defaults) == expected + "\r\n\r\n// Sound frequency in Hz.\r\nsoundOnGPIOFreq = 1600\r\n");
     changes.clear(); changes[Setting::Device] = 9;
     CHECK(MergeRuntimeSettings("deviceID = 8 // earlier\ndeviceID\t=\t8 # effective",changes) ==
         "deviceID = 8 // earlier\ndeviceID\t=\t9 # effective");

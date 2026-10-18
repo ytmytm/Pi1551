@@ -219,9 +219,8 @@ public:
         std::string updated = oled::MergeRuntimeSettings(text, changes, defaults);
         if (updated == text) { CaptureBaseline(); return true; }
         text = updated;
-        // Never truncate the original: sync a new file, then retain it as a backup.
+        // Never truncate the original: sync a new file, then replace the user backup.
         if (f_stat("/options.txt.tmp", &f) == FR_OK) return Failure("options.txt.tmp exists");
-        if (f_stat("/options.txt.bak", &f) == FR_OK) return Failure("options.txt.bak exists");
         FIL out; FRESULT result = f_open(&out, "/options.txt.tmp", FA_WRITE | FA_CREATE_NEW);
         if (result != FR_OK) return Failure("Create temp failed",result);
         UINT n = 0; result = f_write(&out, text.data(), text.size(), &n);
@@ -232,15 +231,22 @@ public:
         result = f_close(&out);
         if (result != FR_OK) { if (ok) Failure("Close temp failed",result); ok = false; }
         if (!ok) { f_unlink("/options.txt.tmp"); return false; }
-        if (exists == FR_OK && (result = f_rename("/options.txt", "/options.txt.bak")) != FR_OK) {
+        FRESULT backupState = f_stat("/options-backup.txt", &f);
+        if (backupState == FR_OK && (result = f_unlink("/options-backup.txt")) != FR_OK) {
+            f_unlink("/options.txt.tmp"); return Failure("Remove old settings backup failed",result);
+        }
+        if (backupState != FR_OK && backupState != FR_NO_FILE) {
+            f_unlink("/options.txt.tmp"); return Failure("Stat settings backup failed",backupState);
+        }
+        if (exists == FR_OK && (result = f_rename("/options.txt", "/options-backup.txt")) != FR_OK) {
             f_unlink("/options.txt.tmp"); return Failure("Backup rename failed",result);
         }
         if ((result = f_rename("/options.txt.tmp", "/options.txt")) != FR_OK) {
-            if (exists == FR_OK && f_rename("/options.txt.bak", "/options.txt") == FR_OK)
-                f_unlink("/options.txt.tmp");
+            if (exists == FR_OK && f_rename("/options-backup.txt", "/options.txt") != FR_OK)
+                return Failure("Install failed; restore options-backup.txt manually",result);
+            f_unlink("/options.txt.tmp");
             return Failure("Install settings failed",result);
         }
-        if (exists == FR_OK) f_unlink("/options.txt.bak");
         CaptureBaseline();
         return true;
     }

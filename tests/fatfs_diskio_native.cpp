@@ -102,6 +102,12 @@ static bool Click(const char* label) {
     }
     return false;
 }
+static std::string ReadFile(const char* path) {
+    FIL file; if (f_open(&file,path,FA_READ)!=FR_OK) return std::string();
+    std::string text; char buffer[256]; UINT count=0;
+    while (f_read(&file,buffer,sizeof(buffer),&count)==FR_OK && count) text.append(buffer,count);
+    f_close(&file); return text;
+}
 int main() {
     static_assert(sizeof(DWORD)==4,"FatFS DWORD must match ARM");
     CEMMCDevice card; unsigned char block[512] = {};
@@ -123,6 +129,8 @@ int main() {
         CHECK(options.GetDeviceID()==9); Pi1551Oled::TestMenu().Input(oled::Key::Back);
         CHECK(Click("Save settings")); CHECK(Pi1551Oled::TestMenu().Message()=="Settings saved");
         const char changed[] = "// keep order\r\ndeviceID = 9 // user comment\r\nROM2 = custom.bin\r\n";
+        CHECK(ReadFile("/options-backup.txt") == original);
+        CHECK(ReadFile("/options.txt") == changed);
         Pi1551Oled::TestMenu().Render(now); Pi1551Oled::TestMenu().Input(oled::Key::Back);
         options.SetRuntime(oled::Setting::Device,8);
         CHECK(Click("Load settings")); CHECK(options.GetDeviceID()==9);
