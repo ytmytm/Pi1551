@@ -60,7 +60,7 @@ class Simulator:
         "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
-        "tape_settings": ["..", "Motor ON", "Tape auto"],
+        "tape_settings": ["..", "Motor ON", "Autoplay"],
         "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC Cmds."],
         "display": ["..", "Temp", "Contrast", "Dimming", "Dim time", "Dim level", "Orient", "Font", "Scroll"],
         "encoder": ["..", "Reverse"],
@@ -161,7 +161,7 @@ class Simulator:
     def display_value(self, item: str) -> str:
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
-          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Tape auto": self.on(self.options["Tape autoplay"]), "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
+          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Autoplay": self.on(self.options["Tape autoplay"]), "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
           "Freq": self.options["Freq"], "Mode": "BUZZER" if self.options["soundOnGPIO"] else "SAMPLE",
           "Duration": f'{self.options["Duration"]}ms', "Temp": self.on(self.options["Temp"]),
           "Dim time": f'{self.options["Dim time"]}s' if self.options["Dim time"] else "OFF", "Dim level": str(self.options["Dim level"]),
@@ -419,7 +419,7 @@ class Simulator:
         elif item == "Reverse": self.options["Encoder reverse"] = not self.options["Encoder reverse"]
         elif item == "Freq": self.options[item] = {"1600 Hz": "1200 Hz", "1200 Hz": "2000 Hz", "2000 Hz": "1600 Hz"}.get(self.options[item], "1600 Hz")
         elif item == "Motor ON": self.options["Motor override"] = not self.options["Motor override"]
-        elif item == "Tape auto": self.options["Tape autoplay"] = not self.options["Tape autoplay"]
+        elif item == "Autoplay": self.options["Tape autoplay"] = not self.options["Tape autoplay"]
         self.message = f"{item}: {self.display_value(item)}"
         if self.screen == "sound":
             self.sound_preview_until = time.monotonic() + 1.0

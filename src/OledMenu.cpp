@@ -256,7 +256,7 @@ std::vector<Menu::Row> Menu::Rows() {
             if (id == Setting::Freq) value += " Hz";
             if (id == Setting::IgnoreReset) value = v ? "IGNORE" : "REACT";
             if (id == Setting::MotorAlways) value = v ? "ALWAYS" : "COMP.";
-            if (id == Setting::TapeAutoplay) { r.push_back(Row(std::string("Tape auto ") + On(v))); continue; }
+            if (id == Setting::TapeAutoplay) { r.push_back(Row(std::string("Autoplay ") + On(v))); continue; }
             if (id == Setting::Orient) value = v ? "flip" : "normal";
             if (id == Setting::Font) value = v ? "C64" : "ASCII";
             if (id == Setting::SoundMode) value = v ? "BUZZER" : "SAMPLE";

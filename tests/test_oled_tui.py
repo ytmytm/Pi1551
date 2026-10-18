@@ -55,7 +55,7 @@ class TuiControls(unittest.TestCase):
                 self.assertEqual(s.display_value("PLAY"), "OFF")
                 s.set_screen("tape_settings")
                 self.assertEqual(s.display_value("Motor ON"), "ALWAYS" if motor_always else "COMP.")
-                self.assertEqual(s.display_value("Tape auto"), "ON" if autoplay else "OFF")
+                self.assertEqual(s.display_value("Autoplay"), "ON" if autoplay else "OFF")
 
     def test_tape_play_stop_are_rendered_between_load_and_eject(self):
         tape = Simulator().sd.children[0].children[3].children[0]
