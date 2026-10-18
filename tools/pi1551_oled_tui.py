@@ -59,7 +59,7 @@ class Simulator:
         "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
-        "tape_settings": ["..", "Motor ON"],
+        "tape_settings": ["..", "Motor ON", "Tape auto"],
         "browser_settings": ["..", "Auto mount", "Reset path", "Lowercase", "SD2IEC Cmds."],
         "display": ["..", "Temp", "Contrast", "Dimming", "Dim time", "Dim level", "Orient", "Font", "Scroll"],
         "encoder": ["..", "Reverse"],
@@ -79,12 +79,12 @@ class Simulator:
         self.flip_mode = "solo"
         self.fliplist: list[Node] = []; self.disk: Optional[Node] = None; self.active_media: Optional[Node] = None
         self.last_flip_media: Optional[Node] = None
-        self.tape: Optional[Node] = None; self.tape_pos = 0; self.tape_motor = False
+        self.tape: Optional[Node] = None; self.tape_playing = False; self.tape_pos = 0; self.tape_motor = False
         self.seek_target = 0
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
-        self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True,
+        self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True, "Tape autoplay": True,
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
                         "SD2IEC Cmds.": True, "Contrast": 255, "Dimming": True, "Orientation": "normal",
                         "scrollHighlightRate": 0.10, "i2cLcdUseCBMChar": True, "Encoder enabled": True, "Encoder reverse": False,
@@ -150,20 +150,24 @@ class Simulator:
     def items(self) -> list[str]:
         items = self.GROUPS.get(self.screen, [])
         if self.screen == "sound" and not self.options["soundOnGPIO"]: return items[:3]
+        if self.screen == "tape":
+            if self.tape:
+                return ["..", "TAP FILE", "Stop" if self.tape_playing else "Play", "Eject TAP", "Rewind", "Go to counter"]
+            return ["..", "TAP FILE", "Load TAP..."]
         if self.screen == "menu" and self.fliplist:
             return ["..", "Clear list", *items[1:]]
         return items
     def display_value(self, item: str) -> str:
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
-          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
+          "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Tape auto": self.on(self.options["Tape autoplay"]), "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
           "Freq": self.options["Freq"], "Mode": "BUZZER" if self.options["soundOnGPIO"] else "SAMPLE",
           "Duration": f'{self.options["Duration"]}ms', "Temp": self.on(self.options["Temp"]),
           "Dim time": f'{self.options["Dim time"]}s' if self.options["Dim time"] else "OFF", "Dim level": str(self.options["Dim level"]),
           "Type": self.options["NewDiskType"],
           "D64": self.active_media.name if self.active_media else "---", "TAP": self.tape.name if self.tape else "---",
           "LED": self.on(self.disk is not None and self.activity != "browser"), "MOTOR": self.on(self.motor_active()),
-          "PLAY": self.on(self.tape is not None), "TRACK": f"{self.track:04.1f}{'S' if self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "---",
+          "PLAY": self.on(self.tape_playing), "TRACK": f"{self.track:04.1f}{'S' if self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "---",
           "TARGET": f"{self.seek_target:03d}", "TAP FILE": self.tape.name if self.tape else "---",
           "Contrast": str(self.options["Contrast"]), "Dimming": self.on(self.options["Dimming"]), "Orient": self.options["Orientation"],
           "Font": "C64" if self.options["i2cLcdUseCBMChar"] else "ASCII", "Scroll": f'{self.options["scrollHighlightRate"]:.2f}s',
@@ -173,7 +177,7 @@ class Simulator:
         return values.get(item, "")
     def signal_status(self) -> str:
         idle = "S" if self.disk and self.activity == "idle" and self.options["Idle trap"] else ""
-        return f"L{1 if self.disk and self.activity != 'browser' else 0} M{1 if self.motor_active() else 0} P{1 if self.tape else 0} T{self.track:04.1f}{idle}"
+        return f"L{1 if self.disk and self.activity != 'browser' else 0} M{1 if self.motor_active() else 0} P{1 if self.tape_playing else 0} T{self.track:04.1f}{idle}"
     def browser_items(self) -> list[Node]:
         result: list[Node] = []
         if len(self.path) > 1: result.append(Node("[..]", "parent"))
@@ -288,7 +292,7 @@ class Simulator:
         self.active_media = node if add_to_fliplist else None
         self.path.append(node); self.browser_source = node; self.disk = None; self.activity = "browser"; self.reset_cursor(); self.message = f"Browser source: {node.name}"
     def load_tape(self, node: Node) -> None:
-        self.tape, self.tape_pos = node, 0; self.browser_filter = None
+        self.tape, self.tape_pos = node, 0; self.tape_playing = self.options["Tape autoplay"]; self.browser_filter = None
         if self.screen == "browser" and self.previous_screen == "tape": self.set_screen("tape")
         self.message = f"Loaded {node.name}"
     def activate_browser(self) -> None:
@@ -360,7 +364,9 @@ class Simulator:
                 self.unmount_for_browser()
                 self.path = [self.sd]; self.browser_source = self.sd
                 self.browser_filter = "tape"; self.previous_screen = "tape"; self.set_screen("browser"); self.message = "Choose a TAP"
-            elif item == "Eject TAP": self.tape = None; self.tape_pos = 0; self.message = "TAP ejected"
+            elif item == "Play": self.tape_playing = True; self.message = "PLAY pressed"
+            elif item == "Stop": self.tape_playing = False; self.message = "PLAY released"
+            elif item == "Eject TAP": self.tape = None; self.tape_playing = False; self.tape_pos = 0; self.message = "TAP ejected"
             elif item == "Rewind":
                 if self.tape: self.tape_pos = 0; self.message = "TAP rewound"
                 else: self.message = "No TAP loaded"
@@ -412,6 +418,7 @@ class Simulator:
         elif item == "Reverse": self.options["Encoder reverse"] = not self.options["Encoder reverse"]
         elif item == "Freq": self.options[item] = {"1600 Hz": "1200 Hz", "1200 Hz": "2000 Hz", "2000 Hz": "1600 Hz"}.get(self.options[item], "1600 Hz")
         elif item == "Motor ON": self.options["Motor override"] = not self.options["Motor override"]
+        elif item == "Tape auto": self.options["Tape autoplay"] = not self.options["Tape autoplay"]
         self.message = f"{item}: {self.display_value(item)}"
         if self.screen == "sound":
             self.sound_preview_until = time.monotonic() + 1.0
@@ -475,7 +482,7 @@ class Simulator:
         if self.disk: self.header_key = None
         drive = f"{self.device}: {self.track:04.1f}{'S' if self.disk and self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else self.folder_status()
         percent = min(99, self.tape_pos // 10)
-        tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}P" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
+        tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}{'P' if self.tape_playing else '-'}" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
         return drive, tape
     def folder_status(self) -> str:
         prefix = f"{self.device}:"; folder = self.current_dir.name
@@ -507,7 +514,7 @@ class Simulator:
             if self.screen == "browser": self.reset_cursor()
         self.message = "Drive RESET ignored" if ignored else f"Computer RESET #{self.reset_count}"
     def tick(self) -> None:
-        if self.tape and self.motor_active(): self.tape_pos = (self.tape_pos + 1) % 1000
+        if self.tape and self.tape_playing and self.motor_active(): self.tape_pos = (self.tape_pos + 1) % 1000
         if self.disk and self.activity == "mounted": self.track = 1.0 if self.track > 35 else self.track + .1; self.activity = "idle" if self.options["Idle trap"] else "run"
         self.update_scroll()
     def selected_name(self) -> str:

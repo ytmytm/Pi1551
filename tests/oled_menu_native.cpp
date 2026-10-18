@@ -41,6 +41,7 @@ struct KernelStub : Backend {
     bool Unmount() override { if (failUnmount) return false; effects.push_back("unmount:"+medium); medium.clear(); status.emulating = false; return true; }
     bool ReadList(const std::string&,std::vector<Entry>& e) override { e = lst; return true; }
     bool LoadTape(const std::string& p) override { if (failTape) return false; status.tape = p; status.play = true; status.counter = 0; effects.push_back("play:1"); return true; }
+    bool SetTapePlaying(bool play) override { if (status.tape.empty()) return false; status.play = play; effects.push_back(play ? "play:1" : "play:0"); return true; }
     void EjectTape() override { status.tape.clear(); status.play = false; effects.push_back("play:0"); }
     bool SeekTape(unsigned n) override { if (status.tape.empty()) return false; status.counter = n; effects.push_back("seek:"+std::to_string(n)); return true; }
     Status ReadStatus() override { return status; }
@@ -183,6 +184,8 @@ static void tape_independent_and_seek() {
     CHECK(k.status.play); CHECK(k.status.motor);
     CHECK(m.OpenMedia(Image("d64"))); CHECK(k.status.counter == 0);
     Device(m); Enter(m,"Tape"); CHECK(m.Cursor() == 1);
+    Enter(m,"Stop"); CHECK(!k.status.play);
+    Enter(m,"Play"); CHECK(k.status.play);
     Choose(m,"1:"); bool tail = false;
     for (unsigned ms = 0; ms < 16000; ms += 100) if (std::string(m.Render(ms).rows[3]).find("dash.tap") != std::string::npos) tail = true;
     CHECK(tail);
