@@ -3066,12 +3066,12 @@ oled::Status OledKernelStatus()
     static u32 nextTemperature = 0, nextSpace = 0;
     static std::string size, free;
     u32 now = read32(ARM_SYSTIMER_CLO);
+    // Refresh the motor indication on every status read, whether or not a TAP
+    // is loaded. Motor ON is a configured state as well as a GPIO state.
+    tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
+        || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
     if ((int)(now - nextTemperature) >= 0) {
         unsigned value; if (GetTemperature(value)) temperature = value / 1000;
-        // MOTOR is an input signal, not a property of a loaded TAP. Keep its
-        // status visible even when the virtual cassette is empty.
-        tapeMotor = g_tapePlayer && (options.TapeMotorAlwaysOn()
-            || RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_MOTOR_GPIO) == RPI_IO_LO);
         nextTemperature = now + 1000000;
     }
     if ((int)(now - nextSpace) >= 0) {
