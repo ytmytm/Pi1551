@@ -647,7 +647,7 @@ class UI:
                     value = "TAP " + sim.scrolling(sim.tape.name, index == sim.cursor)
                 self.line(2 + row, value, index == sim.cursor)
         elif sim.screen == "tape":
-            values = ["..", "1:", "Load TAP...", "Eject TAP", "Rewind", "Go to counter"]
+            values = sim.items()
             for row, value in enumerate(values):
                 if row == 1 and sim.tape: value = "1:" + sim.scrolling(sim.tape.name, True)
                 self.line(2 + row, value, row == sim.cursor)
