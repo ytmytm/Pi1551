@@ -57,30 +57,17 @@ void RPI_SetGpioInputPullUp(rpi_gpio_pin_t gpio)
 
 rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t gpio)
 {
-  rpi_gpio_value_t result = RPI_IO_UNKNOWN;
-
   switch (gpio / 32)
   {
     case 0:
-      result = RPI_GpioBase->GPLEV0[0] & (1 << gpio);
-    break;
+      return (RPI_GpioBase->GPLEV0[0] & (1u << gpio)) ? RPI_IO_HI : RPI_IO_LO;
 
     case 1:
-      //result = RPI_GpioBase->GPLEV1 & (1 << (gpio - 32));
-	  result = RPI_GpioBase->GPLEV0[1] & (1 << (gpio - 32));
-	  break;
+      return (RPI_GpioBase->GPLEV0[1] & (1u << (gpio - 32))) ? RPI_IO_HI : RPI_IO_LO;
 
     default:
-    break;
+      return RPI_IO_UNKNOWN;
   }
-
-  if (result != RPI_IO_UNKNOWN)
-  {
-    if (result)
-      result = RPI_IO_HI;
-  }
-
-  return result;
 }
 
 void RPI_ToggleGpio(rpi_gpio_pin_t gpio)

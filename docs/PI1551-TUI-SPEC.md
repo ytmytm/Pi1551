@@ -64,11 +64,14 @@ The row has a fixed layout:
 - TAP loaded, stopped, motor on: `TAPE 000 00% M-`
 - TAP playing, motor off: `TAPE 000 00% -P`
 - TAP playing, motor on: `TAPE 000 00% MP`
+- TAP recording, motor off: `TAPE 000 00% -R`
+- TAP recording, motor on: `TAPE 000 00% MR`
 
 `M` is the effective tape motor state: always on in `Motor ON ALWAYS`, or the
 live computer input in `Motor ON COMP.`. The `m` key toggles that computer input
 even in `ALWAYS` mode, but cannot turn the effective motor off there. `P` means
-PLAY is pressed; a loaded TAP can be stopped and played independently. Motor
+PLAY is pressed; `R` means RECORD is pressed (which also presses PLAY). A loaded
+TAP can be stopped and played independently. Motor
 state is independent of tape presence and disk activity.
 The simulated counter is 000..999 and the percentage is derived from it.
 The firmware derives the counter from actual TAP timing using the existing
@@ -293,6 +296,9 @@ The current order is:
 1:<loaded TAP filename>
 Play or Stop (only when loaded)
 Load TAP... (only when empty)
+Record (available without a TAP; hidden during RECORD)
+  New TAP
+  Current TAP (only when loaded)
 Eject TAP (only when loaded)
 Rewind (only when loaded)
 Go to counter (only when loaded)
@@ -301,7 +307,7 @@ Go to counter (only when loaded)
 The filename row shows exactly `1:` when no TAP is loaded. When a TAP is
 loaded it shows its name after the fixed `1:` prefix and scrolls. The menu
 shows `Play` or `Stop` according to PLAY state. With no TAP it shows
-`Load TAP...`; eject, rewind and seek only appear while a TAP is loaded. The
+`Load TAP...` and `Record`; eject, rewind and seek only appear while a TAP is loaded. The
 counter and motor are not duplicated here because they are always visible in
 OLED row 1.
 
@@ -310,12 +316,16 @@ OLED row 1.
   for a later return to Fliplist; a temporary `SOLO` entry is cleared. Back
   returns to Tape; choosing a TAP loads it and returns to Tape;
 - `Play` / `Stop`: presses or releases PLAY while keeping the loaded TAP;
-- `Eject TAP`: removes the TAP and releases PLAY, without changing motor state;
-- `Rewind`: sets counter to 000 when a TAP is loaded; otherwise reports
+  Stop also ends RECORD and saves changed data;
+- `Record`: New TAP creates the next unused `NEWTAPE*.tap` in the current SD
+  folder; Current TAP records from the loaded tape's position. RECORD presses
+  PLAY and follows MOTOR. New TAP is available even without a loaded tape;
+- `Eject TAP`: stops, saves changed data and removes the TAP without changing motor state;
+- `Rewind`: stops, saves changed data and sets counter to 000 when a TAP is loaded; otherwise reports
   `No TAP loaded`;
 - `Go to counter`: opens a numeric editor only when a TAP is loaded;
   otherwise reports `No TAP loaded`. Left/right changes the target
-  000..999, Enter seeks to it, and Back/`..` cancels.
+  000..999, Enter stops, saves changed data and seeks to it, and Back/`..` cancels.
 
 ## Disk menu
 

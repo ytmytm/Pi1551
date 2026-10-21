@@ -109,6 +109,15 @@ extern "C" FRESULT f_lseek(FIL* fp, FSIZE_t offset)
 	return FR_OK;
 }
 
+extern "C" FRESULT f_truncate(FIL* fp)
+{
+	std::map<FIL*, std::FILE*>::iterator it = files.find(fp);
+	if (it == files.end()) return FR_INVALID_OBJECT;
+	if (std::fflush(it->second) != 0 || ftruncate(fileno(it->second), static_cast<off_t>(fp->fptr)) != 0) return FR_DISK_ERR;
+	fp->obj.objsize = fp->fptr;
+	return FR_OK;
+}
+
 extern "C" FRESULT f_sync(FIL* fp)
 {
 	if (Fail("sync")) return FR_DISK_ERR;

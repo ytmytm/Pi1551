@@ -14,6 +14,12 @@ def run():
     subprocess.run([sys.executable, "-B", "tests/test_oled_tui.py"], cwd=ROOT, check=True)
     with tempfile.TemporaryDirectory(prefix="pi1551-oled-") as directory:
         build = Path(directory)
+        subprocess.run(["gcc", "-std=gnu99", "-Wall", "-Wextra", "-Werror",
+                        "-Wno-int-to-pointer-cast", "-Wno-unused-parameter",
+                        "-fshort-enums", "-ffunction-sections", "-fdata-sections",
+                        "-Isrc", "-Iuspi/include", "tests/gpio_value_native.c",
+                        "src/rpi-gpio.c", "-Wl,--gc-sections", "-o", str(build / "gpio-value")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "gpio-value")], cwd=ROOT, check=True)
         flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
                  "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                  "-ffunction-sections", "-fdata-sections", "-Isrc", "-Iuspi/include"]
@@ -32,20 +38,20 @@ def run():
         subprocess.run([str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run(flags + ["tests/sound_native.cpp", "-o", str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run([str(build / "sound")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DPI1551_NATIVE_GPIO_IRQ_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
                                "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp",
                                "-Wl,--gc-sections", "-o", str(build / "tape")], cwd=ROOT, check=True)
-        payload = (b"\0" + (11084).to_bytes(3,"little")) * 10000
+        payload = (b"\0" + (11084 * 8).to_bytes(3,"little")) * 10000
         fixture = build / "seek.tap"
         fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(payload)) + payload)
         subprocess.run([str(build / "tape"), str(fixture)], cwd=ROOT, check=True)
-        gap_payload = (b"\0" + (11084).to_bytes(3,"little")) * 1845
-        gap_payload += b"\0" + (1000000).to_bytes(3,"little")
+        gap_payload = (b"\0" + (11084 * 8).to_bytes(3,"little")) * 1845
+        gap_payload += b"\0" + (1000000 * 8).to_bytes(3,"little")
         gap_fixture = build / "seek-gap-67.tap"
         gap_fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(gap_payload)) + gap_payload)
         subprocess.run([str(build / "tape"), str(gap_fixture), "gap67"], cwd=ROOT, check=True)
-        long_payload = (b"\0" + (0xFFFFFF).to_bytes(3, "little")) * 50
+        long_payload = (b"\0" + (0xFFFFFF).to_bytes(3, "little")) * 350
         long_fixture = build / "long.tap"
         long_fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(long_payload)) + long_payload)
         subprocess.run([str(build / "tape"), str(long_fixture), "long"], cwd=ROOT, check=True)

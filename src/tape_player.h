@@ -31,7 +31,7 @@ extern "C"
 // Fixed GPIO pins for tape interface
 #define TAPE_MOTOR_GPIO 6   // Pin 31, input, active-low (GPIO 0 = motor running, GPIO 1 = motor stopped)
 #define TAPE_READ_GPIO  19  // Pin 35, output, active-low (hardware inverts signal)
-#define TAPE_WRITE_GPIO 26  // Pin 37, input (stub, not used)
+#define TAPE_WRITE_GPIO 26  // Pin 37, input from the computer
 // TAPE_SENSE_GPIO: Pin 27, output, active-low (hardware inverts signal)
 // Logic: senseLineState=true (SENSE=1) = PLAY pressed = active state
 //   - Software sets GPIO HIGH (1)
@@ -52,6 +52,7 @@ struct TapeUIState
 {
 	bool isLoaded;
 	bool isPlaying;
+	bool isRecording;
 	bool motorActive;
 	bool atEnd;
 	char filename[256];
@@ -96,7 +97,12 @@ public:
 	void Reset();
 	void Eject();
 	bool Play();
+	bool Record();
+	bool CreateTap(const char* path);
 	bool Stop();
+	bool Rewind();
+	// Sample WRITE and MOTOR from the GPIO interrupt handler.
+	void RecordSample(u32 now);
 	bool SeekCounter(unsigned counter);
 	void SetMotorAlwaysOn(bool value);
 
@@ -132,6 +138,16 @@ private:
     static size_t pulseCount;
     static size_t currentPulseIndex;
 	static volatile bool loaded, playing;
+	static volatile bool recording;
+	static bool unsaved;
+	static bool recordMotor, recordWrite;
+	static u32 recordEdgeTime;
+	static size_t pulseCapacity;
+	static u8 tapeVideo;
+	bool SaveTap();
+	void ArmRecordIRQ();
+	void DisarmRecordIRQ();
+	static void RecordGPIOIRQ(void* param);
 	static volatile bool motorActive;
 	static volatile bool motorAlwaysOn;
 	static volatile bool atEnd;

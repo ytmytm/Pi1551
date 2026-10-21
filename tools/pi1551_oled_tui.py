@@ -68,6 +68,7 @@ class Simulator:
         "new_image": ["..", "Type", "Create image"],
         "status": ["..", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
         "tape": ["..", "TAP FILE", "Load TAP...", "Eject TAP", "Rewind", "Go to counter"],
+        "tape_record": ["..", "New TAP", "Current TAP"],
         "tape_seek": ["..", "TARGET"],
     }
     def __init__(self) -> None:
@@ -80,7 +81,7 @@ class Simulator:
         self.flip_mode = "solo"
         self.fliplist: list[Node] = []; self.disk: Optional[Node] = None; self.active_media: Optional[Node] = None
         self.last_flip_media: Optional[Node] = None
-        self.tape: Optional[Node] = None; self.tape_playing = False; self.tape_pos = 0; self.tape_counter_max = 999; self.tape_motor = False
+        self.tape: Optional[Node] = None; self.tape_playing = False; self.tape_recording = False; self.tape_pos = 0; self.tape_counter_max = 999; self.tape_motor = False
         self.seek_target = 0
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
@@ -153,8 +154,10 @@ class Simulator:
         if self.screen == "sound" and not self.options["soundOnGPIO"]: return items[:3]
         if self.screen == "tape":
             if self.tape:
-                return ["..", "TAP FILE", "Stop" if self.tape_playing else "Play", "Eject TAP", "Rewind", "Go to counter"]
-            return ["..", "TAP FILE", "Load TAP..."]
+                return ["..", "TAP FILE", "Stop" if self.tape_playing else "Play", *([] if self.tape_recording else ["Record"]), "Eject TAP", "Rewind", "Go to counter"]
+            return ["..", "TAP FILE", "Load TAP...", "Record"]
+        if self.screen == "tape_record":
+            return ["..", "New TAP", *(["Current TAP"] if self.tape else [])]
         if self.screen == "menu" and self.fliplist:
             return ["..", "Clear list", *items[1:]]
         return items
@@ -293,7 +296,7 @@ class Simulator:
         self.active_media = node if add_to_fliplist else None
         self.path.append(node); self.browser_source = node; self.disk = None; self.activity = "browser"; self.reset_cursor(); self.message = f"Browser source: {node.name}"
     def load_tape(self, node: Node) -> None:
-        self.tape, self.tape_pos = node, 0; self.tape_counter_max = min(999, node.counter_max); self.tape_playing = self.options["Tape autoplay"]; self.browser_filter = None
+        self.tape, self.tape_pos = node, 0; self.tape_counter_max = min(999, node.counter_max); self.tape_playing = self.options["Tape autoplay"]; self.tape_recording = False; self.browser_filter = None
         if self.screen == "browser" and self.previous_screen == "tape": self.set_screen("tape")
         self.message = f"Loaded {node.name}"
     def activate_browser(self) -> None:
@@ -366,18 +369,33 @@ class Simulator:
                 self.path = [self.sd]; self.browser_source = self.sd
                 self.browser_filter = "tape"; self.previous_screen = "tape"; self.set_screen("browser"); self.message = "Choose a TAP"
             elif item == "Play": self.tape_playing = True; self.message = "PLAY pressed"
-            elif item == "Stop": self.tape_playing = False; self.message = "PLAY released"
-            elif item == "Eject TAP": self.tape = None; self.tape_playing = False; self.tape_pos = 0; self.message = "TAP ejected"
+            elif item == "Stop": self.tape_playing = self.tape_recording = False; self.message = "Tape stopped (simulated flush)"
+            elif item == "Record": self.set_screen("tape_record", True)
+            elif item == "Eject TAP": self.tape = None; self.tape_playing = self.tape_recording = False; self.tape_pos = 0; self.message = "TAP ejected"
             elif item == "Rewind":
-                if self.tape: self.tape_pos = 0; self.message = "TAP rewound"
+                if self.tape: self.tape_playing = self.tape_recording = False; self.tape_pos = 0; self.message = "TAP stopped and rewound"
                 else: self.message = "No TAP loaded"
             elif item == "Go to counter":
                 if self.tape:
                     self.seek_target = self.tape_pos; self.set_screen("tape_seek", True); self.message = "Set target with encoder, Enter seeks"
                 else: self.message = "No TAP loaded"
             else: self.message = "Tape filename is read-only"
+        elif self.screen == "tape_record":
+            if item == "New TAP":
+                number = 1
+                existing = {node.name.upper() for node in self.current_dir.children}
+                while f"NEWTAPE{number}.TAP" in existing: number += 1
+                node = Node(f"NEWTAPE{number}.tap", "tape", counter_max=0)
+                self.current_dir.children.append(node)
+                self.tape = node; self.tape_pos = self.tape_counter_max = 0
+            elif item == "Current TAP" and not self.tape:
+                self.message = "No TAP loaded"; return
+            self.tape_playing = self.tape_recording = True
+            self.restore_parent("tape")
+            self.message = f"RECORD {self.tape.name} (simulated)"
         elif self.screen == "tape_seek":
             if item == "TARGET":
+                self.tape_playing = self.tape_recording = False
                 self.tape_pos = self.seek_target
                 self.restore_parent("tape")
                 self.message = f"TAP counter: {self.tape_pos:03d}"
@@ -483,7 +501,7 @@ class Simulator:
         if self.disk: self.header_key = None
         drive = f"{self.device}: {self.track:04.1f}{'S' if self.disk and self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else self.folder_status()
         percent = min(99, self.tape_pos // 10)
-        tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}{'P' if self.tape_playing else '-'}" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
+        tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}{'R' if self.tape_recording else 'P' if self.tape_playing else '-'}" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
         return drive, tape
     def folder_status(self) -> str:
         prefix = f"{self.device}:"; folder = self.current_dir.name
@@ -515,7 +533,7 @@ class Simulator:
             if self.screen == "browser": self.reset_cursor()
         self.message = "Drive RESET ignored" if ignored else f"Computer RESET #{self.reset_count}"
     def tick(self) -> None:
-        if self.tape and self.tape_playing and self.motor_active(): self.tape_pos = (self.tape_pos + 1) % 1000
+        if self.tape and self.tape_playing and not self.tape_recording and self.motor_active(): self.tape_pos = (self.tape_pos + 1) % 1000
         if self.disk and self.activity == "mounted": self.track = 1.0 if self.track > 35 else self.track + .1; self.activity = "idle" if self.options["Idle trap"] else "run"
         self.update_scroll()
     def selected_name(self) -> str:
@@ -603,7 +621,7 @@ class UI:
         self.text(self.oy + row, self.ox, (value + " " * max(0, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
         x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
-        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_seek": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)
+        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_record": 5, "tape_seek": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)
         if self.sim.fliplist:
             lines.insert(4, "│  ├─ Clear list")
             if active is not None and active >= 4: active += 1

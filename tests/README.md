@@ -27,6 +27,24 @@ See
 [PI1551-OLED-IMPLEMENTATION.md](../docs/PI1551-OLED-IMPLEMENTATION.md) for coverage,
 architecture and hardware-test limits.
 
+## Plus/4 cassette interoperability
+
+With the patched headless VICE and `tests/vice/roms.env` from the Parobek
+checkout available, run:
+
+```sh
+python3 tests/test_vice_tape_interop.py
+```
+
+Pass `--vice-root PATH` if the Parobek checkout is elsewhere. The test saves
+`hello.prg` to a C16 TAP in VICE, then checks VICE→Pi1551, Pi1551→VICE,
+Pi1551→Pi1551 and VICE→VICE. The native bridge runs the production TAP parser,
+GPIO playback loop and recorder through simulated GPIO edge interrupts. Before
+every VICE load, the test fills the program's memory range with zero and confirms
+that it is empty; it then compares all loaded PRG bytes with the reference.
+Files and VICE logs are kept in a
+temporary directory for the duration of the test.
+
 ## TCBM2SD protocol tests
 
 Run from the repository root:

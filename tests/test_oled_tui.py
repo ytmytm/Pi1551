@@ -76,8 +76,23 @@ class TuiControls(unittest.TestCase):
             with patch("tools.pi1551_oled_tui.curses.color_pair", return_value=0): ui.draw()
             rows = [value for row, value in rendered if row >= 2]
             self.assertTrue(rows[1].startswith("1:" + tape.name[:13]))
-            self.assertEqual(rows[2:5], [expected, "Eject TAP", "Rewind"])
+            self.assertEqual(rows[2:5], [expected, "Record", "Eject TAP"])
             self.assertEqual(rows[0], "..")
+
+    def test_tape_record_menu_and_transport_stop_on_seek(self):
+        s = Simulator(); s.set_screen("tape")
+        self.click(s, "Record")
+        self.assertEqual(s.items(), ["..", "New TAP"])
+        self.click(s, "New TAP")
+        self.assertEqual(s.tape.name, "NEWTAPE1.tap")
+        self.assertTrue(s.tape_recording and s.tape_playing)
+        self.click(s, "Go to counter"); self.click(s, "TARGET")
+        self.assertFalse(s.tape_recording or s.tape_playing)
+        self.click(s, "Record")
+        self.assertIn("Current TAP", s.items())
+        self.click(s, "Current TAP")
+        self.click(s, "Rewind")
+        self.assertFalse(s.tape_recording or s.tape_playing)
 
     def test_tape_seek_stops_at_tape_specific_counter_maximum(self):
         s = Simulator(); s.set_screen("tape")

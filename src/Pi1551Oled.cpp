@@ -162,10 +162,34 @@ public:
     }
     bool SetTapePlaying(bool play) override {
         if (!g_tapePlayer) return false;
-        return play ? g_tapePlayer->Play() : g_tapePlayer->Stop();
+        bool ok = play ? g_tapePlayer->Play() : g_tapePlayer->Stop();
+        if (!ok) error = "TAP write failed";
+        return ok;
+    }
+    bool RecordTapeExisting() override {
+        error = "TAP record failed";
+        return g_tapePlayer && g_tapePlayer->Record();
+    }
+    bool RecordTapeNew(const std::string& directory) override {
+        error = "TAP create failed";
+        if (!g_tapePlayer) return false;
+        char name[256]; FILINFO info;
+        for (unsigned i = 1; i < 10000; ++i) {
+            int n = snprintf(name, sizeof(name), "%s/NEWTAPE%u.tap", directory.c_str(), i);
+            if (n < 0 || (size_t)n >= sizeof(name)) return false;
+            FRESULT res = f_stat(name, &info);
+            if (res == FR_NO_FILE) {
+                if (!g_tapePlayer->CreateTap(name)) return false;
+                error = "TAP record failed";
+                return g_tapePlayer->Record();
+            }
+            if (res != FR_OK) return false;
+        }
+        return false;
     }
     void EjectTape() override { if (g_tapePlayer) g_tapePlayer->Eject(); }
     bool SeekTape(unsigned count) override { return g_tapePlayer && g_tapePlayer->SeekCounter(count); }
+    bool RewindTape() override { return g_tapePlayer && g_tapePlayer->Rewind(); }
     oled::Status ReadStatus() override { return OledKernelStatus(); }
     std::vector<std::string> ROMs() override {
         std::vector<std::string> names;

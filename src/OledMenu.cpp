@@ -214,10 +214,17 @@ std::vector<Menu::Row> Menu::Rows() {
         if (s.tape.empty()) r.push_back(Row("Load TAP..."));
         else {
             r.push_back(Row(s.play ? "Stop" : "Play"));
+        }
+        if (!s.record) r.push_back(Row("Record"));
+        if (!s.tape.empty()) {
             r.push_back(Row("Eject TAP")); r.push_back(Row("Rewind")); r.push_back(Row("Go to counter"));
         }
         break;
     }
+    case View::Record:
+        r.push_back(Row("New TAP"));
+        if (!backend.ReadStatus().tape.empty()) r.push_back(Row("Current TAP"));
+        break;
     case View::Seek: { char b[24]; snprintf(b, sizeof(b), "TARGET %03u/%03u", target, targetMax); r.push_back(Row(b)); break; }
     case View::Disk:
         r.push_back(Row(std::string("WProt ") + On(backend.WriteProtected())));
@@ -351,13 +358,18 @@ void Menu::Select() {
         if (action == "Load TAP...") Browse(false, true);
         else if (action == "Play" || action == "Stop") {
             if (!backend.SetTapePlaying(action == "Play")) message = backend.Error();
-        } else if (action == "Eject TAP") backend.EjectTape();
+        } else if (action == "Record") Open(View::Record);
+        else if (action == "Eject TAP") backend.EjectTape();
         else if (action == "Rewind" || action == "Go to counter") {
             Status s = backend.ReadStatus();
             if (s.tape.empty()) message = "No TAP loaded";
-            else if (action == "Rewind") { if (!backend.SeekTape(0)) message = "Seek failed"; }
+            else if (action == "Rewind") { if (!backend.RewindTape()) message = backend.Error(); }
             else { target = s.counter; targetMax = s.counterMax; Open(View::Seek); }
         }
+    } else if (view == View::Record) {
+        std::string action = Rows()[cursor].prefix;
+        bool ok = action == "New TAP" ? backend.RecordTapeNew(path) : backend.RecordTapeExisting();
+        if (ok) Back(); else message = backend.Error();
     } else if (view == View::Seek) { if (backend.SeekTape(target)) Back(); else message = "Seek failed"; }
     else if (view == View::Disk) {
         if (cursor == 1) backend.WriteProtect(!backend.WriteProtected());
@@ -407,7 +419,8 @@ Frame Menu::Render(uint32_t ms) {
     Frame f = {}; for (unsigned i = 0; i < 8; ++i) memset(f.rows[i], ' ', 16);
     if (scrollReset) { selectionTime = ms; scrollReset = false; }
     Status s = backend.ReadStatus(); char b[64];
-    unsigned headerWidth = backend.Get(Setting::Temp) ? 12 : 16;
+    const bool showTemp = backend.Get(Setting::Temp);
+    unsigned headerWidth = showTemp ? 12 : 16;
     if (s.emulating) {
         headerKey.clear();
         snprintf(b, sizeof(b), "%u: %u.%u%s", backend.Get(Setting::Device), s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
@@ -428,11 +441,11 @@ Frame Menu::Render(uint32_t ms) {
         std::string text = prefix + folder.substr(pos,width);
         memcpy(f.rows[0],text.data(),text.size());
     }
-    if (backend.Get(Setting::Temp)) {
+    if (showTemp) {
         snprintf(b, sizeof(b), "%02uC", std::min(99u, s.temperature)); memcpy(f.rows[0] + 13, b, 3);
     }
     if (s.tape.empty()) snprintf(b, sizeof(b), "TAPE --- --%% %c-", s.motor ? 'M' : '-');
-    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %c%c", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-', s.play ? 'P' : '-');
+    else snprintf(b, sizeof(b), "TAPE %03u %02u%% %c%c", s.counter % 1000, std::min(100u, s.percent), s.motor ? 'M' : '-', s.record ? 'R' : s.play ? 'P' : '-');
     memcpy(f.rows[1], b, std::min((size_t)16, strlen(b)));
     std::vector<Row> rows = Rows();
     for (unsigned y = 2; y < 8; ++y) {

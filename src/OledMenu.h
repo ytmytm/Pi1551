@@ -7,7 +7,7 @@
 
 namespace oled {
 enum class Key { Left, Right, Enter, Insert, Back, ResetPath };
-enum class View { Browser, Fliplist, Device, Tape, Seek, Disk, Settings,
+enum class View { Browser, Fliplist, Device, Tape, Record, Seek, Disk, Settings,
     ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways, TapeAutoplay,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
@@ -19,7 +19,7 @@ struct Entry {
         : path(p), name(n), directory(d) {}
 };
 struct Status {
-    bool emulating = false, idle = false, led = false, motor = false, play = false;
+    bool emulating = false, idle = false, led = false, motor = false, play = false, record = false;
     unsigned halfTrack = 34, temperature = 0, counter = 0, counterMax = 999, percent = 0;
     std::string tape, rom, sdSize, sdFree, firmware;
 };
@@ -38,8 +38,12 @@ public:
     virtual bool ReadList(const std::string& path, std::vector<Entry>& entries) = 0;
     virtual bool LoadTape(const std::string& path) = 0;
     virtual bool SetTapePlaying(bool playing) { (void)playing; return false; }
+    virtual bool RecordTapeNew(const std::string& directory) { (void)directory; return false; }
+    virtual bool RecordTapeExisting() { return false; }
     virtual void EjectTape() = 0;
     virtual bool SeekTape(unsigned counter) = 0;
+    // Seeking releases PLAY/RECORD; production backends flush changed TAP data first.
+    virtual bool RewindTape() { return SetTapePlaying(false) && SeekTape(0); }
     virtual Status ReadStatus() = 0;
     virtual std::vector<std::string> ROMs() = 0;
     virtual bool SelectROM(unsigned slot) = 0;

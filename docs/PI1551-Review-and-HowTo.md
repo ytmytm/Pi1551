@@ -122,7 +122,7 @@ Any NPN works: 2n3904, S8050, BC547
 
 - `TAPE_MOTOR` (input): GPIO6 (pin 31) - active high, controls tape playback
 - `TAPE_READ` (output): GPIO19 (pin 35) - tape data output to Plus/4
-- `TAPE_WRITE` (input): GPIO26 (pin 37) - reserved for future recording support
+- `TAPE_WRITE` (input): GPIO26 (pin 37) - captures C16/Plus/4 cassette WRITE pulses during RECORD
 - `TAPE_SENSE` (output): GPIO0 (pin 27) - tape sense output to Plus/4
   - Hardware inverts the signal: GPIO HIGH (1) → output LOW (active/PLAY pressed), GPIO LOW (0) → output HIGH (inactive/PLAY released)
   - When SENSE=1 (senseLineState=true): GPIO is set HIGH, hardware inverts to output LOW, computer sees LOW = active state (PLAY pressed)

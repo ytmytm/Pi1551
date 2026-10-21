@@ -24,6 +24,7 @@ Use browser mode to:
 - Select a D64 or G64 for 1551 emulation.
 - Open D71, D81, D80, or D82 images as read-only file containers.
 - Load a TAP file into the tape player.
+- Record a new or loaded TAP from a C16/C116/Plus/4 cassette port.
 - Create new D64 or G64 images from the UI.
 
 ### 1551 Emulation Mode
@@ -37,15 +38,16 @@ D71/D80/D81/D82 and PRG use file-level container access, not drive emulation.
 ### Tape Player
 
 Selecting a TAP file loads it into the tape player instead of entering disk
-emulation. Playback is sent to the C16/C116/Plus/4 tape port through the
-Pi1551 interface.
+emulation. Playback and recording use the C16/C116/Plus/4 tape port through
+the Pi1551 interface. Recording uses the WRITE input (GPIO26, pin 37).
 
 Supported TAP files must use the Plus/4/C16 TAP signature `C16-TAPE-RAW`.
 Versions 0, 1, and 2 are accepted. PAL/NTSC timing is taken from the TAP
 header.
 
 The tape status is always visible on the OLED. It shows a three-digit counter,
-PLAY state, motor state and percentage, or dashes when no TAP is loaded.
+motor state, percentage and PLAY (`P`) or RECORD (`R`), or dashes when no TAP
+is loaded.
 
 ## File And Image Behavior
 
@@ -160,6 +162,10 @@ Browser / Fliplist
    │  ├─ 1:<loaded TAP filename>    (or just 1: when empty; scrolls)
    │  ├─ Play / Stop                (only when TAP is loaded; toggles with state)
    │  ├─ Load TAP...                (only when no TAP is loaded)
+   │  ├─ Record                     (available with or without a TAP; hidden while recording)
+   │  │  ├─ ..
+   │  │  ├─ New TAP                  (create in the current SD folder)
+   │  │  └─ Current TAP              (only when a TAP is loaded)
    │  ├─ Eject TAP                  (only when TAP is loaded)
    │  ├─ Rewind                     (only when TAP is loaded)
    │  └─ Go to counter              (only when TAP is loaded)
@@ -259,12 +265,13 @@ of the selected row. Temp ON reserves four rightmost characters for a space
 and temperature; Temp OFF gives the directory the full remaining width.
 Selected long media/ROM filenames scroll with their prefixes fixed.
 
-Tape status always shows TAPE, counter, percent and M/P flags. No TAP is
+Tape status always shows TAPE, counter, percent and motor/transport flags. No TAP is
 TAPE --- --% M- or TAPE --- --% --; a loaded tape at the beginning has
 000 00%, not missing-file dashes. MOTOR reflects the computer input (or
-ALWAYS override) even without a tape; PLAY stays pressed from load until
-eject, including EOF. The MOTOR flag refreshes once per second alongside the
-temperature; it is not gated by whether a TAP is loaded.
+ALWAYS override) even without a tape. PLAY may be pressed automatically on
+load, but Stop, Rewind and Go to counter release it; RECORD shows `R` and also
+presses PLAY. The MOTOR flag is refreshed with the OLED status; it is not
+gated by whether a TAP is loaded.
 
 ### SD2IEC-Style Browser Commands And The Panel
 
@@ -370,13 +377,17 @@ startup-configured AutoMountImage is a valid supported image or nonempty LST;
 missing, empty or invalid files behave as OFF. The toggle applies at boot and
 the next REACT reset, not as an immediate mount command.
 
-Motor ON ALWAYS ignores computer MOTOR for playback; COMP. follows it.
+Motor ON ALWAYS ignores computer MOTOR for playback and recording; COMP.
+follows it. Use COMP. for an original C16/C116/Plus/4 with a working MOTOR
+line.
 Autoplay ON presses PLAY as soon as a TAP is loaded; OFF loads it stopped.
 In the Tape menu, the loaded TAP offers `Play` while stopped and `Stop` while
-playing, between the filename and `Eject TAP`. With no TAP, `Load TAP...`
-opens a tape-filtered browser. Eject releases PLAY. Rewind seeks
-to the beginning; Go to counter changes TARGET by exactly one per encoder
-impulse, click seeks and Back cancels. A tape must be loaded to seek.
+playing or recording, between the filename and `Record`. With no TAP,
+`Load TAP...` opens a tape-filtered browser and `Record` remains available.
+`Record` opens `New TAP` and, when a TAP is loaded, `Current TAP`. Rewind and
+Go to counter perform Stop before changing position; Go to counter changes
+TARGET by exactly one per encoder impulse, click stops and seeks, and Back
+cancels without stopping. Eject stops and unloads the tape.
 
 WProt is write protection; read-only media stays protected. Write image
 flushes the mounted medium. New image first lets you choose D64/G64, then
@@ -444,10 +455,11 @@ Use Settings -> ROM to select a ROM and Menu -> Reboot Pi1551 to restart.
 The keyboard controls of make tui are only for the desktop simulator; they
 are not USB keyboard shortcuts on the Raspberry Pi.
 
-## TAP Playback
+## TAP Playback And Recording
 
-Selecting a `.tap` file loads it and asserts the tape SENSE line as if PLAY is
-pressed. The player then emits tape pulses on the READ line.
+Selecting a `.tap` file loads it. With Autoplay ON, Pi1551 asserts the tape
+SENSE line as if PLAY is pressed; with Autoplay OFF, select Play in the menu.
+The player then emits tape pulses on the READ line.
 
 When the computer controls the motor, `M` on the OLED follows the computer's
 MOTOR line. During a cassette `LOAD`, the Kernal can display `PRESS PLAY ON
@@ -466,6 +478,32 @@ load; MOTOR can remain on until that operation finishes.
 
 The tape player is reset when the Commodore reset line is handled. Exiting disk
 emulation does not unload an already loaded tape.
+
+### Recording a program
+
+1. Open `Menu...` → `Tape` → `Record` → `New TAP`. This creates the next unused
+   `NEWTAPE1.tap`, `NEWTAPE2.tap`, etc. in the current SD folder and starts
+   RECORD. Existing files are not overwritten. `Record` is available even
+   when no tape is loaded. To continue on a loaded tape instead, choose
+   `Current TAP` at its current position; use Rewind or Go to counter first if
+   you want another position.
+2. On the computer, enter a program and use a cassette command such as
+   `SAVE"TEST",1`. RECORD also presses PLAY/SENSE. With `Motor ON COMP.`, Pi1551
+   captures WRITE pulses only while the computer runs the MOTOR. Pauses while
+   MOTOR is off do not create long silent intervals in the TAP.
+3. Choose `Stop` after SAVE finishes. You can choose `Record` → `Current TAP`
+   again to add another program. To load from the beginning, choose `Rewind`,
+   then `Play` if needed, and use `LOAD"",1` on the computer. Directly changing
+   from RECORD to PLAY requires Stop first.
+
+`New TAP` creates a valid empty TAP file immediately. Captured pulses are
+buffered in Pi memory and written as version 2 C16 TAP to SD/USB when recording
+stops. Only a tape changed during RECORD is written again: ordinary Play, Stop,
+Rewind and seek
+do not rewrite an unchanged TAP. `Stop`, `Rewind`, a confirmed `Go to counter`
+and `Eject TAP` finish RECORD and save changed data before moving or unloading
+the tape. If saving fails, Rewind and Go to counter leave the position in place
+so the save can be retried. Eject also retains the tape after a failed save.
 
 ## `options.txt`
 

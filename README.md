@@ -130,7 +130,7 @@ Common `options.txt` settings:
 | `LCDName`, `i2cLcdAddress` | OLED model and I2C address. |
 | `RotaryEncoderEnable` | Enables the fixed-wiring encoder; ROM selection is under Settings -> ROM. |
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
-| `tapeMotorAlwaysOn` | Keeps TAP playback motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` to follow MOTOR on original machines. |
+| `tapeMotorAlwaysOn` | Keeps TAP transport motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` so playback and recording follow MOTOR on original machines. |
 | `tapeAutoplay` | Presses PLAY automatically when a TAP is loaded (`1`, default); set to `0` to load it stopped and use Play/Stop in the Tape menu. |
 | `skipMotorSpinUpDelay` | Skips the emulated 1551 motor spin-up delay when set. |
 | `IdleSleep` | Pauses an idle D64 drive at the stock ROM TCBM wait loop to reduce Raspberry Pi power use and temperature. Enabled by default. |
@@ -173,7 +173,8 @@ Browser / Fliplist -> Menu...
 ├─ ..
 ├─ Clear list                         (only when the list is nonempty)
 ├─ Browser                            (clear list and unmount)
-├─ Tape: .., 1:<filename>, Play/Stop (when loaded), Load TAP... (when empty), Eject TAP, Rewind, Go to counter
+├─ Tape: .., 1:<filename>, Play/Stop (when loaded), Load TAP... (when empty), Record, Eject TAP, Rewind, Go to counter
+│  └─ Record: .., New TAP, Current TAP (when loaded)
 ├─ Disk: .., WProt, Write image, New image, Reset drive
 │  └─ New image: .., Type D64/G64, Create image
 ├─ Settings
@@ -227,6 +228,13 @@ Pi1551 has three practical modes:
   image.
 - Tape player: TAP playback can continue while browsing or while a disk image
   is mounted.
+
+The Tape menu records C16/Plus/4 signals to `NEWTAPE1.tap`, `NEWTAPE2.tap`,
+etc., or to the loaded TAP at its current position. RECORD also presses PLAY;
+the computer's MOTOR gates recording. STOP, Rewind, Go to counter and Eject
+finish recording and save changed TAP data. See the
+[tape instructions](USER-MANUAL.md#tap-playback-and-recording) for the menu
+steps and file behavior.
 
 See [USER-MANUAL.md](USER-MANUAL.md) for the full button map,
 keyboard shortcuts, TAP behavior, and every accepted `options.txt` setting.

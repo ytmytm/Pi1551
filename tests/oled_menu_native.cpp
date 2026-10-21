@@ -42,9 +42,11 @@ struct KernelStub : Backend {
     bool Unmount() override { if (failUnmount) return false; effects.push_back("unmount:"+medium); medium.clear(); status.emulating = false; return true; }
     bool ReadList(const std::string&,std::vector<Entry>& e) override { e = lst; return true; }
     bool LoadTape(const std::string& p) override { if (failTape) return false; status.tape = p; status.play = true; status.counter = 0; effects.push_back("play:1"); return true; }
-    bool SetTapePlaying(bool play) override { if (status.tape.empty()) return false; status.play = play; effects.push_back(play ? "play:1" : "play:0"); return true; }
-    void EjectTape() override { status.tape.clear(); status.play = false; effects.push_back("play:0"); }
-    bool SeekTape(unsigned n) override { if (status.tape.empty()) return false; status.counter = n; effects.push_back("seek:"+std::to_string(n)); return true; }
+    bool SetTapePlaying(bool play) override { if (status.tape.empty() || (play && status.record)) return false; status.play = play; status.record = false; effects.push_back(play ? "play:1" : "play:0"); return true; }
+    bool RecordTapeNew(const std::string& p) override { std::string name = "NEWTAPE1.tap"; sd[p].push_back(Entry(p+"/"+name,name)); status.tape = p+"/"+name; status.record = status.play = true; effects.push_back("record:"+status.tape); return true; }
+    bool RecordTapeExisting() override { if (status.tape.empty()) return false; status.record = status.play = true; effects.push_back("record:"+status.tape); return true; }
+    void EjectTape() override { status.tape.clear(); status.play = status.record = false; effects.push_back("play:0"); }
+    bool SeekTape(unsigned n) override { if (status.tape.empty()) return false; if (status.play || status.record) SetTapePlaying(false); status.counter = n; effects.push_back("seek:"+std::to_string(n)); return true; }
     Status ReadStatus() override { return status; }
     std::vector<std::string> ROMs() override { return {"dos1551.bin","a very long alternative dos1551.bin"}; }
     bool SelectROM(unsigned i) override { status.rom = ROMs().at(i); effects.push_back("rom:"+status.rom); return true; }
@@ -204,14 +206,30 @@ static void tape_independent_and_seek() {
     CHECK(tail);
     Enter(m,"Go to counter"); CHECK(m.CurrentView() == View::Seek);
     Press(m,Key::Right,7); CHECK(std::string(m.Render(17000).rows[3]).find("TARGET 007/010") != std::string::npos);
-    Press(m,Key::Enter); CHECK(k.status.counter == 7); CHECK(m.CurrentView() == View::Tape);
+    Press(m,Key::Enter); CHECK(k.status.counter == 7 && !k.status.play); CHECK(m.CurrentView() == View::Tape);
+    CHECK(k.effects[k.effects.size()-2] == "play:0" && k.effects.back() == "seek:7");
     k.status.counterMax = 8;
     Enter(m,"Go to counter"); Press(m,Key::Right,5); Press(m,Key::Enter); CHECK(k.status.counter == 8);
     Enter(m,"Go to counter"); Press(m,Key::Right,3); Press(m,Key::Back); CHECK(k.status.counter == 8);
-    Enter(m,"Rewind"); CHECK(k.status.counter == 0);
+    Enter(m,"Rewind"); CHECK(k.status.counter == 0 && !k.status.play);
+    CHECK(k.effects[k.effects.size()-2] == "play:0" && k.effects.back() == "seek:0");
     Enter(m,"Eject TAP"); CHECK(k.status.tape.empty()); CHECK(!k.status.play); CHECK(k.status.motor);
     Enter(m,"Load TAP..."); CHECK(k.medium.empty()); CHECK(m.CurrentView() == View::Browser);
     Enter(m,"[1551]"); Enter(m,"[tapes]"); Enter(m,"boulder dash"); CHECK(m.CurrentView() == View::Tape);
+}
+static void tape_record_menu() {
+    KernelStub k; Menu m(k); Device(m); Enter(m,"Tape");
+    Enter(m,"Record"); CHECK(m.CurrentView() == View::Record);
+    Frame f = m.Render(0); CHECK(std::string(f.rows[3]).find("New TAP") != std::string::npos);
+    CHECK(std::string(f.rows[4]).find("Current TAP") == std::string::npos);
+    Enter(m,"New TAP"); CHECK(m.CurrentView() == View::Tape);
+    CHECK(k.status.record && k.status.play && k.status.tape == "/1551/NEWTAPE1.tap");
+    CHECK(std::string(m.Render(0).rows[0]) == "8:1551       38C");
+    CHECK(std::string(m.Render(0).rows[1]).find("TAPE 000 00% -R") == 0);
+    Enter(m,"Rewind"); CHECK(!k.status.record && !k.status.play && k.status.counter == 0);
+    CHECK(k.effects[k.effects.size()-2] == "play:0" && k.effects.back() == "seek:0");
+    Enter(m,"Record"); Enter(m,"Current TAP"); CHECK(k.status.record && k.status.play);
+    Enter(m,"Stop"); Enter(m,"Play"); CHECK(k.status.play && !k.status.record);
 }
 static void rom_markers_and_scrolling() {
     KernelStub k; Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"ROM");
@@ -374,7 +392,7 @@ int main() {
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     struct Test { const char* name; void (*run)(); };
-    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"fliplist same-image and D64 swaps",fliplist_skips_reselect_and_switches_d64},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
+    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"fliplist same-image and D64 swaps",fliplist_skips_reselect_and_switches_d64},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"record tape",tape_record_menu},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
     unsigned failures = 0;
     for (const Test& t : tests) try { t.run(); std::cout << "PASS " << t.name << "\n"; } catch (const std::exception& e) { ++failures; std::cerr << "FAIL " << t.name << ": " << e.what() << "\n"; }
     return failures ? 1 : 0;
