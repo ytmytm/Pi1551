@@ -724,8 +724,23 @@ extern "C"
 	}
 }
 
-// Hooks for FatFs
-DWORD get_fattime() { return 0; }	// If you have hardware RTC return a correct value here. THis can then be reflected in file modification times/dates.
+// FatFs timestamps from the shared software wall clock (UI / T-W). Keep this
+// free of locks and extra modules — earlier DateTime/get_fattime paths hung
+// before HDMI. Unset clock → fixed 2016-01-01 (same as former _NORTC defaults).
+DWORD get_fattime()
+{
+	unsigned year, month, day, hour, minute, second;
+#if defined(PI1551SUPPORT)
+	if (!m_TCBM_Commands.ReadWallClock(year, month, day, hour, minute, second))
+#else
+	if (!m_IEC_Commands.ReadWallClock(year, month, day, hour, minute, second))
+#endif
+		return (DWORD)(2016 - 1980) << 25 | 1u << 21 | 1u << 16;
+	if (year < 1980) year = 1980;
+	if (year > 2107) year = 2107;
+	return (DWORD)(year - 1980) << 25 | (DWORD)month << 21 | (DWORD)day << 16 |
+		(DWORD)hour << 11 | (DWORD)minute << 5 | (second / 2);
+}
 
 extern u8 read6502(u16 address);
 extern u8 read6502ExtraRAM(u16 address);

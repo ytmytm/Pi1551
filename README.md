@@ -211,8 +211,9 @@ chargen filename remain startup-only configuration.
 
 `Date & time` sets a software clock (years 2000–2099, 24-hour local time):
 select a field, turn the encoder to change it, then press to apply; Back
-cancels the edit. The same clock backs SD2IEC `T-R`/`T-W` and Status
-DATE/TIME. It survives drive resets but clears on reboot.
+cancels the edit. The same clock backs SD2IEC `T-R`/`T-W`, Status DATE/TIME,
+and FatFs timestamps on new/updated SD files once the clock is set. It
+survives drive resets but clears on reboot.
 
 See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
 rules, option values and examples. Run `make tui` for the keyboard simulator;
