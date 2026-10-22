@@ -343,7 +343,7 @@ device is the default for ordinary file and directory operations until another
 `T-W` and Settings → Date & time use the same software clock, which advances from
 the Raspberry Pi system timer (`TimerGetTicks`). It survives drive/bus resets but
 not a power cycle or reboot. Until it is set, `T-R` returns `31,SYNTAX ERROR,00,00`
-and new SD files get a fixed 2016-01-01 FatFs stamp. After it is set, FatFs uses
+and new SD files get a fixed 2026-11-01 FatFs stamp. After it is set, FatFs uses
 the wall clock for create/modify times. The OLED editor uses years 2000–2099;
 `T-W` accepts the wider SD2IEC range. Times are local 24-hour values; the
 firmware does not infer a timezone.

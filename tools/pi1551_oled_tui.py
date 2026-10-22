@@ -104,7 +104,7 @@ class Simulator:
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
         self.clock_base: Optional[datetime] = None
         self.clock_started = time.monotonic()
-        self.clock_draft = datetime(2026, 10, 22, 12, 0, 0)
+        self.clock_draft = datetime(2026, 11, 1, 12, 0, 0)
         self.clock_editing: Optional[str] = None
         self.set_local_clock(self.clock_draft)
         self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True, "Tape autoplay": True,
@@ -451,7 +451,7 @@ class Simulator:
                     self.clock_editing = None
                     self.message = "Local date and time set"
                 else:
-                    self.clock_draft = self.local_clock() or datetime(2026, 1, 1)
+                    self.clock_draft = self.local_clock() or datetime(2026, 11, 1)
                     self.clock_editing = item
                     self.message = f"Turn encoder to change {item}; Enter applies, Back cancels"
         elif self.screen == "tape":

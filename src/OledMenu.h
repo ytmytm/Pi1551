@@ -125,7 +125,7 @@ private:
     uint32_t headerTime = 0;
     std::string headerKey;
     bool scrollReset = true;
-    ClockValue dateDraft = {2026, 1, 1, 0, 0, 0};
+    ClockValue dateDraft = {2026, 11, 1, 0, 0, 0};
     std::vector<Row> Rows();
     void Open(View next);
     void Back();
