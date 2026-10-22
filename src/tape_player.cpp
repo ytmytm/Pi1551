@@ -19,14 +19,20 @@
 #include "tape_player.h"
 #include "rpiHardware.h"
 #include "options.h"
+#include "OledMenu.h"
+#include "Petscii.h"
 #include <string.h>
 #include <malloc.h>
+#include <stdio.h>
 #include "Pi1551Platform.h"
 #if !defined(PI1551_NATIVE_TEST) || defined(PI1551_NATIVE_GPIO_IRQ_TEST)
 #include "interrupt.h"
 #endif
 #include <limits>
 #include <cmath>
+#include <algorithm>
+#include <string>
+#include <vector>
 
 #define TAPE_CLOCK_PAL_HZ  886724
 #define TAPE_CLOCK_NTSC_HZ 894886
@@ -62,6 +68,8 @@ bool TapePlayer::recordMotor = false;
 bool TapePlayer::recordWrite = false;
 u32 TapePlayer::recordEdgeTime = 0;
 u8 TapePlayer::tapeVideo = 0;
+u8 TapePlayer::tapVersion = 0;
+u32 TapePlayer::tapDataSize = 0;
 volatile bool TapePlayer::motorActive = true;
 volatile bool TapePlayer::motorAlwaysOn = true;
 volatile bool TapePlayer::atEnd = false;
@@ -98,16 +106,18 @@ void TapePlayer::SetMotorAlwaysOn(bool value)
 	if (recording) ArmRecordIRQ();
 	Tick10ms();
 }
-void TapePlayer::Eject()
+bool TapePlayer::Eject()
 {
-	if ((recording || unsaved) && !Stop()) return;
+	if ((recording || unsaved) && !Stop()) return false;
 	PausePlayback(); loaded = false; playing = false; atEnd = false; senseLineState = false;
 	tapFilename[0] = 0; currentPulseIndex = 0; cumulativePulseTimeUs = 0; currentPulseOffsetUs = 0;
 	totalPlaybackTimeUs = 0; FreePulseBuffer();
 	RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_SENSE_GPIO);
 	RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO); readLineState = true;
 	ResumePlayback();
+	return true;
 }
+static void FinalizeRecordIndex(u64* timings, size_t& end, size_t& count, size_t capacity);
 bool TapePlayer::Play()
 {
 	if (!loaded || recording) return false;
@@ -133,6 +143,7 @@ bool TapePlayer::Stop()
 			if (elapsed) { pulseTimings[currentPulseIndex++] = elapsed; unsaved = true; }
 		}
 		if (currentPulseIndex > pulseCount) pulseCount = currentPulseIndex;
+		if (unsaved) FinalizeRecordIndex(pulseTimings, currentPulseIndex, pulseCount, pulseCapacity);
 		// VICE consumes v2 half-waves in pairs. Close an odd final pair.
 		if (unsaved && (pulseCount & 1) && pulseCount < pulseCapacity) pulseTimings[pulseCount++] = 1;
 		totalPlaybackTimeUs = 0;
@@ -188,7 +199,289 @@ bool TapePlayer::SeekCounter(unsigned counter)
 	else RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
 	ResumePlayback(); return true;
 }
+bool TapePlayer::SeekOffset(u32 tapOffset)
+{
+	if (!loaded || recording || unsaved || tapOffset < 20 ||
+	    (u64)tapOffset >= 20u + (u64)tapDataSize) return false;
+	FIL fp;
+	if (f_open(&fp, tapFilename, FA_READ) != FR_OK) return false;
+	bool ok = f_lseek(&fp, 20) == FR_OK;
+	u32 position = 20, pulseIndex = 0;
+	unsigned extensionBytes = 0;
+	u8 buffer[4096];
+	while (ok && position < tapOffset) {
+		UINT n = 0;
+		u32 count = tapOffset - position;
+		if (count > sizeof(buffer)) count = sizeof(buffer);
+		ok = f_read(&fp, buffer, count, &n) == FR_OK && n == count;
+		for (u32 i = 0; ok && i < count; ++i, ++position) {
+			if (extensionBytes) { --extensionBytes; continue; }
+			if (tapVersion != 0 && buffer[i] == 0) extensionBytes = 3;
+			pulseIndex += tapVersion == 2 ? 1 : 2;
+		}
+	}
+	if (f_close(&fp) != FR_OK) ok = false;
+	if (!ok || extensionBytes || pulseIndex >= pulseCount || !Stop()) return false;
+	u64 elapsed = 0;
+	for (u32 i = 0; i < pulseIndex; ++i) elapsed += pulseTimings[i];
+	PausePlayback();
+	currentPulseIndex = pulseIndex;
+	currentPulseOffsetUs = 0;
+	cumulativePulseTimeUs = elapsed;
+	atEnd = false;
+	readLineState = (pulseIndex & 1) == 0;
+	if (readLineState) RPI_SetGpioHi((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	else RPI_SetGpioLo((rpi_gpio_pin_t)TAPE_READ_GPIO);
+	ResumePlayback();
+	return true;
+}
 static u32 tapeLoadGeneration = 0;
+static u32 tapeIndexGeneration = 0;
+struct RecordedIndexMark {
+    size_t pulse;
+    std::string name;
+    u32 offset;
+    RecordedIndexMark(size_t p, const std::string& n, u32 o = 0) : pulse(p), name(n), offset(o) {}
+};
+static std::vector<RecordedIndexMark> recordIndexMarks;
+static std::string recordIndexPath, recordIndexComments;
+static bool recordIndexExisted = false;
+static size_t recordStartPulse = 0, recordDecodeStartPulse = 0;
+static volatile bool recordSawMotor = false;
+static volatile bool recordMotorOffPending = false;
+static volatile u32 recordMotorOffAt = 0;
+static bool recordIndexUpdatePending = false;
+
+static bool ReadRecordIndex(const char* tap, u8 version)
+{
+    recordIndexMarks.clear(); recordIndexComments.clear(); recordIndexExisted = false;
+    recordIndexPath = tap;
+    size_t dot = recordIndexPath.find_last_of('.');
+    if (dot == std::string::npos) return false;
+    recordIndexPath.resize(dot);
+    recordIndexPath += ".idx";
+    FILINFO info;
+    FRESULT stat = f_stat(recordIndexPath.c_str(), &info);
+    if (stat == FR_NO_FILE) {
+        std::string upper = recordIndexPath.substr(0, recordIndexPath.size() - 4) + ".IDX";
+        stat = f_stat(upper.c_str(), &info);
+        if (stat == FR_NO_FILE) return true;
+        recordIndexPath = upper;
+    }
+    if (stat != FR_OK || info.fsize > 65536) return false;
+    recordIndexExisted = true;
+    FIL fp;
+    if (f_open(&fp, recordIndexPath.c_str(), FA_READ) != FR_OK) return false;
+    std::string text;
+    char buffer[512]; UINT count = 0; bool ok = true;
+    do {
+        if (f_read(&fp, buffer, sizeof(buffer), &count) != FR_OK) { ok = false; break; }
+        text.append(buffer, count);
+    } while (count == sizeof(buffer));
+    if (f_close(&fp) != FR_OK || !ok) return false;
+    std::vector<oled::TapeIndexEntry> entries;
+    if (!oled::ParseUltimateTapeIndex(text, entries)) return false;
+    for (size_t at = 0; at < text.size();) {
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        size_t p = text.find_first_not_of(" \t\r", at);
+        if (p != std::string::npos && p < end && (text[p] == ';' || text[p] == '#' || text[p] == '\''))
+            recordIndexComments.append(text, at, end - at).push_back('\n');
+        at = end + 1;
+    }
+    // Map old file offsets to pulse indices before SaveTap re-encodes the image.
+    std::sort(entries.begin(), entries.end(), [](const oled::TapeIndexEntry& a, const oled::TapeIndexEntry& b) { return a.offset < b.offset; });
+    if (f_open(&fp, tap, FA_READ) != FR_OK) return false;
+    if (f_lseek(&fp, 20) != FR_OK) { f_close(&fp); return false; }
+    u32 position = 20; size_t pulse = 0, entry = 0;
+    unsigned extension = 0;
+    do {
+        if (f_read(&fp, buffer, sizeof(buffer), &count) != FR_OK) { ok = false; break; }
+        for (UINT i = 0; i < count; ++i, ++position) {
+            if (extension) { --extension; continue; }
+            while (entry < entries.size() && entries[entry].offset < position) ++entry;
+            while (entry < entries.size() && entries[entry].offset == position) {
+                recordIndexMarks.push_back(RecordedIndexMark(pulse, entries[entry].name));
+                ++entry;
+            }
+            if (version && buffer[i] == 0) extension = 3;
+            pulse += version == 2 ? 1 : 2;
+        }
+    } while (count == sizeof(buffer));
+    if (f_close(&fp) != FR_OK) ok = false;
+    return ok;
+}
+
+static int C16Pulse(const u64* timings, size_t at, size_t end)
+{
+    if (at + 1 >= end) return -1;
+    u64 duration = timings[at] + timings[at + 1];
+    if (duration >= 300 && duration < 700) return 0; // short
+    if (duration >= 700 && duration < 1400) return 1; // long
+    if (duration >= 1400 && duration < 2800) return 2; // word marker
+    return -1;
+}
+
+static bool ReadC16Byte(const u64* timings, size_t& at, size_t end, u8& value)
+{
+    if (at + 40 > end || C16Pulse(timings, at, end) != 2 || C16Pulse(timings, at + 2, end) != 1) return false;
+    at += 4; value = 0; unsigned parity = 1;
+    for (unsigned bit = 0; bit < 9; ++bit, at += 4) {
+        int first = C16Pulse(timings, at, end), second = C16Pulse(timings, at + 2, end);
+        unsigned one;
+        if (first == 0 && second == 1) one = 0;
+        else if (first == 1 && second == 0) one = 1;
+        else return false;
+        if (bit < 8) { value |= one << bit; parity ^= one; }
+        else if (one != parity) return false;
+    }
+    return true;
+}
+
+struct C16HeaderCandidate {
+    size_t pulse;
+    std::string name;
+    bool repeat;
+    C16HeaderCandidate(size_t p, const std::string& n, bool r) : pulse(p), name(n), repeat(r) {}
+};
+static bool ReadC16Header(const u64* timings, size_t at, size_t end, C16HeaderCandidate& result)
+{
+    size_t start = at;
+    u8 value = 0;
+    if (!ReadC16Byte(timings, at, end, value) || (value != 0x89 && value != 0x09)) return false;
+    bool repeat = value == 0x09;
+    for (unsigned i = 1; i < 9; ++i)
+        if (!ReadC16Byte(timings, at, end, value) || value != (repeat ? 0x09u - i : 0x89u - i)) return false;
+    if (!ReadC16Byte(timings, at, end, value) || (value != 1 && value != 3 && value != 4)) return false;
+    u8 checksum = value, data[191];
+    for (unsigned i = 0; i < sizeof(data); ++i) {
+        if (!ReadC16Byte(timings, at, end, data[i])) return false;
+        checksum ^= data[i];
+    }
+    if (!ReadC16Byte(timings, at, end, value) || value != checksum) return false;
+    std::string name;
+    for (unsigned i = 4; i < 20; ++i) {
+        u8 c = petscii2ascii(data[i]);
+        if (c < 32 || c > 126) c = '?';
+        name.push_back((char)c);
+    }
+    while (!name.empty() && name.back() == ' ') name.pop_back();
+    if (name.empty()) return false;
+    result = C16HeaderCandidate(start, name, repeat);
+    return true;
+}
+
+static void DecodeRecordedHeaders(const u64* timings, size_t start, size_t end,
+                                  std::vector<RecordedIndexMark>& marks)
+{
+    std::vector<C16HeaderCandidate> found;
+    for (size_t phase = 0; phase < 2; ++phase) {
+        size_t at = start + phase;
+        while (at + 40 < end) {
+            if (C16Pulse(timings, at, end) != 0) { at += 2; continue; }
+            size_t leader = at;
+            do { at += 2; } while (at + 2 < end && C16Pulse(timings, at, end) == 0);
+            if ((at - leader) / 2 < 32) continue;
+            size_t limit = std::min(at + 128, end);
+            for (size_t candidate = at; candidate + 40 < limit; candidate += 2) {
+                C16HeaderCandidate header(0, "", false);
+                if (ReadC16Header(timings, candidate, end, header)) {
+                    header.pulse = leader;
+                    found.push_back(header);
+                    break;
+                }
+            }
+        }
+    }
+    std::sort(found.begin(), found.end(), [](const C16HeaderCandidate& a, const C16HeaderCandidate& b) { return a.pulse < b.pulse; });
+    for (size_t i = 0; i + 1 < found.size(); ++i) {
+        if (found[i].repeat || !found[i + 1].repeat || found[i].name != found[i + 1].name) continue;
+        if (marks.size() >= 512) break;
+        marks.push_back(RecordedIndexMark(found[i].pulse, found[i].name));
+        ++i;
+    }
+}
+
+static void FinalizeRecordIndex(u64* timings, size_t& end, size_t& count, size_t capacity)
+{
+    std::vector<RecordedIndexMark> decoded;
+    DecodeRecordedHeaders(timings, recordDecodeStartPulse, end, decoded);
+    // A C16 v2 TAP is played as pairs of half-waves starting at pulse zero.
+    // Recording can begin on either WRITE level. If a header's leader begins
+    // on the other phase, its bytes still decode offline but the KERNAL sees
+    // mispaired waves on playback. Add one short half-wave before the leader.
+    bool hasOldSuffix = count > end;
+    size_t inserted = 0;
+    for (size_t i = 0; i < decoded.size(); ++i) {
+        size_t at = decoded[i].pulse;
+        if (!(at & 1) || count + (hasOldSuffix ? 2 : 1) > capacity) continue;
+        memmove(timings + at + 1, timings + at, (count - at) * sizeof(*timings));
+        timings[at] = 240;
+        ++count; ++end; ++inserted;
+        for (size_t j = i; j < decoded.size(); ++j)
+            if (decoded[j].pulse >= at) ++decoded[j].pulse;
+        for (size_t j = 0; j < recordIndexMarks.size(); ++j)
+            if (recordIndexMarks[j].pulse >= at) ++recordIndexMarks[j].pulse;
+    }
+    // Preserve the phase of any existing tape after a middle overwrite.
+    if (hasOldSuffix && (inserted & 1)) {
+        memmove(timings + end + 1, timings + end, (count - end) * sizeof(*timings));
+        timings[end] = 240;
+        ++count; ++end;
+        for (size_t j = 0; j < recordIndexMarks.size(); ++j)
+            if (recordIndexMarks[j].pulse >= end - 1) ++recordIndexMarks[j].pulse;
+    }
+    std::vector<RecordedIndexMark> kept;
+    for (size_t i = 0; i < recordIndexMarks.size(); ++i)
+        if (recordIndexMarks[i].pulse < recordStartPulse || recordIndexMarks[i].pulse >= end)
+            kept.push_back(recordIndexMarks[i]);
+    kept.insert(kept.end(), decoded.begin(), decoded.end());
+    std::sort(kept.begin(), kept.end(), [](const RecordedIndexMark& a, const RecordedIndexMark& b) {
+        return a.pulse < b.pulse;
+    });
+    if (kept.size() > 512) kept.erase(kept.begin() + 512, kept.end());
+    recordIndexMarks.swap(kept);
+    recordIndexUpdatePending = true;
+}
+
+static bool WriteRecordIndex(const std::vector<RecordedIndexMark>& marks)
+{
+    if (marks.empty()) {
+        if (recordIndexExisted && f_unlink(recordIndexPath.c_str()) != FR_OK) return false;
+        if (recordIndexExisted) ++tapeIndexGeneration;
+        recordIndexExisted = false;
+        return true;
+    }
+    std::string text = recordIndexComments;
+    char line[32];
+    for (size_t i = 0; i < marks.size(); ++i) {
+        snprintf(line, sizeof(line), "0x%08X ", marks[i].offset);
+        text += line; text += marks[i].name; text += '\n';
+    }
+    if (text.size() > 65536) return false;
+    std::string temporary = recordIndexPath + ".tmp";
+    std::string backup = recordIndexPath + ".bak";
+    FILINFO info;
+    if (f_stat(temporary.c_str(), &info) != FR_NO_FILE ||
+        (recordIndexExisted && f_stat(backup.c_str(), &info) != FR_NO_FILE)) return false;
+    FIL fp;
+    if (f_open(&fp, temporary.c_str(), FA_WRITE | FA_CREATE_NEW) != FR_OK) return false;
+    UINT count = 0;
+    bool ok = f_write(&fp, text.data(), text.size(), &count) == FR_OK && count == text.size();
+    if (f_close(&fp) != FR_OK) ok = false;
+    if (!ok) { f_unlink(temporary.c_str()); return false; }
+    if (recordIndexExisted && f_rename(recordIndexPath.c_str(), backup.c_str()) != FR_OK) {
+        f_unlink(temporary.c_str()); return false;
+    }
+    if (f_rename(temporary.c_str(), recordIndexPath.c_str()) != FR_OK) {
+        if (recordIndexExisted) f_rename(backup.c_str(), recordIndexPath.c_str());
+        f_unlink(temporary.c_str()); return false;
+    }
+    if (recordIndexExisted) f_unlink(backup.c_str());
+    recordIndexExisted = true;
+    ++tapeIndexGeneration;
+    return true;
+}
 
 static u64 TapeCounterAtTimeMs(u64 elapsedMs)
 {
@@ -243,6 +536,10 @@ bool TapePlayer::Record()
 	FIL check;
 	if (f_open(&check, tapFilename, FA_WRITE | FA_OPEN_EXISTING) != FR_OK) return false;
 	if (f_close(&check) != FR_OK) return false;
+	if (!ReadRecordIndex(tapFilename, tapVersion)) return false;
+	recordIndexMarks.erase(std::remove_if(recordIndexMarks.begin(), recordIndexMarks.end(),
+		[](const RecordedIndexMark& mark) { return mark.pulse >= pulseCount; }), recordIndexMarks.end());
+	recordIndexUpdatePending = false;
 	PausePlayback();
 	if (currentPulseIndex >= TAPE_MAX_HALFWAVES) { ResumePlayback(); return false; }
 	if (pulseCapacity < TAPE_MAX_HALFWAVES) {
@@ -251,6 +548,7 @@ bool TapePlayer::Record()
 		pulseTimings = p;
 		pulseCapacity = TAPE_MAX_HALFWAVES;
 	}
+	recordStartPulse = currentPulseIndex;
 	// At a seek into a pulse, retain the part before the recording position.
 	if (currentPulseOffsetUs && currentPulseIndex < pulseCount) {
 		pulseTimings[currentPulseIndex] = currentPulseOffsetUs;
@@ -260,6 +558,10 @@ bool TapePlayer::Record()
 	}
 	recordMotor = false;
 	recordEdgeTime = 0;
+	recordDecodeStartPulse = currentPulseIndex;
+	recordSawMotor = false;
+	recordMotorOffPending = false;
+	recordMotorOffAt = 0;
 	recording = true;
 	playing = true;
 	senseLineState = true;
@@ -348,10 +650,16 @@ void TapePlayer::RecordSample(u32 now)
 			}
 		}
 		recordMotor = false;
+		if (!motorAlwaysOn && recordSawMotor && currentPulseIndex >= recordDecodeStartPulse + 8 &&
+		    !recordMotorOffPending) {
+			recordMotorOffAt = now;
+			recordMotorOffPending = true;
+		}
 		return;
 	}
+	recordMotorOffPending = false;
 	bool write = RPI_GetGpioValue((rpi_gpio_pin_t)TAPE_WRITE_GPIO) == RPI_IO_HI;
-	if (!recordMotor) { recordMotor = true; recordWrite = write; recordEdgeTime = now; return; }
+	if (!recordMotor) { recordSawMotor = true; recordMotor = true; recordWrite = write; recordEdgeTime = now; return; }
 	if (write == recordWrite) return;
 	u32 elapsed = now - recordEdgeTime;
 	if (elapsed && currentPulseIndex < pulseCapacity) {
@@ -377,7 +685,11 @@ bool TapePlayer::SaveTap()
 	u32 size = 0;
 	u8 output[4096]; UINT used = 0;
 	double hz = tapeVideo == 1 ? TAPE_CLOCK_NTSC_HZ : TAPE_CLOCK_PAL_HZ;
+	size_t nextMark = 0;
 	for (size_t i = 0; ok && i < pulseCount; ++i) {
+		while (recordIndexUpdatePending && nextMark < recordIndexMarks.size() &&
+		       recordIndexMarks[nextMark].pulse == i)
+			recordIndexMarks[nextMark++].offset = size + 20;
 		u64 cycles = (u64)(pulseTimings[i] * hz / 1000000.0 + 0.5);
 		u64 units = (cycles + 4) / 8;
 		u8 b[4]; UINT n = 1;
@@ -406,6 +718,11 @@ bool TapePlayer::SaveTap()
 		if (ok) ok = f_lseek(&fp, size + sizeof(header)) == FR_OK && f_truncate(&fp) == FR_OK;
 	}
 	ok = f_close(&fp) == FR_OK && ok;
+	if (ok) { tapVersion = 2; tapDataSize = size; }
+	if (ok && recordIndexUpdatePending) {
+		if (nextMark != recordIndexMarks.size() || !WriteRecordIndex(recordIndexMarks)) ok = false;
+		else recordIndexUpdatePending = false;
+	}
 	return ok;
 }
 
@@ -478,6 +795,7 @@ bool TapePlayer::LoadTap(const FILINFO* fileInfo)
 	totalPlaybackTimeUs = 0;
 	cumulativePulseTimeUs = 0;
 	FreePulseBuffer();
+	tapDataSize = 0;
 	
 		// TAPE_SENSE: PLAY button released (inactive state) when TAP is unloaded
 		// senseLineState=false: GPIO LOW → hardware inverts to output HIGH → computer sees HIGH = inactive
@@ -574,6 +892,8 @@ bool TapePlayer::ParseTAP(FIL& fp, u32 fileSize)
 	if (dataSize == 0 || dataSize > (fileSize - 20))
 		dataSize = fileSize - 20;  // Use remaining file size if header says 0
 	tapeVideo = header.video;
+	tapVersion = header.version;
+	tapDataSize = dataSize;
 	if (dataSize == 0) { FreePulseBuffer(); totalPlaybackTimeUs = 0; return true; }
 
 	// Allocate buffer for reading data
@@ -807,6 +1127,7 @@ void TapePlayer::GetUIState(TapeUIState& state) const
 	state.motorActive = motorActive;
 	state.atEnd = atEnd;
 	state.loadGeneration = tapeLoadGeneration;
+	state.indexGeneration = tapeIndexGeneration;
 	strncpy(state.filename, tapFilename, sizeof(state.filename) - 1);
 	state.filename[sizeof(state.filename) - 1] = '\0';
 	state.currentPulseIndex = static_cast<u32>(currentPulseIndex);  // Debug: current pulse index
@@ -869,6 +1190,8 @@ void TapePlayer::Tick10ms()
 	// When always-on, still call handler to keep SENSE asserted and wake core 2 after load/reset.
 	if (motorAlwaysOn || motorNow != motorActive)
 		OnMotorChange(motorNow);
+	if (recording && !motorAlwaysOn && !motorNow && recordMotorOffPending &&
+	    (u32)(Pi1551Clock() - recordMotorOffAt) > 500000u) Stop();
 }
 
 void TapePlayer::Reset()

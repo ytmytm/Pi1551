@@ -40,12 +40,20 @@ def run():
         subprocess.run([str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DPI1551_NATIVE_GPIO_IRQ_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
-                               "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp",
+                               "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp",
                                "-Wl,--gc-sections", "-o", str(build / "tape")], cwd=ROOT, check=True)
         payload = (b"\0" + (11084 * 8).to_bytes(3,"little")) * 10000
         fixture = build / "seek.tap"
         fixture.write_bytes(b"C16-TAPE-RAW" + bytes([2,2,0,0]) + struct.pack("<I",len(payload)) + payload)
         subprocess.run([str(build / "tape"), str(fixture)], cwd=ROOT, check=True)
+        v1_payload = bytes([5, 0, 0x20, 0x03, 0, 7, 9])
+        v1_fixture = build / "seek-v1.tap"
+        v1_fixture.write_bytes(b"C16-TAPE-RAW" + bytes([1,2,0,0]) + struct.pack("<I",len(v1_payload)) + v1_payload)
+        subprocess.run([str(build / "tape"), str(v1_fixture), "v1idx"], cwd=ROOT, check=True)
+        v1_record = build / "record-v1.tap"
+        v1_record.write_bytes(v1_fixture.read_bytes())
+        (build / "record-v1.idx").write_text("0x14 EARLY\n0x15 MIDDLE\n0x19 LATE\n0x1A REPLACED\n")
+        subprocess.run([str(build / "tape"), str(v1_record), "v1record"], cwd=ROOT, check=True)
         gap_payload = (b"\0" + (11084 * 8).to_bytes(3,"little")) * 1845
         gap_payload += b"\0" + (1000000 * 8).to_bytes(3,"little")
         gap_fixture = build / "seek-gap-67.tap"

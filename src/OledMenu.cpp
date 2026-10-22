@@ -23,6 +23,44 @@ bool IsMedia(const std::string& p) {
     std::string e = Extension(p);
     return IsEmulated(p) || e == "D71" || e == "D80" || e == "D81" || e == "D82" || e == "PRG";
 }
+bool ParseUltimateTapeIndex(const std::string& text, std::vector<TapeIndexEntry>& entries) {
+    entries.clear();
+    std::vector<TapeIndexEntry> parsed;
+    size_t at = 0;
+    while (at < text.size()) {
+        size_t end = text.find('\n', at);
+        if (end == std::string::npos) end = text.size();
+        size_t p = at;
+        while (p < end && (text[p] == ' ' || text[p] == '\t' || text[p] == '\r')) ++p;
+        if (p < end && text[p] != ';' && text[p] != '#' && text[p] != '\'') {
+            unsigned base = 10;
+            if (text[p] == '0') {
+                if (p + 1 < end && (text[p+1] == 'x' || text[p+1] == 'X')) { base = 16; p += 2; }
+                else base = 8;
+            }
+            uint32_t offset = 0; unsigned digits = 0;
+            while (p < end) {
+                unsigned char c = (unsigned char)text[p++];
+                unsigned v = c >= '0' && c <= '9' ? c - '0' :
+                    c >= 'A' && c <= 'F' ? c - 'A' + 10 :
+                    c >= 'a' && c <= 'f' ? c - 'a' + 10 : 16;
+                if (v >= base) { --p; break; }
+                if (++digits > 11 || offset > (0xffffffffu - v) / base) return false;
+                offset = offset * base + v;
+            }
+            if (!digits || offset < 20 || p == end || (text[p] != ' ' && text[p] != '\t')) return false;
+            while (p < end && (text[p] == ' ' || text[p] == '\t')) ++p;
+            size_t tail = end;
+            while (tail > p && (text[tail-1] == ' ' || text[tail-1] == '\t' || text[tail-1] == '\r')) --tail;
+            if (tail == p || parsed.size() >= 512) return false;
+            parsed.push_back(TapeIndexEntry(offset, text.substr(p, tail-p)));
+        }
+        at = end + 1;
+    }
+    if (parsed.empty()) return false;
+    entries.swap(parsed);
+    return true;
+}
 Menu::Menu(Backend& b, const std::string& s) : backend(b), start(s), path(s) {
     if (!backend.Directory(path)) { path = "/"; backend.Directory(path); }
     Refresh();
@@ -34,7 +72,7 @@ void Menu::Refresh() {
     if (path != "/") files.push_back(Entry(Parent(path), "..", true));
     for (size_t i = 0; i < entries.size(); ++i)
         if (entries[i].name != "." && entries[i].name != ".." &&
-            (!tapeFilter || entries[i].directory || Extension(entries[i].path) == "TAP"))
+            (!tapeFilter || entries[i].directory || Extension(entries[i].path) == "TAP" || Extension(entries[i].path) == "IDX"))
             files.push_back(entries[i]);
     Clamp();
 }
@@ -83,8 +121,25 @@ bool Menu::Activate(const Entry& entry) {
     mounted = entry.path; lastMounted = mounted; return true;
 }
 bool Menu::OpenMedia(const Entry& e) {
+    if (Extension(e.path) == "IDX") {
+        std::string tap = e.path.substr(0, e.path.find_last_of('.')) + ".tap";
+        std::vector<TapeIndexEntry> entries;
+        if (!backend.ReadTapeIndex(tap, entries)) { message = backend.Error(); return false; }
+        if (!backend.LoadTape(tap)) { message = backend.Error(); return false; }
+        if (backend.ReadStatus().play && !backend.SetTapePlaying(false)) {
+            message = backend.Error(); return false;
+        }
+        tapeIndex.swap(entries); indexedTape = tap; tapeFilter = false;
+        indexedGeneration = backend.ReadStatus().tapeIndexGeneration;
+        history.clear(); hasBrowserReturn = false; view = View::Tape; cursor = 1; offset = 0;
+        Open(View::TapeIndex);
+        return true;
+    }
     if (Extension(e.path) == "TAP") {
         if (!backend.LoadTape(e.path)) { message = backend.Error(); return false; }
+        tapeIndex.clear(); indexedTape = e.path;
+        backend.ReadTapeIndex(e.path, tapeIndex);
+        indexedGeneration = backend.ReadStatus().tapeIndexGeneration;
         if (tapeFilter) {
             tapeFilter = false;
             if (hasBrowserReturn) {
@@ -113,7 +168,7 @@ bool Menu::OpenMedia(const Entry& e) {
 bool Menu::OpenHostMedia(const Entry& e) {
     if (!OpenMedia(e)) return false;
     message.clear();
-    if (Extension(e.path) == "TAP") return true;
+    if (Extension(e.path) == "TAP" || Extension(e.path) == "IDX") return true;
     unsigned savedCursor = cursor, savedOffset = offset;
     bool ok = ChangeDirectory(Parent(e.path));
     cursor = savedCursor; offset = savedOffset; Clamp();
@@ -210,17 +265,25 @@ std::vector<Menu::Row> Menu::Rows() {
     }
     case View::Tape: {
         Status s = backend.ReadStatus();
+        if (indexedTape != s.tape || indexedGeneration != s.tapeIndexGeneration) {
+            tapeIndex.clear(); indexedTape = s.tape; indexedGeneration = s.tapeIndexGeneration;
+            if (!s.tape.empty()) backend.ReadTapeIndex(s.tape, tapeIndex);
+        }
         r.push_back(Row("1:", Basename(s.tape)));
         if (s.tape.empty()) r.push_back(Row("Load TAP..."));
         else {
-            r.push_back(Row(s.play ? "Stop" : "Play"));
+            r.push_back(Row((s.play || s.record) ? "Stop" : "Play"));
+            if (!s.play && !s.record && !tapeIndex.empty()) r.push_back(Row("Go to file..."));
         }
-        if (!s.record) r.push_back(Row("Record"));
-        if (!s.tape.empty()) {
+        if (!s.play && !s.record) r.push_back(Row("Record"));
+        if (!s.tape.empty() && !s.play && !s.record) {
             r.push_back(Row("Eject TAP")); r.push_back(Row("Rewind")); r.push_back(Row("Go to counter"));
         }
         break;
     }
+    case View::TapeIndex:
+        for (size_t i = 0; i < tapeIndex.size(); ++i) r.push_back(Row("", tapeIndex[i].name));
+        break;
     case View::Record:
         r.push_back(Row("New TAP"));
         if (!backend.ReadStatus().tape.empty()) r.push_back(Row("Current TAP"));
@@ -328,6 +391,7 @@ void Menu::ChangeValue(int /*delta*/) {
     else if (view == View::Sound && !backend.PreviewSound()) message = backend.Error();
 }
 void Menu::Select() {
+    Clamp();
     if (cursor == 0) { if (view == View::Browser || view == View::Fliplist) Open(View::Device); else Back(); return; }
     if (view == View::Browser) {
         const Entry e = files[cursor - 1];
@@ -359,17 +423,27 @@ void Menu::Select() {
         else if (action == "Play" || action == "Stop") {
             if (!backend.SetTapePlaying(action == "Play")) message = backend.Error();
         } else if (action == "Record") Open(View::Record);
-        else if (action == "Eject TAP") backend.EjectTape();
+        else if (action == "Eject TAP") {
+            if (backend.EjectTape()) { tapeIndex.clear(); indexedTape.clear(); }
+            else message = backend.Error();
+        }
+        else if (action == "Go to file...") Open(View::TapeIndex);
         else if (action == "Rewind" || action == "Go to counter") {
             Status s = backend.ReadStatus();
             if (s.tape.empty()) message = "No TAP loaded";
             else if (action == "Rewind") { if (!backend.RewindTape()) message = backend.Error(); }
             else { target = s.counter; targetMax = s.counterMax; Open(View::Seek); }
         }
+    } else if (view == View::TapeIndex) {
+        if (cursor - 1 < tapeIndex.size()) {
+            if (backend.SeekTapeOffset(tapeIndex[cursor - 1].offset)) Back();
+            else message = backend.Error();
+        }
     } else if (view == View::Record) {
         std::string action = Rows()[cursor].prefix;
         bool ok = action == "New TAP" ? backend.RecordTapeNew(path) : backend.RecordTapeExisting();
-        if (ok) Back(); else message = backend.Error();
+        if (ok) { tapeIndex.clear(); indexedTape = backend.ReadStatus().tape; Back(); }
+        else message = backend.Error();
     } else if (view == View::Seek) { if (backend.SeekTape(target)) Back(); else message = "Seek failed"; }
     else if (view == View::Disk) {
         if (cursor == 1) backend.WriteProtect(!backend.WriteProtected());

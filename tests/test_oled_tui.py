@@ -47,6 +47,8 @@ class TuiControls(unittest.TestCase):
                 self.assertEqual(s.display_value("MOTOR"), "ON" if motor_always else "OFF")
                 self.assertIn("Stop" if autoplay else "Play", s.items())
                 self.assertNotIn("Play" if autoplay else "Stop", s.items())
+                for action in ("Go to file...", "Eject TAP", "Rewind", "Go to counter", "Record"):
+                    if autoplay: self.assertNotIn(action, s.items())
                 s.tape_motor = True
                 self.assertEqual(s.display_value("MOTOR"), "ON")
                 if not autoplay:
@@ -76,7 +78,7 @@ class TuiControls(unittest.TestCase):
             with patch("tools.pi1551_oled_tui.curses.color_pair", return_value=0): ui.draw()
             rows = [value for row, value in rendered if row >= 2]
             self.assertTrue(rows[1].startswith("1:" + tape.name[:13]))
-            self.assertEqual(rows[2:5], [expected, "Record", "Eject TAP"])
+            self.assertEqual(rows[2:5], [expected] if autoplay else [expected, "Record", "Eject TAP"])
             self.assertEqual(rows[0], "..")
 
     def test_tape_record_menu_and_transport_stop_on_seek(self):
@@ -86,23 +88,79 @@ class TuiControls(unittest.TestCase):
         self.click(s, "New TAP")
         self.assertEqual(s.tape.name, "NEWTAPE1.tap")
         self.assertTrue(s.tape_recording and s.tape_playing)
+        self.assertEqual(s.items(), ["..", "TAP FILE", "Stop"])
+        self.click(s, "Stop")
         self.click(s, "Go to counter"); self.click(s, "TARGET")
         self.assertFalse(s.tape_recording or s.tape_playing)
         self.click(s, "Record")
         self.assertIn("Current TAP", s.items())
         self.click(s, "Current TAP")
+        self.click(s, "Stop")
         self.click(s, "Rewind")
         self.assertFalse(s.tape_recording or s.tape_playing)
+
+    def test_record_motor_off_and_always_manual_stop(self):
+        s = Simulator(); s.set_screen("tape")
+        s.options["Motor override"] = False
+        s.toggle_motor()
+        self.click(s, "Record"); self.click(s, "New TAP")
+        self.assertTrue(s.tape_recording)
+        s.toggle_motor()
+        self.assertTrue(s.tape_recording)
+        s.record_motor_off_since -= 0.4; s.tick()
+        self.assertTrue(s.tape_recording)
+        s.toggle_motor(); s.tick()
+        self.assertTrue(s.tape_recording)
+        s.toggle_motor()
+        s.record_motor_off_since -= 0.6; s.tick()
+        self.assertFalse(s.tape_recording or s.tape_playing)
+        s.options["Motor override"] = True
+        self.click(s, "Record"); self.click(s, "Current TAP")
+        s.toggle_motor()
+        self.assertTrue(s.tape_recording)
+        self.click(s, "Stop")
+        self.assertFalse(s.tape_recording)
 
     def test_tape_seek_stops_at_tape_specific_counter_maximum(self):
         s = Simulator(); s.set_screen("tape")
         tape = s.sd.children[0].children[3].children[0]
-        s.load_tape(tape); self.click(s, "Go to counter")
+        s.load_tape(tape); self.click(s, "Stop"); self.click(s, "Go to counter")
         s.move(500)
         self.assertEqual(s.seek_target, tape.counter_max)
         self.assertEqual(s.display_value("TARGET"), f"{tape.counter_max:03d}/{tape.counter_max:03d}")
         self.click(s, "TARGET")
         self.assertEqual(s.tape_pos, tape.counter_max)
+
+    def test_tape_index_in_browser_and_tape_menu(self):
+        s = Simulator(); tape_dir = s.start_folder.children[3]
+        tape, index, no_index = tape_dir.children
+        s.path.append(tape_dir); s.set_screen("browser")
+        self.assertIn(index, s.browser_items())
+        s.cursor = s.browser_items().index(index) + 1
+        s.activate()
+        self.assertIs(s.tape, tape)
+        self.assertEqual(s.screen, "tape_index")
+        self.assertFalse(s.tape_playing)
+        self.assertEqual(s.items(), ["..", "INTRO", "EVENT 1", "EVENT 2"])
+        self.click(s, "EVENT 1")
+        self.assertEqual(s.screen, "tape")
+        self.assertEqual(s.items()[2:5], ["Play", "Go to file...", "Record"])
+        self.assertEqual((s.tape_pos, s.last_seek_offset, s.tape_playing), (48, 0x4000, False))
+        self.click(s, "Go to file...")
+        self.click(s, "EVENT 2")
+        self.assertEqual((s.tape_pos, s.last_seek_offset), (105, 0x9000))
+        self.click(s, "Eject TAP")
+        self.assertNotIn("Go to file...", s.items())
+        s.load_tape(no_index); s.set_screen("tape")
+        self.assertNotIn("Go to file...", s.items())
+        s.load_tape(tape)
+        self.click(s, "Stop")
+        self.assertIn("Go to file...", s.items())
+        s.load_index(index)
+        s.go_back()
+        self.assertIn("Go to file...", s.items())
+        self.click(s, "Record"); self.click(s, "Current TAP")
+        self.assertNotIn("Go to file...", s.items())
 
     def test_independent_reset_path_and_folder_header(self):
         for ignore in (False,True):

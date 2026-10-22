@@ -3067,6 +3067,7 @@ oled::Status OledKernelStatus()
         g_tapePlayer->Tick10ms(); TapeUIState tape; g_tapePlayer->GetUIState(tape);
         s.tape = tape.isLoaded ? tape.filename : "";
         s.play = tape.isPlaying; s.record = tape.isRecording; s.counter = tape.tapeCounter; s.counterMax = tape.maxTapeCounter; s.percent = tape.percentage;
+        s.tapeIndexGeneration = tape.indexGeneration;
     }
     s.motor = tapeMotor;
     return s;

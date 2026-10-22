@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 Options options;
 void NativeFatFSFail(const std::string& operation);
 static unsigned nativeClock = 0;
@@ -48,6 +49,55 @@ extern "C" void RPI_SetGpioHi(rpi_gpio_pin_t p) { pins[p] = true; ++changes[p]; 
 extern "C" void RPI_SetGpioLo(rpi_gpio_pin_t p) { pins[p] = false; ++changes[p]; }
 extern "C" rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t p) { return pins[p] ? RPI_IO_HI : RPI_IO_LO; }
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"FAIL tape:%d %s\n",__LINE__,#x); return 1; } } while(0)
+static void RecordedHalfwave(TapePlayer& tape, unsigned micros) {
+    nativeClock += micros;
+    pins[TAPE_WRITE_GPIO] = !pins[TAPE_WRITE_GPIO];
+    tape.RecordSample(nativeClock);
+}
+static void RecordedPulse(TapePlayer& tape, unsigned halfwaveMicros) {
+    RecordedHalfwave(tape, halfwaveMicros);
+    RecordedHalfwave(tape, halfwaveMicros);
+}
+static void RecordedBit(TapePlayer& tape, bool one) {
+    RecordedPulse(tape, one ? 480 : 240);
+    RecordedPulse(tape, one ? 240 : 480);
+}
+static void RecordedByte(TapePlayer& tape, unsigned value) {
+    RecordedPulse(tape, 960); RecordedPulse(tape, 480);
+    unsigned parity = 1;
+    for (unsigned bit = 0; bit < 8; ++bit) {
+        unsigned one = (value >> bit) & 1;
+        RecordedBit(tape, one); parity ^= one;
+    }
+    RecordedBit(tape, parity);
+}
+static void RecordedHeaderPass(TapePlayer& tape, const char* name, bool repeat) {
+    for (unsigned i = 0; i < 64; ++i) RecordedPulse(tape, 240);
+    for (unsigned i = 0; i < 9; ++i) RecordedByte(tape, (repeat ? 0x09 : 0x89) - i);
+    RecordedByte(tape, 1);
+    unsigned checksum = 1;
+    unsigned char data[191]; memset(data, ' ', sizeof(data));
+    for (unsigned i = 0; i < 16 && name[i]; ++i) data[i + 4] = name[i];
+    for (unsigned char c : data) { RecordedByte(tape, c); checksum ^= c; }
+    RecordedByte(tape, checksum);
+}
+static void RecordedSave(TapePlayer& tape, const char* name) {
+    RecordedHeaderPass(tape, name, false);
+    RecordedHeaderPass(tape, name, true);
+}
+static std::string ReadNativeText(const std::string& path) {
+    FILE* file = fopen(path.c_str(), "rb");
+    if (!file) return "";
+    std::string result; char buffer[256]; size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), file)) != 0) result.append(buffer, n);
+    fclose(file); return result;
+}
+static size_t TapPulseAtOffset(const std::string& path, u32 offset) {
+    std::string tap = ReadNativeText(path);
+    size_t at = 20, pulse = 0;
+    while (at < offset && at < tap.size()) { at += tap[at] ? 1 : 4; ++pulse; }
+    return at == offset ? pulse : (size_t)-1;
+}
 int main(int argc,char** argv) {
     CHECK(argc == 2 || argc == 3);
     options.SetRuntime(oled::Setting::MotorAlways,0);
@@ -58,6 +108,50 @@ int main(int argc,char** argv) {
     FILE* file = fopen(argv[1],"rb"); CHECK(file != 0); fseek(file,0,SEEK_END); info.fsize = ftell(file); fclose(file);
     CHECK(tape.LoadTap(&info)); CHECK(tape.GetTapeSenseState()); CHECK(pins[TAPE_SENSE_GPIO]);
     TapeUIState s; tape.GetUIState(s); CHECK(s.tapeCounter == 0); CHECK(s.percentage == 0);
+    if (argc == 3 && strcmp(argv[2], "v1idx") == 0) {
+        CHECK(!tape.SeekOffset(22)); // Middle of the extended v1 record.
+        CHECK(tape.SeekOffset(21)); tape.GetUIState(s);
+        CHECK(s.currentPulseIndex == 2 && !s.isPlaying);
+        CHECK(tape.SeekOffset(25)); tape.GetUIState(s);
+        CHECK(s.currentPulseIndex == 4);
+        CHECK(tape.SeekOffset(20)); tape.GetUIState(s);
+        CHECK(s.currentPulseIndex == 0);
+        puts("PASS v1 TAP IDX byte offsets and extended record boundaries");
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[2], "v1record") == 0) {
+        CHECK(tape.SeekOffset(26));
+        nativeClock = 1000; pins[TAPE_WRITE_GPIO] = false;
+        CHECK(tape.Record());
+        RecordedSave(tape, "NEW FILE");
+        pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+        nativeClock += 500001;
+        tape.Tick10ms(); tape.GetUIState(s);
+        CHECK(!s.isRecording);
+        std::string indexPath = std::string(argv[1]);
+        indexPath.replace(indexPath.size() - 4, 4, ".idx");
+        std::vector<oled::TapeIndexEntry> index;
+        CHECK(oled::ParseUltimateTapeIndex(ReadNativeText(indexPath), index));
+        CHECK(index.size() == 4);
+        CHECK(index[0].name == "EARLY" && index[0].offset == 20);
+        CHECK(index[1].name == "MIDDLE" && index[1].offset == 22);
+        CHECK(index[2].name == "LATE" && index[2].offset == 24);
+        CHECK(index[3].name == "new file" && index[3].offset > index[2].offset);
+        FILE* converted = fopen(argv[1], "rb"); CHECK(converted);
+        unsigned char header[20]; CHECK(fread(header, 1, sizeof(header), converted) == sizeof(header));
+        CHECK(header[12] == 2); fclose(converted);
+        for (size_t i = 0; i < index.size(); ++i) CHECK(tape.SeekOffset(index[i].offset));
+        puts("PASS v1 IDX entries remapped after TAP v2 recording");
+        return 0;
+    }
+    CHECK(!tape.SeekOffset(19));
+    CHECK(!tape.SeekOffset(21)); // Inside a four-byte extended pulse.
+    CHECK(tape.SeekOffset(24)); tape.GetUIState(s);
+    CHECK(s.currentPulseIndex == 1 && !s.isPlaying && !tape.AtEnd());
+    CHECK(tape.SeekOffset(20)); tape.GetUIState(s);
+    CHECK(s.currentPulseIndex == 0);
+    CHECK(!tape.SeekOffset(20 + info.fsize));
+    CHECK(tape.Play()); tape.GetUIState(s);
     if (argc == 3 && strcmp(argv[2],"gap67") == 0) {
         CHECK(s.maxTapeCounter == 67);
         for (unsigned counter : {65u,66u}) {
@@ -189,6 +283,76 @@ int main(int argc,char** argv) {
     tape.GetUIState(s); CHECK(s.currentTimeMs == 0 && s.tapeCounter == 0);
     tape.Eject();
     if (!getenv("PI1551_KEEP_RECORDED_TAP")) remove(recorded.c_str());
+    std::string autoTap = std::string(argv[1]) + ".auto.tap";
+    std::string autoIdx = std::string(argv[1]) + ".auto.idx";
+    pins[TAPE_MOTOR_GPIO] = false; pins[TAPE_WRITE_GPIO] = false; nativeClock = 1000;
+    CHECK(tape.CreateTap(autoTap.c_str()));
+    CHECK(tape.Record());
+    // Start the first header on the opposite v2 half-wave phase.
+    RecordedHalfwave(tape, 240);
+    RecordedHalfwave(tape, 240);
+    RecordedSave(tape, "FIRST FILE");
+    pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+    nativeClock += 300000;
+    tape.Tick10ms(); tape.GetUIState(s); CHECK(s.isRecording);
+    pins[TAPE_MOTOR_GPIO] = false; tape.RecordSample(++nativeClock);
+    RecordedPulse(tape, 240);
+    pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+    nativeClock += 500000;
+    tape.Tick10ms(); tape.GetUIState(s); CHECK(s.isRecording);
+    ++nativeClock;
+    tape.Tick10ms(); tape.GetUIState(s);
+    CHECK(!s.isRecording && !s.isPlaying);
+    std::vector<oled::TapeIndexEntry> index;
+    CHECK(oled::ParseUltimateTapeIndex(ReadNativeText(autoIdx), index));
+    CHECK(index.size() == 1 && index[0].name == "first file" && index[0].offset >= 20);
+    CHECK((TapPulseAtOffset(autoTap, index[0].offset) & 1) == 0);
+    u32 firstOffset = index[0].offset;
+    pins[TAPE_MOTOR_GPIO] = false; tape.Tick10ms();
+    CHECK(tape.Record());
+    RecordedSave(tape, "SECOND FILE");
+    pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+    nativeClock += 500001;
+    tape.Tick10ms();
+    CHECK(oled::ParseUltimateTapeIndex(ReadNativeText(autoIdx), index));
+    CHECK(index.size() == 2 && index[0].name == "first file" && index[1].name == "second file");
+    CHECK((TapPulseAtOffset(autoTap, index[0].offset) & 1) == 0);
+    CHECK((TapPulseAtOffset(autoTap, index[1].offset) & 1) == 0);
+    CHECK(index[0].offset == firstOffset && index[1].offset > firstOffset);
+    CHECK(tape.SeekOffset(index[1].offset));
+    tape.SetMotorAlwaysOn(true);
+    CHECK(tape.Record());
+    RecordedSave(tape, "THIRD FILE");
+    pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+    tape.Tick10ms(); tape.GetUIState(s); CHECK(s.isRecording);
+    CHECK(tape.Stop());
+    tape.SetMotorAlwaysOn(false);
+    CHECK(oled::ParseUltimateTapeIndex(ReadNativeText(autoIdx), index));
+    CHECK(index.size() == 2 && index[0].name == "first file" && index[1].name == "third file");
+    CHECK((TapPulseAtOffset(autoTap, index[1].offset) & 1) == 0);
+    pins[TAPE_MOTOR_GPIO] = false; CHECK(tape.Record());
+    RecordedSave(tape, "FOURTH FILE");
+    NativeFatFSFail("rename");
+    CHECK(!tape.Stop());
+    NativeFatFSFail("rename");
+    CHECK(!tape.Eject() && tape.IsLoaded());
+    NativeFatFSFail("none");
+    CHECK(tape.Eject());
+    CHECK(oled::ParseUltimateTapeIndex(ReadNativeText(autoIdx), index));
+    CHECK(index.size() == 3 && index[2].name == "fourth file");
+    if (!getenv("PI1551_KEEP_RECORDED_TAP")) { remove(autoTap.c_str()); remove(autoIdx.c_str()); }
+    std::string mismatchTap = std::string(argv[1]) + ".mismatch.tap";
+    std::string mismatchIdx = std::string(argv[1]) + ".mismatch.idx";
+    pins[TAPE_MOTOR_GPIO] = false; pins[TAPE_WRITE_GPIO] = false; nativeClock = 1000;
+    CHECK(tape.CreateTap(mismatchTap.c_str())); CHECK(tape.Record());
+    RecordedHeaderPass(tape, "FIRST", false);
+    RecordedHeaderPass(tape, "DIFFERENT", true);
+    pins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++nativeClock);
+    nativeClock += 500001;
+    tape.Tick10ms(); tape.GetUIState(s); CHECK(!s.isRecording);
+    FILE* mismatch = fopen(mismatchIdx.c_str(), "rb"); CHECK(!mismatch);
+    tape.Eject();
+    if (!getenv("PI1551_KEEP_RECORDED_TAP")) remove(mismatchTap.c_str());
     puts("PASS TAP playback, recording, motor gating, persistence and GPIO effects");
     return 0;
 }

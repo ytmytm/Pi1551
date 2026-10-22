@@ -161,14 +161,17 @@ Browser / Fliplist
    │  ├─ ..
    │  ├─ 1:<loaded TAP filename>    (or just 1: when empty; scrolls)
    │  ├─ Play / Stop                (only when TAP is loaded; toggles with state)
+   │  ├─ Go to file...              (matching IDX loaded and tape stopped)
+   │  │  ├─ ..
+   │  │  └─ indexed tape positions
    │  ├─ Load TAP...                (only when no TAP is loaded)
-   │  ├─ Record                     (available with or without a TAP; hidden while recording)
+   │  ├─ Record                     (no TAP or loaded TAP stopped)
    │  │  ├─ ..
    │  │  ├─ New TAP                  (create in the current SD folder)
    │  │  └─ Current TAP              (only when a TAP is loaded)
-   │  ├─ Eject TAP                  (only when TAP is loaded)
-   │  ├─ Rewind                     (only when TAP is loaded)
-   │  └─ Go to counter              (only when TAP is loaded)
+   │  ├─ Eject TAP                  (only when loaded TAP is stopped)
+   │  ├─ Rewind                     (only when loaded TAP is stopped)
+   │  └─ Go to counter              (only when loaded TAP is stopped)
    │     ├─ ..
    │     └─ TARGET 000..999
    ├─ Disk
@@ -384,10 +387,39 @@ Autoplay ON presses PLAY as soon as a TAP is loaded; OFF loads it stopped.
 In the Tape menu, the loaded TAP offers `Play` while stopped and `Stop` while
 playing or recording, between the filename and `Record`. With no TAP,
 `Load TAP...` opens a tape-filtered browser and `Record` remains available.
-`Record` opens `New TAP` and, when a TAP is loaded, `Current TAP`. Rewind and
-Go to counter perform Stop before changing position; Go to counter changes
-TARGET by exactly one per encoder impulse, click stops and seeks, and Back
-cancels without stopping. Eject stops and unloads the tape.
+With a loaded TAP, choose `Stop` before Record, Eject, Rewind or either Go to
+command. `Record` opens `New TAP` and `Current TAP`. Go to counter changes
+TARGET by exactly one per encoder impulse; click seeks and Back cancels.
+Eject unloads the stopped tape. MOTOR OFF pauses movement but does not release
+PLAY, so the Stop step is still needed after the computer switches MOTOR off.
+
+Put an Ultimate-format `.idx` next to a same-named `.tap`, for example
+`games.idx` and `games.tap`. Each non-comment line contains an absolute byte
+offset in the TAP, whitespace, then a position name: `0x00000015 GAME 2`.
+Offsets may be decimal, hexadecimal with `0x`, or octal with a leading `0`.
+Lines starting with `;`, `#`, or `'` are comments.
+Selecting an IDX in the tape browser loads and stops its matching TAP, then opens the
+position list directly. Selecting the TAP loads an adjacent matching IDX
+automatically; use Tape > `Go to file...` to open the position list.
+The option appears immediately below Play when a valid IDX is loaded and the
+tape is stopped. During Play or Record, choose Stop before seeking.
+IDX is independent of the computer, but the paired TAP must be a C16/Plus/4
+recording supported by this player. Offsets must
+point to the start of a TAP pulse record; an offset inside an extended pulse
+is rejected. Seeking stops playback. The position list is hidden during
+recording and reloaded after the TAP and IDX are saved.
+
+**Try it in the desktop TUI:** run `make tui`, open `/1551/tap`, and select
+`Winter Games.idx`. The simulator loads `Winter Games.tap` and shows the
+sample positions INTRO, EVENT 1, and EVENT 2. Selecting a position stops
+playback and displays its TAP offset. Back in Tape, `Go to file...` is directly
+below Play/Stop. Selecting `Winter Games.tap` also loads its IDX automatically;
+open `Go to file...` from Tape to see the positions.
+Use Left/Right to move, Enter to select, and `b` to go back. This virtual SD
+card and its index offsets are examples;
+`make tui` does not read TAP/IDX files from your computer or SD card. To test
+your own files, copy a matching `.tap`/`.idx` pair to the device's SD card
+and use the hardware menu.
 
 WProt is write protection; read-only media stays protected. Write image
 flushes the mounted medium. New image first lets you choose D64/G64, then
@@ -486,19 +518,28 @@ emulation does not unload an already loaded tape.
    RECORD. Existing files are not overwritten. `Record` is available even
    when no tape is loaded. To continue on a loaded tape instead, choose
    `Current TAP` at its current position; use Rewind or Go to counter first if
-   you want another position.
+   you want another position. If autoplay started a loaded TAP, choose Stop
+   before opening Record.
 2. On the computer, enter a program and use a cassette command such as
    `SAVE"TEST",1`. RECORD also presses PLAY/SENSE. With `Motor ON COMP.`, Pi1551
-   captures WRITE pulses only while the computer runs the MOTOR. Pauses while
-   MOTOR is off do not create long silent intervals in the TAP.
-3. Choose `Stop` after SAVE finishes. You can choose `Record` → `Current TAP`
+   captures WRITE pulses only while the computer runs the MOTOR. The first
+   MOTOR OFF for more than 0.5 seconds after captured pulses ends RECORD and
+   saves TAP. A brief MOTOR pause after the C16 header does not end RECORD.
+   With `Motor ON ALWAYS`, choose `Stop` after SAVE finishes.
+3. After recording ends, you can choose `Record` → `Current TAP`
    again to add another program. To load from the beginning, choose `Rewind`,
    then `Play` if needed, and use `LOAD"",1` on the computer. Directly changing
    from RECORD to PLAY requires Stop first.
 
 `New TAP` creates a valid empty TAP file immediately. Captured pulses are
 buffered in Pi memory and written as version 2 C16 TAP to SD/USB when recording
-stops. Only a tape changed during RECORD is written again: ordinary Play, Stop,
+stops. After a successful save, Pi1551 decodes standard Plus/4 KERNAL headers
+from the recorded pulses, checks the repeated header, and creates or updates a
+matching IDX with the file names. Existing entries outside the overwritten
+region are kept at their recalculated byte offsets; entries in the overwritten
+region are replaced by decoded names. Recordings with no recognized header do
+not create an IDX. This decoding and IDX write run outside the GPIO interrupt.
+Only a tape changed during RECORD is written again: ordinary Play, Stop,
 Rewind and seek
 do not rewrite an unchanged TAP. `Stop`, `Rewind`, a confirmed `Go to counter`
 and `Eject TAP` finish RECORD and save changed data before moving or unloading

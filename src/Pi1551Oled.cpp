@@ -160,6 +160,27 @@ public:
         FILINFO f; if (!g_tapePlayer || f_stat(path.c_str(), &f) != FR_OK || path.size() >= sizeof(f.fname)) return false;
         strcpy(f.fname, path.c_str()); return g_tapePlayer->LoadTap(&f);
     }
+    bool ReadTapeIndex(const std::string& tap, std::vector<oled::TapeIndexEntry>& entries) override {
+        entries.clear();
+        error = "IDX read failed";
+        size_t dot = tap.find_last_of('.');
+        if (dot == std::string::npos) return false;
+        std::string stem = tap.substr(0, dot), text;
+        if (!ReadText((stem + ".idx").c_str(), text) &&
+            !ReadText((stem + ".IDX").c_str(), text)) return false;
+        std::vector<oled::TapeIndexEntry> parsed;
+        if (!oled::ParseUltimateTapeIndex(text, parsed)) { error = "Invalid IDX"; return false; }
+        FILINFO f;
+        if (f_stat(tap.c_str(), &f) != FR_OK || f.fsize <= 20) { error = "Matching TAP missing"; return false; }
+        for (size_t i = 0; i < parsed.size(); ++i)
+            if (parsed[i].offset >= f.fsize) { error = "IDX offset outside TAP"; return false; }
+        entries.swap(parsed);
+        return true;
+    }
+    bool SeekTapeOffset(uint32_t offset) override {
+        error = "IDX seek failed";
+        return g_tapePlayer && g_tapePlayer->SeekOffset(offset);
+    }
     bool SetTapePlaying(bool play) override {
         if (!g_tapePlayer) return false;
         bool ok = play ? g_tapePlayer->Play() : g_tapePlayer->Stop();
@@ -187,7 +208,10 @@ public:
         }
         return false;
     }
-    void EjectTape() override { if (g_tapePlayer) g_tapePlayer->Eject(); }
+    bool EjectTape() override {
+        error = "TAP/IDX write failed";
+        return g_tapePlayer && g_tapePlayer->Eject();
+    }
     bool SeekTape(unsigned count) override { return g_tapePlayer && g_tapePlayer->SeekCounter(count); }
     bool RewindTape() override { return g_tapePlayer && g_tapePlayer->Rewind(); }
     oled::Status ReadStatus() override { return OledKernelStatus(); }

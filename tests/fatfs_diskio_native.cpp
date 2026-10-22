@@ -21,6 +21,7 @@ TapePlayer* g_tapePlayer = 0;
 ScreenLCD* screenLCD = 0;
 InputMappings* inputMappings = 0;
 static unsigned now = 0, reboots = 0;
+static bool gpioPins[54] = {};
 unsigned Pi1551NativeClock() { return now; }
 SpinLock::SpinLock() : m_bLocked(false) {}
 SpinLock::~SpinLock() {}
@@ -46,9 +47,9 @@ oled::Status OledKernelStatus() { return oled::Status(); }
 void Reboot_Pi() { ++reboots; }
 extern "C" void RPI_SetGpioInputPullUp(rpi_gpio_pin_t) {}
 extern "C" void RPI_SetGpioOutput(rpi_gpio_pin_t) {}
-extern "C" void RPI_SetGpioHi(rpi_gpio_pin_t) {}
-extern "C" void RPI_SetGpioLo(rpi_gpio_pin_t) {}
-extern "C" rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t) { return RPI_IO_LO; }
+extern "C" void RPI_SetGpioHi(rpi_gpio_pin_t p) { gpioPins[p] = true; }
+extern "C" void RPI_SetGpioLo(rpi_gpio_pin_t p) { gpioPins[p] = false; }
+extern "C" rpi_gpio_value_t RPI_GetGpioValue(rpi_gpio_pin_t p) { return gpioPins[p] ? RPI_IO_HI : RPI_IO_LO; }
 CEMMCDevice::CEMMCDevice() {}
 CEMMCDevice::~CEMMCDevice() {}
 bool CEMMCDevice::Initialize() { return initOK; }
@@ -108,6 +109,28 @@ static std::string ReadFile(const char* path) {
     while (f_read(&file,buffer,sizeof(buffer),&count)==FR_OK && count) text.append(buffer,count);
     f_close(&file); return text;
 }
+static void TapeHalfwave(TapePlayer& tape, unsigned us) {
+    now += us; gpioPins[TAPE_WRITE_GPIO] = !gpioPins[TAPE_WRITE_GPIO]; tape.RecordSample(now);
+}
+static void TapePulse(TapePlayer& tape, unsigned us) { TapeHalfwave(tape, us); TapeHalfwave(tape, us); }
+static void TapeBit(TapePlayer& tape, bool one) {
+    TapePulse(tape, one ? 480 : 240); TapePulse(tape, one ? 240 : 480);
+}
+static void TapeByte(TapePlayer& tape, unsigned value) {
+    TapePulse(tape, 960); TapePulse(tape, 480);
+    unsigned parity = 1;
+    for (unsigned bit=0; bit<8; ++bit) { unsigned one = (value >> bit) & 1; TapeBit(tape, one); parity ^= one; }
+    TapeBit(tape, parity);
+}
+static void TapeHeader(TapePlayer& tape, const char* name, bool repeat) {
+    for (unsigned i=0; i<64; ++i) TapePulse(tape, 240);
+    for (unsigned i=0; i<9; ++i) TapeByte(tape, (repeat ? 0x09 : 0x89) - i);
+    TapeByte(tape, 1);
+    unsigned checksum = 1; unsigned char data[191]; memset(data, ' ', sizeof(data));
+    for (unsigned i=0; i<16 && name[i]; ++i) data[i+4] = name[i];
+    for (unsigned char c : data) { TapeByte(tape, c); checksum ^= c; }
+    TapeByte(tape, checksum);
+}
 int main() {
     static_assert(sizeof(DWORD)==4,"FatFS DWORD must match ARM");
     CEMMCDevice card; unsigned char block[512] = {};
@@ -123,6 +146,25 @@ int main() {
         CHECK(f_write(&file,original,sizeof(original)-1,&count)==FR_OK);
         CHECK(f_sync(&file)==FR_OK); CHECK(f_close(&file)==FR_OK);
         CHECK(f_mkdir("/1551")==FR_OK);
+        options.SetRuntime(oled::Setting::MotorAlways,0);
+        gpioPins[TAPE_MOTOR_GPIO] = false; gpioPins[TAPE_WRITE_GPIO] = false; now = 1000;
+        {
+            TapePlayer tape;
+            tape.InitializeGPIO();
+            CHECK(tape.CreateTap("/1551/C16TEST.tap")); CHECK(tape.Record());
+            tape.RecordSample(now);
+            TapeHeader(tape,"FAT INDEX",false);
+            gpioPins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++now);
+            now += 100000; tape.Tick10ms(); CHECK(tape.IsLoaded());
+            gpioPins[TAPE_MOTOR_GPIO] = false; tape.RecordSample(++now);
+            TapeHeader(tape,"FAT INDEX",true);
+            gpioPins[TAPE_MOTOR_GPIO] = true; tape.RecordSample(++now);
+            now += 500001; tape.Tick10ms();
+            CHECK(tape.Eject());
+        }
+        CHECK(ReadFile("/1551/C16TEST.idx").find("fat index") != std::string::npos);
+        CHECK(f_mount(0,"SD:",0)==FR_OK); CHECK(f_mount(&fs,"SD:",1)==FR_OK);
+        CHECK(ReadFile("/1551/C16TEST.idx").find("fat index") != std::string::npos);
         options.SetRuntime(oled::Setting::Device,8);
         Pi1551Oled::Initialize();
         CHECK(Click("Menu...")); CHECK(Click("Settings")); CHECK(Click("Drive")); CHECK(Click("Device number"));

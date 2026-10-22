@@ -7,7 +7,7 @@
 
 namespace oled {
 enum class Key { Left, Right, Enter, Insert, Back, ResetPath };
-enum class View { Browser, Fliplist, Device, Tape, Record, Seek, Disk, Settings,
+enum class View { Browser, Fliplist, Device, Tape, TapeIndex, Record, Seek, Disk, Settings,
     ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways, TapeAutoplay,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
@@ -18,9 +18,15 @@ struct Entry {
     Entry(const std::string& p = "", const std::string& n = "", bool d = false)
         : path(p), name(n), directory(d) {}
 };
+struct TapeIndexEntry {
+    uint32_t offset;
+    std::string name;
+    TapeIndexEntry(uint32_t o = 0, const std::string& n = "") : offset(o), name(n) {}
+};
 struct Status {
     bool emulating = false, idle = false, led = false, motor = false, play = false, record = false;
     unsigned halfTrack = 34, temperature = 0, counter = 0, counterMax = 999, percent = 0;
+    uint32_t tapeIndexGeneration = 0;
     std::string tape, rom, sdSize, sdFree, firmware;
 };
 struct Frame {
@@ -37,10 +43,12 @@ public:
     virtual bool Unmount() = 0;
     virtual bool ReadList(const std::string& path, std::vector<Entry>& entries) = 0;
     virtual bool LoadTape(const std::string& path) = 0;
+    virtual bool ReadTapeIndex(const std::string& tap, std::vector<TapeIndexEntry>& entries) { (void)tap; (void)entries; return false; }
+    virtual bool SeekTapeOffset(uint32_t offset) { (void)offset; return false; }
     virtual bool SetTapePlaying(bool playing) { (void)playing; return false; }
     virtual bool RecordTapeNew(const std::string& directory) { (void)directory; return false; }
     virtual bool RecordTapeExisting() { return false; }
-    virtual void EjectTape() = 0;
+    virtual bool EjectTape() = 0;
     virtual bool SeekTape(unsigned counter) = 0;
     // Seeking releases PLAY/RECORD; production backends flush changed TAP data first.
     virtual bool RewindTape() { return SetTapePlaying(false) && SeekTape(0); }
@@ -66,6 +74,7 @@ bool IsEmulated(const std::string& path);
 std::string Extension(const std::string& path);
 std::string Basename(const std::string& path);
 std::string Parent(const std::string& path);
+bool ParseUltimateTapeIndex(const std::string& text, std::vector<TapeIndexEntry>& entries);
 
 class Menu {
 public:
@@ -100,6 +109,9 @@ private:
     Backend& backend;
     std::string start, path, mounted, lastMounted, message;
     std::vector<Entry> files, flip;
+    std::vector<TapeIndexEntry> tapeIndex;
+    std::string indexedTape;
+    uint32_t indexedGeneration = 0;
     std::vector<Position> history;
     Position browserReturn;
     bool hasBrowserReturn = false, listMode = false, tapeFilter = false, editing = false;

@@ -135,7 +135,7 @@ Common `options.txt` settings:
 | `skipMotorSpinUpDelay` | Skips the emulated 1551 motor spin-up delay when set. |
 | `IdleSleep` | Pauses an idle D64 drive at the stock ROM TCBM wait loop to reduce Raspberry Pi power use and temperature. Enabled by default. |
 
-Put disk images, PRG files, folders, and TAP files under `/1551`. The firmware
+Put disk images, PRG files, folders, TAP files, and optional matching IDX files under `/1551`. The firmware
 starts in that folder by default.
 
 To upgrade an existing card, copy the new `kernel.img` to the SD card root.
@@ -174,6 +174,8 @@ Browser / Fliplist -> Menu...
 ├─ Clear list                         (only when the list is nonempty)
 ├─ Browser                            (clear list and unmount)
 ├─ Tape: .., 1:<filename>, Play/Stop (when loaded), Load TAP... (when empty), Record, Eject TAP, Rewind, Go to counter
+│  ├─ Go to file... (only with a matching IDX and stopped TAP)
+│  └─ Record/Eject TAP/Rewind/Go to counter (only while stopped; Record also when empty)
 │  └─ Record: .., New TAP, Current TAP (when loaded)
 ├─ Disk: .., WProt, Write image, New image, Reset drive
 │  └─ New image: .., Type D64/G64, Create image
@@ -210,6 +212,15 @@ See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
 rules, option values and examples. Run `make tui` for the keyboard simulator;
 `make help` lists build and native-test targets.
 
+To try IDX in `make tui`, open `/1551/tap` and select `Winter Games.idx`.
+The simulator loads and stops the matching `Winter Games.tap`, then shows INTRO, EVENT 1,
+and EVENT 2. After choosing a position, `Go to file...` appears directly
+below Play/Stop in the Tape menu. Selecting `Winter Games.tap` also loads its
+adjacent IDX automatically; choose `Stop` first if autoplay is on, then open
+`Go to file...` to choose a position.
+These are sample entries in the simulator's virtual SD card; they do not
+create actual TAP/IDX files on your computer or SD card.
+
 ### HDMI And USB Keyboard
 
 HDMI startup output (logo, font/ROM loading and configured diagnostics) remains.
@@ -231,8 +242,11 @@ Pi1551 has three practical modes:
 
 The Tape menu records C16/Plus/4 signals to `NEWTAPE1.tap`, `NEWTAPE2.tap`,
 etc., or to the loaded TAP at its current position. RECORD also presses PLAY;
-the computer's MOTOR gates recording. STOP, Rewind, Go to counter and Eject
-finish recording and save changed TAP data. See the
+with Motor ON COMP., recording ends and saves the TAP only when the computer
+keeps MOTOR off for more than 0.5 seconds. Short pauses after a C16 header
+continue the same recording. Motor ON ALWAYS requires a manual Stop. A recognized standard
+Plus/4 SAVE creates or updates the adjacent IDX after the TAP is saved.
+Stop, Rewind, Go to counter and Eject also finish recording. See the
 [tape instructions](USER-MANUAL.md#tap-playback-and-recording) for the menu
 steps and file behavior.
 

@@ -64,6 +64,7 @@ struct TapeUIState
 	u32 currentPulseIndex;      // Current pulse index (for debugging)
 	u32 currentPulseDurationUs; // Duration of current pulse in microseconds (for debugging)
 	u32 loadGeneration;         // Monotonic load counter to detect new TAP loads
+	u32 indexGeneration;        // Changes when recording updates the companion IDX.
 };
 
 class TapePlayer
@@ -95,7 +96,7 @@ public:
 
 	// Reset playback (start from beginning)
 	void Reset();
-	void Eject();
+	bool Eject();
 	bool Play();
 	bool Record();
 	bool CreateTap(const char* path);
@@ -104,6 +105,7 @@ public:
 	// Sample WRITE and MOTOR from the GPIO interrupt handler.
 	void RecordSample(u32 now);
 	bool SeekCounter(unsigned counter);
+	bool SeekOffset(u32 tapOffset); // Absolute byte offset, including the 20-byte TAP header.
 	void SetMotorAlwaysOn(bool value);
 
 	// Initialize GPIO pins
@@ -144,6 +146,8 @@ private:
 	static u32 recordEdgeTime;
 	static size_t pulseCapacity;
 	static u8 tapeVideo;
+	static u8 tapVersion;
+	static u32 tapDataSize;
 	bool SaveTap();
 	void ArmRecordIRQ();
 	void DisarmRecordIRQ();
