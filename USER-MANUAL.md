@@ -344,9 +344,11 @@ device is the default for ordinary file and directory operations until another
 the Raspberry Pi system timer (`TimerGetTicks`). It survives drive/bus resets but
 not a power cycle or reboot. Until it is set, `T-R` returns `31,SYNTAX ERROR,00,00`
 and new SD files get a fixed 2026-11-01 FatFs stamp. After it is set, FatFs uses
-the wall clock for create/modify times. The OLED editor uses years 2000–2099;
-`T-W` accepts the wider SD2IEC range. Times are local 24-hour values; the
-firmware does not infer a timezone.
+the wall clock for create/modify times. If an I2C RTC answers at `i2cRtcAddress`
+(default `0x68`) after HDMI/LCD init and its time is valid, that value is loaded
+into the wall clock once at boot. The OLED editor uses years 2000–2099; `T-W`
+accepts the wider SD2IEC range. Times are local 24-hour values; the firmware
+does not infer a timezone.
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

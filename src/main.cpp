@@ -3584,12 +3584,15 @@ int DisplayOptions(int y_pos)
 	return y_pos;
 }
 
-// Boot-safety steps 1–2 for DS3231/DS1307: ACK after HDMI/LCD, then read
-// time registers if present. Does not touch the software wall clock.
+// Boot-safety steps 1–3 for DS3231/DS1307: ACK after HDMI/LCD, read time
+// registers if present, and load a valid chip time into the wall clock once.
+static bool g_rtcLoaded = false;
+
 static void ProbeI2CRtc()
 {
 	g_rtcPresent = false;
 	g_rtcTimeValid = false;
+	g_rtcLoaded = false;
 	g_rtcChipTime = {};
 	unsigned address = options.I2CRtcAddress();
 	if (address == 0 || address > 0x7f)
@@ -3597,8 +3600,20 @@ static void ProbeI2CRtc()
 	int bus = options.I2CBusMaster();
 	RPI_I2CInit(bus, 1);
 	g_rtcPresent = RPI_I2CScan(bus, static_cast<unsigned char>(address)) != 0;
-	if (g_rtcPresent)
-		g_rtcTimeValid = rtc_i2c::Read(bus, address, g_rtcChipTime);
+	if (!g_rtcPresent)
+		return;
+	g_rtcTimeValid = rtc_i2c::Read(bus, address, g_rtcChipTime);
+	if (!g_rtcTimeValid)
+		return;
+#if defined(PI1551SUPPORT)
+	g_rtcLoaded = m_TCBM_Commands.WriteWallClock(
+		g_rtcChipTime.year, g_rtcChipTime.month, g_rtcChipTime.day,
+		g_rtcChipTime.hour, g_rtcChipTime.minute, g_rtcChipTime.second);
+#else
+	g_rtcLoaded = m_IEC_Commands.WriteWallClock(
+		g_rtcChipTime.year, g_rtcChipTime.month, g_rtcChipTime.day,
+		g_rtcChipTime.hour, g_rtcChipTime.minute, g_rtcChipTime.second);
+#endif
 }
 
 void DisplayI2CScan(int y_pos)
@@ -4075,9 +4090,10 @@ extern "C"
 			screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 			if (g_rtcPresent) {
 				if (g_rtcTimeValid)
-					snprintf(tempBuffer, tempBufferSize, "RTC %04u-%02u-%02u %02u:%02u:%02u",
+					snprintf(tempBuffer, tempBufferSize, "RTC %04u-%02u-%02u %02u:%02u:%02u%s",
 						g_rtcChipTime.year, g_rtcChipTime.month, g_rtcChipTime.day,
-						g_rtcChipTime.hour, g_rtcChipTime.minute, g_rtcChipTime.second);
+						g_rtcChipTime.hour, g_rtcChipTime.minute, g_rtcChipTime.second,
+						g_rtcLoaded ? " OK" : "");
 				else
 					snprintf(tempBuffer, tempBufferSize, "RTC TIME ----");
 				screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
