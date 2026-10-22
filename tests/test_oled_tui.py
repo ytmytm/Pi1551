@@ -33,6 +33,11 @@ class TuiControls(unittest.TestCase):
         s.go_back(); self.assertEqual(s.local_clock().year, 2026)
         self.click(s, "Year"); s.move(1); s.activate()
         self.assertEqual(s.local_clock().year, 2027)
+        s.rtc_present = True
+        self.assertIn("Load from RTC", s.items())
+        self.click(s, "Save to RTC"); self.assertEqual(s.rtc_value.year, 2027)
+        s.set_local_clock(datetime(2028, 1, 2, 3, 4))
+        self.click(s, "Load from RTC"); self.assertEqual(s.local_clock().year, 2027)
 
     def test_status_rows_render_in_tui(self):
         s = Simulator(); s.set_screen("status")

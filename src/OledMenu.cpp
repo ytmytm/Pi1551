@@ -273,6 +273,10 @@ std::vector<Menu::Row> Menu::Rows() {
         snprintf(b, sizeof(b), "%sDay    %02u", editing && cursor == 3 ? "*" : "", v.day); r.push_back(Row(b));
         snprintf(b, sizeof(b), "%sHour   %02u", editing && cursor == 4 ? "*" : "", v.hour); r.push_back(Row(b));
         snprintf(b, sizeof(b), "%sMinute %02u", editing && cursor == 5 ? "*" : "", v.minute); r.push_back(Row(b));
+        if (backend.HasRTC()) {
+            r.push_back(Row("Load from RTC"));
+            r.push_back(Row("Save to RTC"));
+        }
         break;
     }
     case View::ROM: {
@@ -446,6 +450,13 @@ void Menu::Select() {
             else {
                 if (backend.SetDateTime(dateDraft)) editing = false;
                 else message = backend.Error();
+            }
+        } else if (backend.HasRTC()) {
+            if (cursor == 6) {
+                if (backend.LoadRTC()) { backend.ReadDateTime(dateDraft); editing = false; message = "RTC loaded"; }
+                else message = backend.Error();
+            } else if (cursor == 7) {
+                message = backend.SaveRTC() ? "RTC saved" : backend.Error();
             }
         }
     } else if (view == View::Notice) Back();

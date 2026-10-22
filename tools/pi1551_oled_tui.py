@@ -69,7 +69,7 @@ class Simulator:
         "menu": ["..", "Browser", "Tape", "Disk", "Settings", "Status", "Reboot Pi1551"],
         "reboot_confirm": ["..", "Cancel", "Reboot Pi1551?"],
         "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Date & time", "Load settings", "Save settings"],
-        "date_time": ["..", "Year", "Month", "Day", "Hour", "Minute"],
+        "date_time": ["..", "Year", "Month", "Day", "Hour", "Minute", "Load from RTC", "Save to RTC"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
         "tape_settings": ["..", "Motor ON", "Autoplay"],
@@ -103,6 +103,7 @@ class Simulator:
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
         self.rtc_present = False
+        self.rtc_value = datetime(2026, 11, 1, 12, 0, 0)
         self.clock_base: Optional[datetime] = None
         self.clock_started = time.monotonic()
         self.clock_draft = datetime(2026, 11, 1, 12, 0, 0)
@@ -199,6 +200,8 @@ class Simulator:
         self.flip_mode = "list"
     def items(self) -> list[str]:
         items = self.GROUPS.get(self.screen, [])
+        if self.screen == "date_time":
+            return items if self.rtc_present else items[:6]
         if self.screen == "sound" and not self.options["soundOnGPIO"]: return items[:3]
         if self.screen == "tape":
             if self.tape:
@@ -455,6 +458,15 @@ class Simulator:
                     self.clock_draft = self.local_clock() or datetime(2026, 11, 1)
                     self.clock_editing = item
                     self.message = f"Turn encoder to change {item}; Enter applies, Back cancels"
+            elif item == "Load from RTC" and self.rtc_present:
+                self.set_local_clock(self.rtc_value)
+                self.message = "RTC loaded into local clock (simulated)"
+            elif item == "Save to RTC" and self.rtc_present:
+                current = self.local_clock()
+                if current:
+                    self.rtc_value = current
+                    self.message = "Local clock saved to RTC (simulated)"
+                else: self.message = "Set local date and time first"
         elif self.screen == "tape":
             if item == "Load TAP...":
                 self.unmount_for_browser()

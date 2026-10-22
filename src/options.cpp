@@ -156,6 +156,7 @@ Options::Options(void)
 	, i2cBusMaster(1)
 	, i2cLcdAddress(0x3C)
 	, i2cRtcAddress(0x68)
+	, i2cRtcType(I2CRtcType::DS3231)
 	, i2cScan(0)
 	, i2cLcdFlip(0)
 	, i2cLcdOnContrast(128)
@@ -252,6 +253,11 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(displayTCBMDebug)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdAddress)
 		ELSE_CHECK_DECIMAL_OPTION(i2cRtcAddress)
+		else if (strcasecmp(pOption, "i2cRtcType") == 0)
+		{
+			if (strcasecmp(pValue, "ds1307") == 0) i2cRtcType = I2CRtcType::DS1307;
+			else if (strcasecmp(pValue, "ds3231") == 0) i2cRtcType = I2CRtcType::DS3231;
+		}
 		ELSE_CHECK_DECIMAL_OPTION(i2cScan)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdFlip)
 		ELSE_CHECK_DECIMAL_OPTION(i2cLcdOnContrast)

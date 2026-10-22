@@ -230,7 +230,9 @@ Browser / Fliplist
    │  │  ├─ Month 01–12
    │  │  ├─ Day 01–28/29/30/31
    │  │  ├─ Hour 00–23
-   │  │  └─ Minute 00–59
+   │  │  ├─ Minute 00–59
+   │  │  ├─ Load from RTC         (only when RTC detected)
+   │  │  └─ Save to RTC           (only when RTC detected)
    │  ├─ Load settings
    │  └─ Save settings
    ├─ Status
@@ -346,9 +348,11 @@ not a power cycle or reboot. Until it is set, `T-R` returns `31,SYNTAX ERROR,00,
 and new SD files get a fixed 2026-11-01 FatFs stamp. After it is set, FatFs uses
 the wall clock for create/modify times. If an I2C RTC answers at `i2cRtcAddress`
 (default `0x68`) after HDMI/LCD init and its time is valid, that value is loaded
-into the wall clock once at boot. The OLED editor uses years 2000–2099; `T-W`
-accepts the wider SD2IEC range. Times are local 24-hour values; the firmware
-does not infer a timezone.
+into the wall clock once at boot. Date & time then offers Load from RTC / Save
+to RTC. Set `i2cRtcType = ds1307` when using a DS1307 (default `ds3231`). I2C
+transfers time out after 100 ms so a stuck bus cannot hang the firmware. The
+OLED editor uses years 2000–2099; `T-W` accepts the wider SD2IEC range. Times
+are local 24-hour values; the firmware does not infer a timezone.
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

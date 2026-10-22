@@ -35,4 +35,7 @@ void OledKernelReset();
 void OledKernelSelectROM(unsigned index);
 void OledKernelApplySettings();
 oled::Status OledKernelStatus();
+bool OledKernelHasRTC();
+bool OledKernelLoadRTC();
+bool OledKernelSaveRTC();
 #endif

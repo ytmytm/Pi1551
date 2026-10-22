@@ -128,7 +128,7 @@ Common `options.txt` settings:
 | `StarFileName` | File served for `LOAD"*"` / `DLOAD"*"` requests. |
 | `RAMBOard` | Enables 8 KiB 1551 RAM expansion emulation at `$8000`. Use with `dos1551-ram.bin`. |
 | `LCDName`, `i2cLcdAddress` | OLED model and I2C address. |
-| `i2cRtcAddress` | Optional RTC address (default `0x68`). Set `0` to skip. After HDMI/LCD: ACK, read chip time, and load a valid reading into the software wall clock once. |
+| `i2cRtcAddress`, `i2cRtcType` | Optional RTC address (default `0x68`; `0` skips) and type (`ds3231` default, or `ds1307`). After HDMI/LCD: ACK, read, boot-load wall clock; Date & time offers Load/Save when present. |
 | `RotaryEncoderEnable` | Enables the fixed-wiring encoder; ROM selection is under Settings -> ROM. |
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
 | `tapeMotorAlwaysOn` | Keeps TAP transport motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` so playback and recording follow MOTOR on original machines. |
@@ -189,7 +189,7 @@ Browser / Fliplist -> Menu...
 │  ├─ Display: .., Temp, Contrast, Dimming, Dim time, Dim level, Orient, Font, Scroll
 │  ├─ Encoder: .., Reverse
 │  ├─ Sound: .., Sound, Mode SAMPLE/BUZZER, Freq, Duration
-│  ├─ Date & time: .., Year, Month, Day, Hour, Minute
+│  ├─ Date & time: .., Year, Month, Day, Hour, Minute[, Load from RTC, Save to RTC]
 │  ├─ Load settings
 │  └─ Save settings
 ├─ Status: .., DATE, TIME, TEMP, SD, FREE, FW, DOS, image, TAP, LED, MOTOR, PLAY, TRACK

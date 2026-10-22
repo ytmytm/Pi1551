@@ -66,6 +66,9 @@ public:
     virtual bool SaveSettings() = 0;
     virtual bool ReadDateTime(ClockValue& value) { (void)value; return false; }
     virtual bool SetDateTime(const ClockValue& value) { (void)value; return false; }
+    virtual bool HasRTC() { return false; }
+    virtual bool LoadRTC() { return false; }
+    virtual bool SaveRTC() { return false; }
     virtual bool WriteImage() = 0;
     virtual bool NewImage(const std::string& directory) = 0;
     virtual void ResetDrive() = 0;

@@ -9,6 +9,11 @@ unsigned FromBcd(unsigned char value)
 	return ((value >> 4) * 10u) + (value & 0x0fu);
 }
 
+unsigned ToBcd(unsigned value)
+{
+	return ((value / 10u) << 4) | (value % 10u);
+}
+
 static bool Leap(unsigned year)
 {
 	return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
@@ -34,7 +39,6 @@ bool Decode(const unsigned char regs[7], Value& out)
 	out.minute = FromBcd(regs[1] & 0x7f);
 	unsigned hourReg = regs[2];
 	if (hourReg & 0x40) {
-		// 12-hour mode: bit 5 is PM
 		unsigned hour12 = FromBcd(hourReg & 0x1f);
 		if (hour12 < 1 || hour12 > 12) return false;
 		out.hour = (hour12 % 12) + ((hourReg & 0x20) ? 12 : 0);
@@ -45,6 +49,19 @@ bool Decode(const unsigned char regs[7], Value& out)
 	out.month = FromBcd(regs[5] & 0x1f);
 	out.year = 2000 + FromBcd(regs[6]);
 	return Valid(out);
+}
+
+bool Encode(const Value& value, unsigned char regs[7])
+{
+	if (!Valid(value)) return false;
+	regs[0] = static_cast<unsigned char>(ToBcd(value.second)); // CH/OSF clear
+	regs[1] = static_cast<unsigned char>(ToBcd(value.minute));
+	regs[2] = static_cast<unsigned char>(ToBcd(value.hour)); // 24-hour
+	regs[3] = 1;
+	regs[4] = static_cast<unsigned char>(ToBcd(value.day));
+	regs[5] = static_cast<unsigned char>(ToBcd(value.month));
+	regs[6] = static_cast<unsigned char>(ToBcd(value.year % 100));
+	return true;
 }
 
 bool Read(int bus, unsigned address, Value& out)
@@ -58,5 +75,28 @@ bool Read(int bus, unsigned address, Value& out)
 	if (!RPI_I2CRead(bus, static_cast<unsigned char>(address), data, 7))
 		return false;
 	return Decode(data, out);
+}
+
+bool Write(int bus, unsigned address, Type type, const Value& value)
+{
+	if (address == 0 || address > 0x7f) return false;
+	unsigned char regs[7];
+	if (!Encode(value, regs)) return false;
+	unsigned char packet[8];
+	packet[0] = 0;
+	for (unsigned i = 0; i < 7; ++i) packet[i + 1] = regs[i];
+	RPI_I2CInit(bus, 1);
+	if (!RPI_I2CWrite(bus, static_cast<unsigned char>(address), packet, 8))
+		return false;
+	if (type == Type::DS3231) {
+		// Clear oscillator-stop flag; keep control with oscillator enabled.
+		unsigned char status[2] = {0x0f, 0x00};
+		unsigned char control[2] = {0x0e, 0x00};
+		if (!RPI_I2CWrite(bus, static_cast<unsigned char>(address), control, 2))
+			return false;
+		if (!RPI_I2CWrite(bus, static_cast<unsigned char>(address), status, 2))
+			return false;
+	}
+	return true;
 }
 }

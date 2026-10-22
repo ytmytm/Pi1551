@@ -48,6 +48,23 @@ http://elinux.org/BCM2835_datasheet_errata */
 #define STATUS_BIT_CLKT (1 << 9)	// CLKT Clock Stretch Timeout
 
 #define FIFO_SIZE 16
+// Bound stuck-bus waits so OLED/RTC I2C cannot hang the firmware after HDMI.
+#define I2C_WAIT_TIMEOUT_US 100000u
+
+static int I2CWaitDone(unsigned baseAddress)
+{
+	unsigned start = read32(ARM_SYSTIMER_CLO);
+	while (!(read32(baseAddress + I2C_BSC_S) & STATUS_BIT_DONE))
+	{
+		if ((unsigned)(read32(ARM_SYSTIMER_CLO) - start) > I2C_WAIT_TIMEOUT_US)
+		{
+			write32(baseAddress + I2C_BSC_C, 0);
+			write32(baseAddress + I2C_BSC_S, STATUS_BIT_CLKT | STATUS_BIT_ERR | STATUS_BIT_DONE);
+			return 0;
+		}
+	}
+	return 1;
+}
 
 void RPI_I2CSetClock(int BSCMaster, int clock_freq)
 {
@@ -97,12 +114,19 @@ int RPI_I2CRead(int BSCMaster, unsigned char slaveAddress, void* buffer, unsigne
 			write32(baseAddress + I2C_BSC_DLEN, count);
 			write32(baseAddress + I2C_BSC_C, CONTROL_BIT_I2CEN | CONTROL_BIT_ST | CONTROL_BIT_READ);
 
+			unsigned start = read32(ARM_SYSTIMER_CLO);
 			while (!(read32(baseAddress + I2C_BSC_S) & STATUS_BIT_DONE))
 			{
 				while (read32(baseAddress + I2C_BSC_S) & STATUS_BIT_RXD)
 				{
 					*data++ = (unsigned char)read32(baseAddress + I2C_BSC_FIFO);
 					count--;
+				}
+				if ((unsigned)(read32(ARM_SYSTIMER_CLO) - start) > I2C_WAIT_TIMEOUT_US)
+				{
+					write32(baseAddress + I2C_BSC_C, 0);
+					write32(baseAddress + I2C_BSC_S, STATUS_BIT_CLKT | STATUS_BIT_ERR | STATUS_BIT_DONE);
+					return 0;
 				}
 			}
 
@@ -155,12 +179,19 @@ int RPI_I2CWrite(int BSCMaster, unsigned char slaveAddress, void* buffer, unsign
 
 			write32(baseAddress + I2C_BSC_C, CONTROL_BIT_I2CEN | CONTROL_BIT_ST);
 
+			unsigned start = read32(ARM_SYSTIMER_CLO);
 			while (!(read32(baseAddress + I2C_BSC_S) & STATUS_BIT_DONE))
 			{
 				while (count > 0 && (read32(baseAddress + I2C_BSC_S) & STATUS_BIT_TXD))
 				{
 					write32(baseAddress + I2C_BSC_FIFO, *data++);
 					count--;
+				}
+				if ((unsigned)(read32(ARM_SYSTIMER_CLO) - start) > I2C_WAIT_TIMEOUT_US)
+				{
+					write32(baseAddress + I2C_BSC_C, 0);
+					write32(baseAddress + I2C_BSC_S, STATUS_BIT_CLKT | STATUS_BIT_ERR | STATUS_BIT_DONE);
+					return 0;
 				}
 			}
 
@@ -181,13 +212,12 @@ int RPI_I2CWrite(int BSCMaster, unsigned char slaveAddress, void* buffer, unsign
 			success = 1;
 		}
 	}
-	//DEBUG_LOG("I2C Write %d %d\r\n", count, success);
 	return success;
 }
 
 int RPI_I2CScan(int BSCMaster, unsigned char slaveAddress)
 {
-	int success = 1;
+	int success = 0;
 	if (slaveAddress < 0x80)
 	{
 		unsigned baseAddress = GetBaseAddress(BSCMaster);
@@ -198,15 +228,12 @@ int RPI_I2CScan(int BSCMaster, unsigned char slaveAddress)
 		write32(baseAddress + I2C_BSC_DLEN, 1);
 		write32(baseAddress + I2C_BSC_C, CONTROL_BIT_I2CEN | CONTROL_BIT_ST | CONTROL_BIT_READ);
 
-		while (!(read32(baseAddress + I2C_BSC_S) & STATUS_BIT_DONE))
-		{
-		}
+		if (!I2CWaitDone(baseAddress))
+			return 0;
 
 		unsigned status = read32(baseAddress + I2C_BSC_S);
-		if (status & (STATUS_BIT_ERR | STATUS_BIT_CLKT) )
-		{
-			success = 0;
-		}
+		if ((status & (STATUS_BIT_ERR | STATUS_BIT_CLKT)) == 0)
+			success = 1;
 
 		write32(baseAddress + I2C_BSC_S, STATUS_BIT_CLKT | STATUS_BIT_ERR | STATUS_BIT_DONE);
 	}

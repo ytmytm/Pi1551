@@ -151,6 +151,7 @@ Options options;
 // Set only by ProbeI2CRtc() after HDMI/LCD — ACK (+ optional register read).
 static bool g_rtcPresent = false;
 static bool g_rtcTimeValid = false;
+static bool g_rtcLoaded = false;
 static rtc_i2c::Value g_rtcChipTime = {};
 const char* fileBrowserSelectedName;
 u8 deviceID = 8;
@@ -3094,6 +3095,49 @@ oled::Status OledKernelStatus()
     return s;
 }
 
+bool OledKernelHasRTC() { return g_rtcPresent; }
+
+static rtc_i2c::Type KernelRtcType()
+{
+	return options.I2CRtcTypeValue() == Options::I2CRtcType::DS1307
+		? rtc_i2c::Type::DS1307 : rtc_i2c::Type::DS3231;
+}
+
+bool OledKernelLoadRTC()
+{
+	if (!g_rtcPresent) return false;
+	rtc_i2c::Value chip = {};
+	unsigned address = options.I2CRtcAddress();
+	if (!rtc_i2c::Read(options.I2CBusMaster(), address, chip)) return false;
+	g_rtcChipTime = chip;
+	g_rtcTimeValid = true;
+#if defined(PI1551SUPPORT)
+	g_rtcLoaded = m_TCBM_Commands.WriteWallClock(chip.year, chip.month, chip.day,
+		chip.hour, chip.minute, chip.second);
+#else
+	g_rtcLoaded = m_IEC_Commands.WriteWallClock(chip.year, chip.month, chip.day,
+		chip.hour, chip.minute, chip.second);
+#endif
+	return g_rtcLoaded;
+}
+
+bool OledKernelSaveRTC()
+{
+	if (!g_rtcPresent) return false;
+	unsigned year, month, day, hour, minute, second;
+#if defined(PI1551SUPPORT)
+	if (!m_TCBM_Commands.ReadWallClock(year, month, day, hour, minute, second)) return false;
+#else
+	if (!m_IEC_Commands.ReadWallClock(year, month, day, hour, minute, second)) return false;
+#endif
+	rtc_i2c::Value chip = {year, month, day, hour, minute, second};
+	if (!rtc_i2c::Write(options.I2CBusMaster(), options.I2CRtcAddress(), KernelRtcType(), chip))
+		return false;
+	g_rtcChipTime = chip;
+	g_rtcTimeValid = true;
+	return true;
+}
+
 void emulator()
 {
     // UI media list is independent of DiskCaddy; the caddy holds only the
@@ -3586,8 +3630,6 @@ int DisplayOptions(int y_pos)
 
 // Boot-safety steps 1–3 for DS3231/DS1307: ACK after HDMI/LCD, read time
 // registers if present, and load a valid chip time into the wall clock once.
-static bool g_rtcLoaded = false;
-
 static void ProbeI2CRtc()
 {
 	g_rtcPresent = false;

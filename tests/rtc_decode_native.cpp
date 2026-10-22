@@ -26,5 +26,13 @@ int main()
 
 	unsigned char bad[7] = {0x60, 0x00, 0x00, 0x01, 0x01, 0x01, 0x26};
 	assert(!Decode(bad, v));
+
+	Value set = {2026, 11, 1, 9, 8, 7};
+	unsigned char encoded[7];
+	assert(Encode(set, encoded));
+	assert(Decode(encoded, v));
+	assert(v.year == 2026 && v.month == 11 && v.day == 1);
+	assert(v.hour == 9 && v.minute == 8 && v.second == 7);
+	assert(ToBcd(59) == 0x59);
 	return 0;
 }

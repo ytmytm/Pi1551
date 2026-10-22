@@ -489,8 +489,12 @@ static bool ValidClock(const ClockValue& v) {
 static void date_time_menu() {
     struct ClockStub : KernelStub {
         ClockValue value = {2024, 2, 28, 23, 58, 0};
+        bool rtc = false;
         bool ReadDateTime(ClockValue& out) override { out = value; return true; }
         bool SetDateTime(const ClockValue& in) override { if (!ValidClock(in)) return false; value = in; return true; }
+        bool HasRTC() override { return rtc; }
+        bool LoadRTC() override { value = {2025, 1, 1, 12, 30, 0}; return true; }
+        bool SaveRTC() override { effects.push_back("save-rtc"); return true; }
     } k;
     Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Date & time");
     CHECK(m.CurrentView() == View::DateTime);
@@ -500,6 +504,10 @@ static void date_time_menu() {
     CHECK(k.value.year == 2025 && k.value.day == 28);
     Enter(m,"Minute"); Press(m,Key::Right); Press(m,Key::Back);
     CHECK(k.value.minute == 58);
+    try { Enter(m,"Load from RTC"); CHECK(false); } catch (const std::exception&) {}
+    k.rtc = true;
+    Enter(m,"Load from RTC"); CHECK(k.value.hour == 12);
+    Enter(m,"Save to RTC"); CHECK(k.effects.back() == "save-rtc");
 }
 int main() {
     try { host_navigation_replaces_stale_panel_history(); folder_header_and_reset_policies(); new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS host/panel histories, folder header, reset policies and runtime settings\n"; }

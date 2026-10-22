@@ -317,6 +317,16 @@ public:
             value.hour, value.minute, value.second)) return true;
         error = "Invalid date/time"; return false;
     }
+    bool HasRTC() override { return OledKernelHasRTC(); }
+    bool LoadRTC() override {
+        if (OledKernelLoadRTC()) return true;
+        error = OledKernelHasRTC() ? "RTC read failed" : "No RTC"; return false;
+    }
+    bool SaveRTC() override {
+        if (OledKernelSaveRTC()) return true;
+        error = OledKernelHasRTC() ? "Set local time first / RTC write failed" : "No RTC";
+        return false;
+    }
     bool WriteImage() override { return OledKernelWriteImage(); }
     bool NewImage(const std::string& path) override { return OledKernelNewImage(path.c_str()); }
     void ResetDrive() override { OledKernelReset(); }
