@@ -128,7 +128,7 @@ Common `options.txt` settings:
 | `StarFileName` | File served for `LOAD"*"` / `DLOAD"*"` requests. |
 | `RAMBOard` | Enables 8 KiB 1551 RAM expansion emulation at `$8000`. Use with `dos1551-ram.bin`. |
 | `LCDName`, `i2cLcdAddress` | OLED model and I2C address. |
-| `i2cRtcAddress`, `i2cRtcType` | Optional RTC address (default `0x68`; `0` skips) and type (`ds3231` default, or `ds1307`). After HDMI/LCD: ACK, read, boot-load wall clock; Date & time offers Load/Save when present. |
+| `i2cRtcAddress`, `i2cRtcType` | Optional RTC address (default `0x68`; `0` skips) and type (`ds3231` default, or `ds1307`). After HDMI/LCD: ACK, read, boot-load wall clock; Date & time offers Load/Save when present. Safe with `i2cScan = 1` (scan is HDMI-only afterward). |
 | `RotaryEncoderEnable` | Enables the fixed-wiring encoder; ROM selection is under Settings -> ROM. |
 | `SoundOnGPIO` | Selects head-step sound mode on the Pi1551 interface SOUND pin. |
 | `tapeMotorAlwaysOn` | Keeps TAP transport motor-active for machines with a 6510 CPU replacement that cannot control the tape MOTOR line; set to `0` so playback and recording follow MOTOR on original machines. |

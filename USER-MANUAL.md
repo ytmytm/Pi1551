@@ -350,9 +350,11 @@ the wall clock for create/modify times. If an I2C RTC answers at `i2cRtcAddress`
 (default `0x68`) after HDMI/LCD init and its time is valid, that value is loaded
 into the wall clock once at boot. Date & time then offers Load from RTC / Save
 to RTC. Set `i2cRtcType = ds1307` when using a DS1307 (default `ds3231`). I2C
-transfers time out after 100 ms so a stuck bus cannot hang the firmware. The
-OLED editor uses years 2000–2099; `T-W` accepts the wider SD2IEC range. Times
-are local 24-hour values; the firmware does not infer a timezone.
+transfers time out after 100 ms so a stuck bus cannot hang the firmware.
+`i2cScan = 1` only prints addresses on HDMI afterward; it does not change RTC
+probe, boot-load, or Load/Save. The OLED editor uses years 2000–2099; `T-W`
+accepts the wider SD2IEC range. Times are local 24-hour values; the firmware
+does not infer a timezone.
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a
@@ -615,7 +617,9 @@ Change slot filenames in options.txt and reboot to load different ROM files.
 | `LCDName` | empty | Startup OLED model: use `ssd1306_128x64` or `sh1106_128x64` for this eight-row menu. The inherited parser also recognizes `ssd1306_128x32`, which cannot show all eight rows. |
 | `LcdLogoName` or `LCDLogoName` | `1541classic` | Built-in logo name or custom raw logo filename. |
 | `i2cLcdAddress` | `0x3c` | I2C OLED address. `60` decimal is `0x3c`. |
-| `i2cScan` | `0` | Scan I2C and display found addresses at startup. |
+| `i2cRtcAddress` | `0x68` | I2C RTC address after HDMI/LCD init. `0` skips probe and Load/Save. |
+| `i2cRtcType` | `ds3231` | RTC chip for register decode/write: `ds3231` or `ds1307`. |
+| `i2cScan` | `0` | Scan I2C and list found addresses on HDMI at startup. Independent of the RTC probe. |
 | `i2cLcdFlip` | `0` | Rotate OLED 180 degrees. |
 | `i2cLcdOnContrast` | `128` | Active brightness 1..255; menu steps 16,32,...,240,255. Startup zero is clamped; runtime load rejects zero. |
 | `oledDimming` | `1` | Runtime Dimming ON/OFF. |
