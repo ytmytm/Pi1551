@@ -101,10 +101,9 @@ Supported commands:
   (usually 100 to 120 characters).
 
 - T-R and T-W
-  If your hardware features RTC support the commands T-R (time read) and T-W
-  (time write) are available. If the RTC isn't present, both commands return
-  30,SYNTAX ERROR,00,00; if the RTC is present but not set correctly T-R will
-  return 31,SYNTAX ERROR,00,00.
+  Pi1551 implements T-R (time read) and T-W (time write) against a software
+  clock shared with Settings → Date & time. Until the clock is set, T-R
+  returns 31,SYNTAX ERROR,00,00.
 
   Both commands expect a fourth character that specifies the time format
   to be used. T-W expects that the new time follows that character

@@ -6,9 +6,11 @@
 #include <stdint.h>
 
 namespace oled {
+struct ClockValue { unsigned year, month, day, hour, minute, second; };
+unsigned DaysInMonth(unsigned year, unsigned month);
 enum class Key { Left, Right, Enter, Insert, Back, ResetPath };
 enum class View { Browser, Fliplist, Device, Tape, TapeIndex, Record, Seek, Disk, Settings,
-    ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, Status, Reboot, Notice, NewImage };
+    ROM, Drive, TapeSettings, BrowserSettings, Display, Encoder, Sound, DateTime, Status, Reboot, Notice, NewImage };
 enum class Setting { Device, Idle, RAM, Spinup, IgnoreReset, MotorAlways, TapeAutoplay,
     AutoMount, ResetPath, Lowercase, SD2IEC, Contrast, Dimming, Orient, Font,
     Scroll, Reverse, Sound, Freq, Temp, DimTime, DimLevel, Duration, SoundMode, NewType, Count };
@@ -61,6 +63,8 @@ public:
     virtual bool AutoMountAvailable() = 0;
     virtual bool LoadSettings() = 0;
     virtual bool SaveSettings() = 0;
+    virtual bool ReadDateTime(ClockValue& value) { (void)value; return false; }
+    virtual bool SetDateTime(const ClockValue& value) { (void)value; return false; }
     virtual bool WriteImage() = 0;
     virtual bool NewImage(const std::string& directory) = 0;
     virtual void ResetDrive() = 0;
@@ -121,6 +125,7 @@ private:
     uint32_t headerTime = 0;
     std::string headerKey;
     bool scrollReset = true;
+    ClockValue dateDraft = {2026, 1, 1, 0, 0, 0};
     std::vector<Row> Rows();
     void Open(View next);
     void Back();

@@ -188,9 +188,10 @@ Browser / Fliplist -> Menu...
 │  ├─ Display: .., Temp, Contrast, Dimming, Dim time, Dim level, Orient, Font, Scroll
 │  ├─ Encoder: .., Reverse
 │  ├─ Sound: .., Sound, Mode SAMPLE/BUZZER, Freq, Duration
+│  ├─ Date & time: .., Year, Month, Day, Hour, Minute
 │  ├─ Load settings
 │  └─ Save settings
-├─ Status: .., TEMP, SD, FREE, FW, DOS, image, TAP, LED, MOTOR, PLAY, TRACK
+├─ Status: .., DATE, TIME, TEMP, SD, FREE, FW, DOS, image, TAP, LED, MOTOR, PLAY, TRACK
 └─ Reboot Pi1551: .., Cancel, Reboot Pi1551?
 ```
 
@@ -207,6 +208,11 @@ start a one-second preview window. `Load settings` reloads runtime values;
 `Save settings` writes changed values to `/options.txt`, preserving user
 order, comments and unrelated settings. Hardware, ROM filenames and the
 chargen filename remain startup-only configuration.
+
+`Date & time` sets a software clock (years 2000–2099, 24-hour local time):
+select a field, turn the encoder to change it, then press to apply; Back
+cancels the edit. The same clock backs SD2IEC `T-R`/`T-W` and Status
+DATE/TIME. It survives drive resets but clears on reboot.
 
 See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
 rules, option values and examples. Run `make tui` for the keyboard simulator;

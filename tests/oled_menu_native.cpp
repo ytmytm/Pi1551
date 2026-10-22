@@ -1,6 +1,7 @@
 // Tests execute the production firmware state machine with observable kernel effects.
 #include "OledMenu.h"
 #include "OledSettings.h"
+#include "options.h"
 #include <map>
 #include <stdexcept>
 #include <iostream>
@@ -439,7 +440,25 @@ static void new_runtime_controls() {
     Enter(m,"Type"); CHECK(k.Get(Setting::NewType) == 1);
     Enter(m,"Create image"); CHECK(k.effects.back() == "create:NEWIMAGE1.g64"); CHECK(m.Mounted().empty());
     m.Render(0); Press(m,Key::Back); Press(m,Key::Back); CHECK(m.CurrentView() == View::Disk);
-    Press(m,Key::Back); Enter(m,"Status"); CHECK(std::string(m.Render(0).rows[3]).find("TEMP 38C") != std::string::npos);
+    Press(m,Key::Back); Enter(m,"Status"); CHECK(std::string(m.Render(0).rows[5]).find("TEMP 38C") != std::string::npos);
+}
+static void status_local_clock() {
+    struct ClockStub : KernelStub {
+        bool clockSet = false;
+        ClockValue clock = {2026, 10, 22, 21, 42, 5};
+        bool ReadDateTime(ClockValue& out) override {
+            if (!clockSet) return false;
+            out = clock; return true;
+        }
+    } k;
+    Menu m(k); Device(m); Enter(m,"Status");
+    Frame f = m.Render(0);
+    CHECK(std::string(f.rows[3]).find("DATE ---- -- --") != std::string::npos);
+    CHECK(std::string(f.rows[4]).find("TIME --:--:--") != std::string::npos);
+    k.clockSet = true;
+    f = m.Render(0);
+    CHECK(std::string(f.rows[3]).find("DATE 2026-10-22") != std::string::npos);
+    CHECK(std::string(f.rows[4]).find("TIME 21:42:05") != std::string::npos);
 }
 static void canonical_setting_formats() {
     std::map<Setting,int> parsed;
@@ -456,13 +475,33 @@ static void canonical_setting_formats() {
     CHECK(ParseRuntimeSettings("i2cLcdOnContrast = 1\ni2cLcdDimContrast = 0",parsed));
     CHECK(ParseRuntimeSettings("oledScroll = 1\noledFont = 1",parsed)); CHECK(parsed.empty());
 }
+static bool ValidClock(const ClockValue& v) {
+    return v.year >= 2000 && v.year <= 2099 && v.month >= 1 && v.month <= 12 &&
+        v.day >= 1 && v.day <= DaysInMonth(v.year, v.month) &&
+        v.hour < 24 && v.minute < 60 && v.second < 60;
+}
+static void date_time_menu() {
+    struct ClockStub : KernelStub {
+        ClockValue value = {2024, 2, 28, 23, 58, 0};
+        bool ReadDateTime(ClockValue& out) override { out = value; return true; }
+        bool SetDateTime(const ClockValue& in) override { if (!ValidClock(in)) return false; value = in; return true; }
+    } k;
+    Menu m(k); Device(m); Enter(m,"Settings"); Enter(m,"Date & time");
+    CHECK(m.CurrentView() == View::DateTime);
+    Enter(m,"Day"); Press(m,Key::Right); CHECK(k.value.day == 28);
+    Press(m,Key::Enter); CHECK(k.value.day == 29);
+    Enter(m,"Year"); Press(m,Key::Right); Press(m,Key::Enter);
+    CHECK(k.value.year == 2025 && k.value.day == 28);
+    Enter(m,"Minute"); Press(m,Key::Right); Press(m,Key::Back);
+    CHECK(k.value.minute == 58);
+}
 int main() {
     try { host_navigation_replaces_stale_panel_history(); folder_header_and_reset_policies(); new_runtime_controls(); canonical_setting_formats(); std::cout << "PASS host/panel histories, folder header, reset policies and runtime settings\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     try { settings_preserve_user_layout(); std::cout << "PASS settings user layout\n"; }
     catch (const std::exception& e) { std::cerr << e.what() << "\n"; return 1; }
     struct Test { const char* name; void (*run)(); };
-    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"fliplist same-image and D64 swaps",fliplist_skips_reselect_and_switches_d64},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"tape index",tape_index_navigation},{"record tape",tape_record_menu},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window}};
+    Test tests[] = {{"startup/source",startup_and_source},{"solo all media",solo_all_types},{"fliplist same-image and D64 swaps",fliplist_skips_reselect_and_switches_d64},{"mixed list",mixed_list_toggle_and_restore},{"list construction",insert_last_enter_and_empty_list},{"independent tape",tape_independent_and_seek},{"tape index",tape_index_navigation},{"record tape",tape_record_menu},{"ROM markers/scroll",rom_markers_and_scrolling},{"failures/reboot",failures_and_reboot},{"reset/settings",reset_and_settings},{"settings document",persistence_preserves_unknown},{"random graph navigation",random_navigation},{"long fliplist window",long_fliplist_window},{"date and time menu",date_time_menu},{"status local clock",status_local_clock}};
     unsigned failures = 0;
     for (const Test& t : tests) try { t.run(); std::cout << "PASS " << t.name << "\n"; } catch (const std::exception& e) { ++failures; std::cerr << "FAIL " << t.name << ": " << e.what() << "\n"; }
     return failures ? 1 : 0;

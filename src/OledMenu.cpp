@@ -5,6 +5,11 @@
 #include <ctype.h>
 
 namespace oled {
+unsigned DaysInMonth(unsigned year, unsigned month) {
+    static const unsigned days[] = {0,31,28,31,30,31,30,31,31,30,31,30,31};
+    bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return month >= 1 && month <= 12 ? days[month] + (month == 2 && leap) : 0;
+}
 static std::string Number(unsigned n) { char b[24]; snprintf(b, sizeof(b), "%u", n); return b; }
 std::string Basename(const std::string& p) { return p.substr(p.find_last_of('/') + 1); }
 std::string Parent(const std::string& p) {
@@ -83,6 +88,7 @@ bool Menu::ChangeDirectory(const std::string& next) {
 void Menu::Open(View next) {
     history.push_back(Position{view, cursor, offset});
     view = next; cursor = 1; offset = 0; editing = false; scrollReset = true; Clamp();
+    if (next == View::DateTime) backend.ReadDateTime(dateDraft);
 }
 bool Menu::Browse(bool fresh, bool tape) {
     if (!backend.Unmount()) { message = "Write failed"; return false; }
@@ -194,7 +200,7 @@ void Menu::DisableList() {
 }
 void Menu::Back() {
     if (view == View::Notice) message.clear();
-    if (editing) { editing = false; return; }
+    if (editing) { editing = false; if (view == View::DateTime) backend.ReadDateTime(dateDraft); return; }
     if (view == View::Browser) {
         if (path != "/") { ChangeDirectory(Parent(path)); return; }
         if (hasBrowserReturn) {
@@ -254,8 +260,19 @@ std::vector<Menu::Row> Menu::Rows() {
         r.push_back(Row("Browser")); r.push_back(Row("Tape")); r.push_back(Row("Disk"));
         r.push_back(Row("Settings")); r.push_back(Row("Status")); r.push_back(Row("Reboot Pi1551")); break;
     case View::Settings: {
-        const char* names[] = {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"};
-        for (unsigned i = 0; i < 9; ++i) r.push_back(Row(names[i]));
+        const char* names[] = {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Date & time", "Load settings", "Save settings"};
+        for (unsigned i = 0; i < 10; ++i) r.push_back(Row(names[i]));
+        break;
+    }
+    case View::DateTime: {
+        ClockValue v = dateDraft;
+        if (!editing) backend.ReadDateTime(v);
+        char b[24];
+        snprintf(b, sizeof(b), "%sYear   %04u", editing && cursor == 1 ? "*" : "", v.year); r.push_back(Row(b));
+        snprintf(b, sizeof(b), "%sMonth  %02u", editing && cursor == 2 ? "*" : "", v.month); r.push_back(Row(b));
+        snprintf(b, sizeof(b), "%sDay    %02u", editing && cursor == 3 ? "*" : "", v.day); r.push_back(Row(b));
+        snprintf(b, sizeof(b), "%sHour   %02u", editing && cursor == 4 ? "*" : "", v.hour); r.push_back(Row(b));
+        snprintf(b, sizeof(b), "%sMinute %02u", editing && cursor == 5 ? "*" : "", v.minute); r.push_back(Row(b));
         break;
     }
     case View::ROM: {
@@ -299,6 +316,17 @@ std::vector<Menu::Row> Menu::Rows() {
     case View::Notice: r.push_back(Row("", message)); break;
     case View::Status: {
         Status s = backend.ReadStatus();
+        ClockValue now;
+        char clockText[24];
+        if (backend.ReadDateTime(now)) {
+            snprintf(clockText, sizeof(clockText), "DATE %04u-%02u-%02u", now.year, now.month, now.day);
+            r.push_back(Row(clockText));
+            snprintf(clockText, sizeof(clockText), "TIME %02u:%02u:%02u", now.hour, now.minute, now.second);
+            r.push_back(Row(clockText));
+        } else {
+            r.push_back(Row("DATE ---- -- --"));
+            r.push_back(Row("TIME --:--:--"));
+        }
         r.push_back(Row("TEMP " + Number(s.temperature) + "C")); r.push_back(Row("SD " + s.sdSize));
         r.push_back(Row("FREE " + s.sdFree)); r.push_back(Row("FW " + s.firmware));
         r.push_back(Row("DOS ", Basename(s.rom))); r.push_back(Row(mounted.empty() ? "IMG " : Extension(mounted) + " ", mounted.empty() ? "---" : Basename(mounted)));
@@ -407,10 +435,18 @@ void Menu::Select() {
         else if (name == "Status") Open(View::Status);
         else Open(View::Reboot);
     } else if (view == View::Settings) {
-        static const View targets[] = {View::ROM, View::Drive, View::TapeSettings, View::BrowserSettings, View::Display, View::Encoder, View::Sound};
-        if (cursor <= 7) Open(targets[cursor - 1]);
-        else if (cursor == 8) message = backend.LoadSettings() ? "Settings loaded" : backend.Error();
+        static const View targets[] = {View::ROM, View::Drive, View::TapeSettings, View::BrowserSettings, View::Display, View::Encoder, View::Sound, View::DateTime};
+        if (cursor <= 8) Open(targets[cursor - 1]);
+        else if (cursor == 9) message = backend.LoadSettings() ? "Settings loaded" : backend.Error();
         else message = backend.SaveSettings() ? "Settings saved" : backend.Error();
+    } else if (view == View::DateTime) {
+        if (cursor <= 5) {
+            if (!editing) { backend.ReadDateTime(dateDraft); editing = true; }
+            else {
+                if (backend.SetDateTime(dateDraft)) editing = false;
+                else message = backend.Error();
+            }
+        }
     } else if (view == View::Notice) Back();
     else if (view == View::ROM) {
         if (Rows()[cursor].active) Back();
@@ -475,6 +511,17 @@ void Menu::Input(Key key) {
         Clamp(); return;
     }
     int delta = key == Key::Left ? -1 : 1;
+    if (view == View::DateTime && editing) {
+        unsigned* field = cursor == 1 ? &dateDraft.year : cursor == 2 ? &dateDraft.month :
+            cursor == 3 ? &dateDraft.day : cursor == 4 ? &dateDraft.hour : &dateDraft.minute;
+        unsigned low = cursor == 1 ? 2000 : cursor == 3 || cursor == 2 ? 1 : 0;
+        unsigned high = cursor == 1 ? 2099 : cursor == 2 ? 12 : cursor == 3 ?
+            DaysInMonth(dateDraft.year, dateDraft.month) : cursor == 4 ? 23 : 59;
+        *field = *field == high && delta > 0 ? low : *field == low && delta < 0 ? high : *field + delta;
+        if (dateDraft.day > DaysInMonth(dateDraft.year, dateDraft.month))
+            dateDraft.day = DaysInMonth(dateDraft.year, dateDraft.month);
+        return;
+    }
     if (view == View::Seek && cursor == 1) { target = std::max(0, std::min((int)targetMax, (int)target + delta)); return; }
     if (editing) { ChangeValue(delta); return; }
     unsigned n = Rows().size();

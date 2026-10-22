@@ -224,10 +224,19 @@ Browser / Fliplist
    │  │  ├─ Mode SAMPLE/BUZZER
    │  │  ├─ Freq 1200/1600/2000 Hz   (BUZZER only)
    │  │  └─ Duration 0/50/100/250/500/1000/2000/5000ms (BUZZER only)
+   │  ├─ Date & time
+   │  │  ├─ ..
+   │  │  ├─ Year 2000–2099
+   │  │  ├─ Month 01–12
+   │  │  ├─ Day 01–28/29/30/31
+   │  │  ├─ Hour 00–23
+   │  │  └─ Minute 00–59
    │  ├─ Load settings
    │  └─ Save settings
    ├─ Status
    │  ├─ ..
+   │  ├─ DATE YYYY-MM-DD          (local clock, or unset)
+   │  ├─ TIME HH:MM:SS           (local clock, or unset)
    │  ├─ TEMP, SD size, FREE space, FW version
    │  ├─ DOS filename, current image filename, TAP filename
    │  └─ LED, MOTOR, PLAY, TRACK (S while idle)
@@ -236,6 +245,9 @@ Browser / Fliplist
       ├─ Cancel                    (initial selection)
       └─ Reboot Pi1551?
 ~~~
+
+In Date & time, click a field, rotate to change it, and click again to set the
+local clock; Back cancels the edit. Status shows that same local clock.
 
 ### Browser, SOLO And LIST
 
@@ -328,11 +340,11 @@ was detected, `USB01` is active by default. `CP0` switches back to SD, while
 device is the default for ordinary file and directory operations until another
 `CP` command changes it.
 
-Pi1551 has no battery-backed RTC, but after any valid `T-W` it advances the
-clock from Raspberry Pi's system timer. The value survives drive/bus resets
-while Pi1551 remains powered, but not a power cycle or reboot. Until it is set,
-`T-R` returns `31,SYNTAX ERROR,00,00`. The clock uses elapsed monotonic time and
-does not infer civil time or a timezone from the Raspberry Pi.
+`T-W` and Settings → Date & time use the same software clock, which advances from
+the Raspberry Pi system timer (`TimerGetTicks`). It survives drive/bus resets but
+not a power cycle or reboot. Until it is set, `T-R` returns `31,SYNTAX ERROR,00,00`.
+The OLED editor uses years 2000–2099; `T-W` accepts the wider SD2IEC range.
+Times are local 24-hour values; the firmware does not infer a timezone.
 
 The same browser command channel also implements normal file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

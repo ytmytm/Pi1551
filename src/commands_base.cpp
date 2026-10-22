@@ -1675,6 +1675,28 @@ static unsigned DayOfWeek(const SD2IECTime& value)
 static u8 ToBCD(unsigned value) { return static_cast<u8>(((value / 10) << 4) | (value % 10)); }
 static unsigned FromBCD(u8 value) { return ((value >> 4) * 10) + (value & 15); }
 
+bool Commands_Base::ReadWallClock(unsigned& year, unsigned& month, unsigned& day,
+	unsigned& hour, unsigned& minute, unsigned& second) const
+{
+	if (!clockSet) return false;
+	SD2IECTime value = SecondsToTime(clockBaseSeconds
+		+ static_cast<u32>(ClockTicks() - clockBaseTicks) / HZ);
+	year = value.year; month = value.month; day = value.day;
+	hour = value.hour; minute = value.minute; second = value.second;
+	return true;
+}
+
+bool Commands_Base::WriteWallClock(unsigned year, unsigned month, unsigned day,
+	unsigned hour, unsigned minute, unsigned second)
+{
+	SD2IECTime value = {year, month, day, hour, minute, second};
+	if (!ValidTime(value)) return false;
+	clockBaseSeconds = TimeToSeconds(value);
+	clockBaseTicks = ClockTicks();
+	clockSet = true;
+	return true;
+}
+
 void Commands_Base::TimeCommand(void)
 {
 	Channel& command = channels[15];

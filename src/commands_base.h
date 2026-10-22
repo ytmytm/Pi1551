@@ -124,6 +124,11 @@ public:
 
 	void SetDisplayingDevices(bool displayingDevices) { this->displayingDevices = displayingDevices; }
 
+	bool ReadWallClock(unsigned& year, unsigned& month, unsigned& day,
+		unsigned& hour, unsigned& minute, unsigned& second) const;
+	bool WriteWallClock(unsigned year, unsigned month, unsigned day,
+		unsigned hour, unsigned minute, unsigned second);
+
 protected:
 	enum ATNSequence 
 	{

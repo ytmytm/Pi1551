@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Headless checks for the TUI reference menu and settings."""
 from pathlib import Path
+from datetime import datetime
 import sys
 import unittest
 from unittest.mock import patch
@@ -12,6 +13,38 @@ class TuiControls(unittest.TestCase):
         sim.cursor = sim.items().index(label)
         sim.activate()
 
+    def test_status_shows_local_clock(self):
+        s = Simulator(); s.set_screen("status")
+        self.assertEqual(s.status_rows()[1:3], ["DATE 2026-10-22", "TIME 12:00:00"])
+        s.set_local_clock(datetime(2027, 3, 4, 18, 5, 6))
+        self.assertEqual(s.status_rows()[1:3], ["DATE 2027-03-04", "TIME 18:05:06"])
+        s.clock_base = None
+        self.assertEqual(s.status_rows()[1:3], ["DATE ---- -- --", "TIME --:--:--"])
+
+    def test_date_time_menu_edits_local_clock(self):
+        s = Simulator(); s.set_screen("settings", True); self.click(s, "Date & time")
+        self.assertEqual(s.screen, "date_time")
+        self.assertNotIn("Save to RTC", s.items())
+        self.assertNotIn("Load from RTC", s.items())
+        self.click(s, "Year"); s.move(1)
+        self.assertEqual(s.display_value("Year"), "2027")
+        s.go_back(); self.assertEqual(s.local_clock().year, 2026)
+        self.click(s, "Year"); s.move(1); s.activate()
+        self.assertEqual(s.local_clock().year, 2027)
+
+    def test_status_rows_render_in_tui(self):
+        s = Simulator(); s.set_screen("status")
+        ui = UI.__new__(UI); ui.sim = s
+        ui.s = type("ScreenStub", (), {"getmaxyx": lambda self: (15, 70)})()
+        ui.text = lambda *args: None
+        ui.frame = lambda: True
+        ui.status_line = lambda *args: None
+        ui.tree = lambda: None
+        rendered = []
+        ui.line = lambda row, value, *args: rendered.append((row, value))
+        with patch("tools.pi1551_oled_tui.curses.color_pair", return_value=0): ui.draw()
+        self.assertEqual([(row, value) for row, value in rendered if 3 <= row <= 4],
+                         [(3, "DATE 2026-10-22"), (4, "TIME 12:00:00")])
     def test_display_shared_options(self):
         s = Simulator(); s.set_screen("settings",True); self.click(s,"Display")
         self.assertEqual(s.screen,"display")

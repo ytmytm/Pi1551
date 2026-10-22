@@ -29,18 +29,18 @@ def run():
         subprocess.run(flags + ["-O0", "-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder", "-fno-sanitize=vptr",
                                "tests/fatfs_diskio_native.cpp", "src/ff.cpp", "src/diskio.cpp",
-                               "src/Pi1551Oled.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp",
+                               "src/Pi1551Oled.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp", "tests/rtc_i2c_native.cpp",
                                "src/options.cpp", "src/tape_player.cpp", "-Wl,--gc-sections",
                                "-o", str(build / "fatfs-storage")], cwd=ROOT, check=True)
         subprocess.run([str(build / "fatfs-storage")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-Werror", "tests/oled_menu_native.cpp", "src/OledMenu.cpp",
-                               "src/OledSettings.cpp", "-o", str(build / "menu")], cwd=ROOT, check=True)
+                               "src/OledSettings.cpp", "src/options.cpp", "tests/rtc_i2c_native.cpp", "-o", str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run([str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run(flags + ["tests/sound_native.cpp", "-o", str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run([str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DPI1551_NATIVE_GPIO_IRQ_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
-                               "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp",
+                               "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp", "tests/rtc_i2c_native.cpp",
                                "-Wl,--gc-sections", "-o", str(build / "tape")], cwd=ROOT, check=True)
         payload = (b"\0" + (11084 * 8).to_bytes(3,"little")) * 10000
         fixture = build / "seek.tap"
@@ -78,12 +78,12 @@ def run():
         subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",
                                "-Wno-unused-parameter", "-Wno-reorder", "-Wno-unused-variable",
                                "-fno-sanitize=vptr", "tests/host_files_native.cpp", "tests/fatfs_posix.cpp",
-                               "src/commands_base.cpp", "-Wl,--gc-sections", "-o", str(build / "host-files")], cwd=ROOT, check=True)
+                               "src/commands_base.cpp", "tests/rtc_i2c_native.cpp", "-Wl,--gc-sections", "-o", str(build / "host-files")], cwd=ROOT, check=True)
         subprocess.run([str(build / "host-files"), str(build / "host-save.prg")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder",
                                "-fno-sanitize=vptr", "tests/oled_kernel_native.cpp", "tests/fatfs_posix.cpp",
-                               "src/OledMenu.cpp", "src/OledSettings.cpp", "src/Pi1551Oled.cpp",
+                               "src/OledMenu.cpp", "src/OledSettings.cpp", "src/Pi1551Oled.cpp", "tests/rtc_i2c_native.cpp",
                                "src/tape_player.cpp", "src/options.cpp", "src/ScreenLCD.cpp", "src/SSD1306.cpp",
                                str(build / "font.o"), "-Wl,--gc-sections",
                                "-o", str(build / "bridge")], cwd=ROOT, check=True)
@@ -102,7 +102,7 @@ def run():
         subprocess.run([str(build / "bridge"), str(card)], cwd=ROOT, check=True)
         subprocess.run(flags + ["-O0", "-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-reorder",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-fno-sanitize=vptr",
-                               "tests/host_cd_native.cpp", "tests/fatfs_posix.cpp", "src/commands_base.cpp",
+                               "tests/host_cd_native.cpp", "tests/fatfs_posix.cpp", "src/commands_base.cpp", "tests/rtc_i2c_native.cpp",
                                "src/cbm_diskimage.cpp", "src/tcbm2sd_protocol.cpp", "src/DiskImage.cpp",
                                "src/gcr.cpp", "src/prot.cpp", str(build / "lz.o"),
                                "-Wl,--gc-sections", "-o", str(build / "host-cd")], cwd=ROOT, check=True)

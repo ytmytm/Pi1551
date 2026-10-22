@@ -8,6 +8,7 @@
 #include "InputMappings.h"
 #include "SpinLock.h"
 #include "Pi1551Platform.h"
+#include "tcbm_commands.h"
 #include <algorithm>
 #include <string.h>
 #include <strings.h>
@@ -17,6 +18,7 @@ extern ScreenLCD* screenLCD;
 extern TapePlayer* g_tapePlayer;
 extern ROMs roms;
 extern InputMappings* inputMappings;
+extern TCBM_Commands m_TCBM_Commands;
 extern void Reboot_Pi();
 extern bool OledKernelWriteImage();
 extern bool OledKernelNewImage(const char* path);
@@ -305,6 +307,15 @@ public:
         }
         CaptureBaseline();
         return true;
+    }
+    bool ReadDateTime(oled::ClockValue& value) override {
+        return m_TCBM_Commands.ReadWallClock(value.year, value.month, value.day,
+            value.hour, value.minute, value.second);
+    }
+    bool SetDateTime(const oled::ClockValue& value) override {
+        if (m_TCBM_Commands.WriteWallClock(value.year, value.month, value.day,
+            value.hour, value.minute, value.second)) return true;
+        error = "Invalid date/time"; return false;
     }
     bool WriteImage() override { return OledKernelWriteImage(); }
     bool NewImage(const std::string& path) override { return OledKernelNewImage(path.c_str()); }

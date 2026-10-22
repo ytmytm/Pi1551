@@ -4,6 +4,7 @@ from __future__ import annotations
 import curses
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Optional
 
 @dataclass
@@ -67,7 +68,8 @@ class Simulator:
     GROUPS = {
         "menu": ["..", "Browser", "Tape", "Disk", "Settings", "Status", "Reboot Pi1551"],
         "reboot_confirm": ["..", "Cancel", "Reboot Pi1551?"],
-        "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Load settings", "Save settings"],
+        "settings": ["..", "ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Date & time", "Load settings", "Save settings"],
+        "date_time": ["..", "Year", "Month", "Day", "Hour", "Minute"],
         "drive": ["..", "Device number", "Idle trap", "RAMBOard", "Skip spinup", "Reset"],
         "sound": ["..", "Sound", "Mode", "Freq", "Duration"],
         "tape_settings": ["..", "Motor ON", "Autoplay"],
@@ -76,7 +78,7 @@ class Simulator:
         "encoder": ["..", "Reverse"],
         "disk": ["..", "WProt", "Write image", "New image", "Reset drive"],
         "new_image": ["..", "Type", "Create image"],
-        "status": ["..", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
+        "status": ["..", "DATE", "TIME", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
         "tape": ["..", "TAP FILE", "Load TAP...", "Eject TAP", "Rewind", "Go to counter"],
         "tape_record": ["..", "New TAP", "Current TAP"],
         "tape_seek": ["..", "TARGET"],
@@ -100,6 +102,11 @@ class Simulator:
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
+        self.clock_base: Optional[datetime] = None
+        self.clock_started = time.monotonic()
+        self.clock_draft = datetime(2026, 10, 22, 12, 0, 0)
+        self.clock_editing: Optional[str] = None
+        self.set_local_clock(self.clock_draft)
         self.options = {"Idle trap": True, "RAMBOard": False, "Skip spinup": False, "Motor override": True, "Tape autoplay": True,
                         "Auto mount": False, "Reset path": True, "Lowercase names": False,
                         "SD2IEC Cmds.": True, "Contrast": 128, "Dimming": True, "Orientation": "normal",
@@ -122,6 +129,31 @@ class Simulator:
         if value in self.GROUPS and len(self.GROUPS[value]) > 1: self.cursor = 1
         elif value == "tape_index" and self.tape_index: self.cursor = 1
         elif value == "rom": self.cursor = 1
+        if value == "date_time": self.clock_editing = None
+    def local_clock(self) -> Optional[datetime]:
+        if self.clock_base is None: return None
+        return self.clock_base + timedelta(seconds=int(time.monotonic() - self.clock_started))
+    def set_local_clock(self, value: datetime) -> None:
+        self.clock_base, self.clock_started = value, time.monotonic()
+        self.clock_draft = value
+    def adjust_clock_field(self, field: str, direction: int) -> None:
+        value = self.clock_draft
+        low, high = {"Year": (2000, 2099), "Month": (1, 12), "Day": (1, 31),
+                     "Hour": (0, 23), "Minute": (0, 59)}[field]
+        current = getattr(value, field.lower())
+        next_value = low if current == high and direction > 0 else high if current == low and direction < 0 else current + direction
+        fields = {"year": value.year, "month": value.month, "day": value.day,
+                  "hour": value.hour, "minute": value.minute, "second": value.second}
+        fields[field.lower()] = next_value
+        # Match the firmware: changing month/year clamps an invalid day.
+        if field in {"Year", "Month"}:
+            next_month = datetime(fields["year"] + (fields["month"] == 12), fields["month"] % 12 + 1, 1)
+            fields["day"] = min(fields["day"], (next_month - timedelta(days=1)).day)
+        elif field == "Day":
+            next_month = datetime(fields["year"] + (fields["month"] == 12), fields["month"] % 12 + 1, 1)
+            last_day = (next_month - timedelta(days=1)).day
+            fields["day"] = 1 if direction > 0 and value.day == last_day else last_day if direction < 0 and value.day == 1 else max(1, min(next_value, last_day))
+        self.clock_draft = datetime(**fields)
     def on(self, value: object) -> str: return "ON" if value else "OFF"
     def motor_active(self) -> bool:
         return self.options["Motor override"] or self.tape_motor
@@ -181,6 +213,10 @@ class Simulator:
             return ["..", "Clear list", *items[1:]]
         return items
     def display_value(self, item: str) -> str:
+        if self.screen == "date_time" and item in {"Year", "Month", "Day", "Hour", "Minute"}:
+            value = self.clock_draft if self.clock_editing else (self.local_clock() or self.clock_draft)
+            width = 4 if item == "Year" else 2
+            return f"{getattr(value, item.lower()):0{width}d}"
         values = {"Device number": str(self.device), "Idle trap": self.on(self.options["Idle trap"]), "RAMBOard": self.on(self.options["RAMBOard"]),
           "Skip spinup": self.on(self.options["Skip spinup"]), "Reset": self.options["Reset"], "Sound": self.on(self.options["Sound"]),
           "Motor ON": "ALWAYS" if self.options["Motor override"] else "COMP.", "Autoplay": self.on(self.options["Tape autoplay"]), "Auto mount": self.on(self.options["Auto mount"]), "Reset path": self.on(self.options["Reset path"]), "Lowercase": self.on(self.options["Lowercase names"]), "SD2IEC Cmds.": self.on(self.options["SD2IEC Cmds."]),
@@ -226,6 +262,9 @@ class Simulator:
         if self.cursor >= self.offset + visible: self.offset = self.cursor - visible + 1
     def move(self, direction: int) -> None:
         if self.options["Encoder reverse"]: direction = -direction
+        if self.screen == "date_time" and self.clock_editing:
+            self.adjust_clock_field(self.clock_editing, direction)
+            return
         if self.screen == "flip":
             if not self.fliplist: self.open_browser("No fliplist — browser"); return
             if self.cursor == 0:
@@ -396,12 +435,25 @@ class Simulator:
                 self.go_back()
                 self.message = "Pi1551 reboot cancelled"
             elif item == "Reboot Pi1551?":
+                saved = self.local_clock()
                 self.__init__()
+                if saved: self.set_local_clock(saved)
+                else: self.clock_base = None
                 self.message = "Pi1551 rebooted (simulated); settings reloaded"
         elif self.screen == "settings":
             if item == "Load settings": self.message = "Settings loaded from options-pi1551.txt (simulated)"
             elif item == "Save settings": self.message = "Settings saved to options-pi1551.txt (simulated)"
-            else: self.set_screen({"ROM": "rom", "Drive": "drive", "Tape": "tape_settings", "Browser": "browser_settings", "Display": "display", "Encoder": "encoder", "Sound": "sound"}[item], True)
+            else: self.set_screen({"ROM": "rom", "Drive": "drive", "Tape": "tape_settings", "Browser": "browser_settings", "Display": "display", "Encoder": "encoder", "Sound": "sound", "Date & time": "date_time"}[item], True)
+        elif self.screen == "date_time":
+            if item in {"Year", "Month", "Day", "Hour", "Minute"}:
+                if self.clock_editing:
+                    self.set_local_clock(self.clock_draft)
+                    self.clock_editing = None
+                    self.message = "Local date and time set"
+                else:
+                    self.clock_draft = self.local_clock() or datetime(2026, 1, 1)
+                    self.clock_editing = item
+                    self.message = f"Turn encoder to change {item}; Enter applies, Back cancels"
         elif self.screen == "tape":
             if item == "Load TAP...":
                 self.unmount_for_browser()
@@ -517,6 +569,10 @@ class Simulator:
         elif node.kind == "tape": self.load_tape(node)
         elif node.kind == "idx": self.load_index(node)
     def go_back(self) -> None:
+        if self.screen == "date_time" and self.clock_editing:
+            self.clock_editing = None
+            self.message = "Date/time edit cancelled"
+            return
         if self.screen == "browser":
             if len(self.path) > 1:
                 self.path.pop(); self.browser_source = self.current_dir; self.reset_cursor()
@@ -552,6 +608,18 @@ class Simulator:
         percent = min(99, self.tape_pos // 10)
         tape = f"TAPE {self.tape_pos:03d} {percent:02d}% {'M' if self.motor_active() else '-'}{'R' if self.tape_recording else 'P' if self.tape_playing else '-'}" if self.tape else f"TAPE --- --% {'M' if self.motor_active() else '-'}-"
         return drive, tape
+    def status_rows(self) -> list[str]:
+        local = self.local_clock()
+        date = f"DATE {local:%Y-%m-%d}" if local else "DATE ---- -- --"
+        clock = f"TIME {local:%H:%M:%S}" if local else "TIME --:--:--"
+        return ["..", date, clock,
+                f"TEMP {self.temperature:02d}C", f"SD {self.sd_size}", f"FREE {self.sd_free}",
+                f"FW {self.firmware}", f"DOS {self.rom}",
+                f"{self.media_type_label()} {self.active_media.name if self.active_media else '---'}",
+                f"TAP {self.tape.name if self.tape else '---'}",
+                f"LED {self.on(self.disk is not None and self.activity != 'browser')}",
+                f"MOTOR {self.on(self.motor_active())}", f"PLAY {self.on(self.tape_playing)}",
+                f"TRACK {self.track:04.1f}{'S' if self.disk and self.activity == 'idle' and self.options['Idle trap'] else ''}" if self.disk else "TRACK ---"]
     def folder_status(self) -> str:
         prefix = f"{self.device}:"; folder = self.current_dir.name
         width = (12 if self.options["Temp"] else 16) - len(prefix)
@@ -603,9 +671,9 @@ class Simulator:
         if self.screen == "rom" and 0 < self.cursor <= len(self.ROMS): return self.ROMS[self.cursor - 1]
         if self.screen == "tape" and self.tape: return self.tape.name
         if self.screen == "status":
-            if self.cursor == 5: return self.rom
-            if self.cursor == 6 and self.active_media: return self.active_media.name
-            if self.cursor == 7 and self.tape: return self.tape.name
+            if self.cursor == 8: return self.rom
+            if self.cursor == 9 and self.active_media: return self.active_media.name
+            if self.cursor == 10 and self.tape: return self.tape.name
         if self.screen == "browser":
             entries = self.browser_items()
             if 0 < self.cursor <= len(entries): return self.browser_name(entries[self.cursor - 1])
@@ -617,9 +685,9 @@ class Simulator:
             if 0 < self.cursor <= len(entries): return self.browser_prefix(entries[self.cursor - 1])
         if self.screen == "tape": return "1:"
         if self.screen == "status":
-            if self.cursor == 5: return "DOS "
-            if self.cursor == 6: return self.media_type_label() + " "
-            if self.cursor == 7: return "TAP "
+            if self.cursor == 8: return "DOS "
+            if self.cursor == 9: return self.media_type_label() + " "
+            if self.cursor == 10: return "TAP "
         return ""
     def browser_label(self, node: Node) -> str:
         if node.kind in {"disk", "browser_image"} and node in self.fliplist:
@@ -681,8 +749,8 @@ class UI:
         value = clip(left, self.width - len(right) - (1 if right else 0))
         self.text(self.oy + row, self.ox, (value + " " * max(0, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
-        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  └─ Sound", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
-        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_record": 5, "tape_seek": 5, "tape_index": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "status": 16, "reboot_confirm": 18}.get(self.sim.screen)
+        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  ├─ Sound", "│  │  └─ Date & time", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
+        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_record": 5, "tape_seek": 5, "tape_index": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "date_time": 16, "status": 17, "reboot_confirm": 19}.get(self.sim.screen)
         if self.sim.fliplist:
             lines.insert(4, "│  ├─ Clear list")
             if active is not None and active >= 4: active += 1
@@ -716,14 +784,14 @@ class UI:
                 label = sim.scrolling(item, index == sim.cursor) if index else item
                 self.line(2 + row, label, index == sim.cursor, "▶" if item == sim.rom else " ")
         elif sim.screen == "status":
-            values = ["..", f"TEMP {sim.temperature:02d}C", f"SD {sim.sd_size}", f"FREE {sim.sd_free}", f"FW {sim.firmware}", f"DOS {sim.rom}", f"{sim.media_type_label()} {sim.active_media.name if sim.active_media else '---'}", f"TAP {sim.tape.name if sim.tape else '---'}", f"LED {sim.on(sim.disk is not None and sim.activity != 'browser')}", f"MOTOR {sim.on(sim.motor_active())}", f"PLAY {sim.on(sim.tape is not None)}", f"TRACK {sim.track:04.1f}{'S' if sim.disk and sim.activity == 'idle' and sim.options['Idle trap'] else ''}" if sim.disk else "TRACK ---"]
+            values = sim.status_rows()
             for row, index in enumerate(range(sim.offset, min(len(values), sim.offset + 6))):
                 value = values[index]
-                if index == 5:
+                if index == 8:
                     value = "DOS " + sim.scrolling(sim.rom, index == sim.cursor)
-                elif index == 6 and sim.active_media:
+                elif index == 9 and sim.active_media:
                     value = sim.media_type_label() + " " + sim.scrolling(sim.active_media.name, index == sim.cursor)
-                elif index == 7 and sim.tape:
+                elif index == 10 and sim.tape:
                     value = "TAP " + sim.scrolling(sim.tape.name, index == sim.cursor)
                 self.line(2 + row, value, index == sim.cursor)
         elif sim.screen == "tape":
@@ -735,9 +803,9 @@ class UI:
             values = sim.items()
             for row, index in enumerate(range(sim.offset, min(len(values), sim.offset + 6))):
                 item = values[index]
-                submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound"}
+                submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Date & time"}
                 suffix = " " + sim.display_value(item) if sim.display_value(item) and not submenu else ""
-                label = item + suffix
+                label = ("*" if sim.screen == "date_time" and sim.clock_editing == item else "") + item + suffix
                 if sim.screen == "display" and item == "Scroll":
                     label += " " + sim.scrolling("Scrolling preview 0123456789", index == sim.cursor)
                 self.line(2 + row, label, index == sim.cursor)
