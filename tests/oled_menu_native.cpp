@@ -440,7 +440,7 @@ static void new_runtime_controls() {
     Enter(m,"Type"); CHECK(k.Get(Setting::NewType) == 1);
     Enter(m,"Create image"); CHECK(k.effects.back() == "create:NEWIMAGE1.g64"); CHECK(m.Mounted().empty());
     m.Render(0); Press(m,Key::Back); Press(m,Key::Back); CHECK(m.CurrentView() == View::Disk);
-    Press(m,Key::Back); Enter(m,"Status"); CHECK(std::string(m.Render(0).rows[5]).find("TEMP 38C") != std::string::npos);
+    Press(m,Key::Back); Enter(m,"Status"); CHECK(std::string(m.Render(0).rows[6]).find("TEMP 38C") != std::string::npos);
 }
 static void status_local_clock() {
     struct ClockStub : KernelStub {
@@ -450,15 +450,21 @@ static void status_local_clock() {
             if (!clockSet) return false;
             out = clock; return true;
         }
+        Status ReadStatus() override {
+            Status s = status;
+            s.rtcPresent = true;
+            return s;
+        }
     } k;
     Menu m(k); Device(m); Enter(m,"Status");
     Frame f = m.Render(0);
-    CHECK(std::string(f.rows[3]).find("DATE ---- -- --") != std::string::npos);
-    CHECK(std::string(f.rows[4]).find("TIME --:--:--") != std::string::npos);
+    CHECK(std::string(f.rows[3]).find("RTC YES") != std::string::npos);
+    CHECK(std::string(f.rows[4]).find("DATE ---- -- --") != std::string::npos);
+    CHECK(std::string(f.rows[5]).find("TIME --:--:--") != std::string::npos);
     k.clockSet = true;
     f = m.Render(0);
-    CHECK(std::string(f.rows[3]).find("DATE 2026-10-22") != std::string::npos);
-    CHECK(std::string(f.rows[4]).find("TIME 21:42:05") != std::string::npos);
+    CHECK(std::string(f.rows[4]).find("DATE 2026-10-22") != std::string::npos);
+    CHECK(std::string(f.rows[5]).find("TIME 21:42:05") != std::string::npos);
 }
 static void canonical_setting_formats() {
     std::map<Setting,int> parsed;

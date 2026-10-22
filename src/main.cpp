@@ -147,6 +147,8 @@ Screen screen;
 ScreenLCD* screenLCD = 0;
 static bool hdmiPresent = true;
 Options options;
+// Set only by ProbeI2CRtc() after HDMI/LCD — ACK probe, no register I/O.
+static bool g_rtcPresent = false;
 const char* fileBrowserSelectedName;
 u8 deviceID = 8;
 InputMappings* inputMappings;
@@ -3085,6 +3087,7 @@ oled::Status OledKernelStatus()
         s.tapeIndexGeneration = tape.indexGeneration;
     }
     s.motor = tapeMotor;
+    s.rtcPresent = g_rtcPresent;
     return s;
 }
 
@@ -3578,6 +3581,19 @@ int DisplayOptions(int y_pos)
 	return y_pos;
 }
 
+// Boot-safety step 1 for DS3231/DS1307: one ACK after HDMI/LCD only.
+// i2cRtcAddress = 0 skips the probe. Does not read time or touch the wall clock.
+static void ProbeI2CRtc()
+{
+	g_rtcPresent = false;
+	unsigned address = options.I2CRtcAddress();
+	if (address == 0 || address > 0x7f)
+		return;
+	int bus = options.I2CBusMaster();
+	RPI_I2CInit(bus, 1);
+	g_rtcPresent = RPI_I2CScan(bus, static_cast<unsigned char>(address)) != 0;
+}
+
 void DisplayI2CScan(int y_pos)
 {
 #if not defined(EXPERIMENTALZERO)
@@ -4027,6 +4043,7 @@ extern "C"
 		DisplayLogo();
 
 		InitialiseLCD();
+		ProbeI2CRtc();
 #if not defined(EXPERIMENTALZERO)
 		int y_pos = 184;
 #if defined(PI1551SUPPORT)
@@ -4041,6 +4058,15 @@ extern "C"
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
 		snprintf(tempBuffer, tempBufferSize, "This is free software, and you are welcome to redistribute it.");
 		screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+		{
+			unsigned rtcAddr = options.I2CRtcAddress();
+			if (rtcAddr == 0)
+				snprintf(tempBuffer, tempBufferSize, "RTC probe OFF");
+			else
+				snprintf(tempBuffer, tempBufferSize, "RTC 0x%02X %s", rtcAddr & 0x7f,
+					g_rtcPresent ? "YES" : "NO");
+			screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+		}
 
 		if (options.I2CScan())
 			DisplayI2CScan(y_pos+=32);

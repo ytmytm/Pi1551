@@ -78,7 +78,7 @@ class Simulator:
         "encoder": ["..", "Reverse"],
         "disk": ["..", "WProt", "Write image", "New image", "Reset drive"],
         "new_image": ["..", "Type", "Create image"],
-        "status": ["..", "DATE", "TIME", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
+        "status": ["..", "RTC", "DATE", "TIME", "TEMP", "SD", "FREE", "FIRMWARE", "DOS", "IMAGE", "TAPE", "LED", "MOTOR", "PLAY", "TRACK"],
         "tape": ["..", "TAP FILE", "Load TAP...", "Eject TAP", "Rewind", "Go to counter"],
         "tape_record": ["..", "New TAP", "Current TAP"],
         "tape_seek": ["..", "TARGET"],
@@ -102,6 +102,7 @@ class Simulator:
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
         self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
+        self.rtc_present = False
         self.clock_base: Optional[datetime] = None
         self.clock_started = time.monotonic()
         self.clock_draft = datetime(2026, 11, 1, 12, 0, 0)
@@ -612,7 +613,7 @@ class Simulator:
         local = self.local_clock()
         date = f"DATE {local:%Y-%m-%d}" if local else "DATE ---- -- --"
         clock = f"TIME {local:%H:%M:%S}" if local else "TIME --:--:--"
-        return ["..", date, clock,
+        return ["..", f"RTC {'YES' if self.rtc_present else 'NO'}", date, clock,
                 f"TEMP {self.temperature:02d}C", f"SD {self.sd_size}", f"FREE {self.sd_free}",
                 f"FW {self.firmware}", f"DOS {self.rom}",
                 f"{self.media_type_label()} {self.active_media.name if self.active_media else '---'}",

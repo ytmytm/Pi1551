@@ -97,6 +97,8 @@ public:
 
 	inline unsigned int I2CBusMaster() const { return i2cBusMaster; }
 	inline unsigned int I2CLcdAddress() const { return i2cLcdAddress; }
+	// 0 disables the post-LCD RTC ACK probe; default 0x68 (DS3231/DS1307).
+	inline unsigned int I2CRtcAddress() const { return i2cRtcAddress; }
 	inline unsigned int I2CScan() const { return i2cScan; }
 	inline unsigned int I2CLcdFlip() const { return i2cLcdFlip; }
 	inline unsigned int I2CLcdOnContrast() const { return i2cLcdOnContrast < 1 ? 1 : i2cLcdOnContrast > 255 ? 255 : i2cLcdOnContrast; }
@@ -170,6 +172,7 @@ private:
 
 	unsigned int i2cBusMaster;
 	unsigned int i2cLcdAddress;
+	unsigned int i2cRtcAddress;
 	unsigned int i2cScan;
 	unsigned int i2cLcdFlip;
 	unsigned int i2cLcdOnContrast;

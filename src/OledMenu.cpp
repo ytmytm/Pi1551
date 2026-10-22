@@ -316,6 +316,7 @@ std::vector<Menu::Row> Menu::Rows() {
     case View::Notice: r.push_back(Row("", message)); break;
     case View::Status: {
         Status s = backend.ReadStatus();
+        r.push_back(Row(std::string("RTC ") + (s.rtcPresent ? "YES" : "NO")));
         ClockValue now;
         char clockText[24];
         if (backend.ReadDateTime(now)) {

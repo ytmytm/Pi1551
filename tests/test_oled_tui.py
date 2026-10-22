@@ -15,11 +15,13 @@ class TuiControls(unittest.TestCase):
 
     def test_status_shows_local_clock(self):
         s = Simulator(); s.set_screen("status")
-        self.assertEqual(s.status_rows()[1:3], ["DATE 2026-11-01", "TIME 12:00:00"])
+        self.assertEqual(s.status_rows()[1:4], ["RTC NO", "DATE 2026-11-01", "TIME 12:00:00"])
+        s.rtc_present = True
+        self.assertEqual(s.status_rows()[1:4], ["RTC YES", "DATE 2026-11-01", "TIME 12:00:00"])
         s.set_local_clock(datetime(2027, 3, 4, 18, 5, 6))
-        self.assertEqual(s.status_rows()[1:3], ["DATE 2027-03-04", "TIME 18:05:06"])
+        self.assertEqual(s.status_rows()[1:4], ["RTC YES", "DATE 2027-03-04", "TIME 18:05:06"])
         s.clock_base = None
-        self.assertEqual(s.status_rows()[1:3], ["DATE ---- -- --", "TIME --:--:--"])
+        self.assertEqual(s.status_rows()[1:4], ["RTC YES", "DATE ---- -- --", "TIME --:--:--"])
 
     def test_date_time_menu_edits_local_clock(self):
         s = Simulator(); s.set_screen("settings", True); self.click(s, "Date & time")
@@ -43,8 +45,8 @@ class TuiControls(unittest.TestCase):
         rendered = []
         ui.line = lambda row, value, *args: rendered.append((row, value))
         with patch("tools.pi1551_oled_tui.curses.color_pair", return_value=0): ui.draw()
-        self.assertEqual([(row, value) for row, value in rendered if 3 <= row <= 4],
-                         [(3, "DATE 2026-11-01"), (4, "TIME 12:00:00")])
+        self.assertEqual([(row, value) for row, value in rendered if 3 <= row <= 5],
+                         [(3, "RTC NO"), (4, "DATE 2026-11-01"), (5, "TIME 12:00:00")])
     def test_display_shared_options(self):
         s = Simulator(); s.set_screen("settings",True); self.click(s,"Display")
         self.assertEqual(s.screen,"display")
