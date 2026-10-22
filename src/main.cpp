@@ -38,6 +38,7 @@ void uspi_CleanAndInvalidateDataCacheRange(u32 nAddress, u32 nLength);
 #include "rpi-mailbox.h"
 }
 #include "options.h"
+#include "RtcI2c.h"
 #include "diskio.h"
 #include "InputMappings.h"
 #if defined(PI1551SUPPORT)
@@ -147,8 +148,10 @@ Screen screen;
 ScreenLCD* screenLCD = 0;
 static bool hdmiPresent = true;
 Options options;
-// Set only by ProbeI2CRtc() after HDMI/LCD — ACK probe, no register I/O.
+// Set only by ProbeI2CRtc() after HDMI/LCD — ACK (+ optional register read).
 static bool g_rtcPresent = false;
+static bool g_rtcTimeValid = false;
+static rtc_i2c::Value g_rtcChipTime = {};
 const char* fileBrowserSelectedName;
 u8 deviceID = 8;
 InputMappings* inputMappings;
@@ -3581,17 +3584,21 @@ int DisplayOptions(int y_pos)
 	return y_pos;
 }
 
-// Boot-safety step 1 for DS3231/DS1307: one ACK after HDMI/LCD only.
-// i2cRtcAddress = 0 skips the probe. Does not read time or touch the wall clock.
+// Boot-safety steps 1–2 for DS3231/DS1307: ACK after HDMI/LCD, then read
+// time registers if present. Does not touch the software wall clock.
 static void ProbeI2CRtc()
 {
 	g_rtcPresent = false;
+	g_rtcTimeValid = false;
+	g_rtcChipTime = {};
 	unsigned address = options.I2CRtcAddress();
 	if (address == 0 || address > 0x7f)
 		return;
 	int bus = options.I2CBusMaster();
 	RPI_I2CInit(bus, 1);
 	g_rtcPresent = RPI_I2CScan(bus, static_cast<unsigned char>(address)) != 0;
+	if (g_rtcPresent)
+		g_rtcTimeValid = rtc_i2c::Read(bus, address, g_rtcChipTime);
 }
 
 void DisplayI2CScan(int y_pos)
@@ -4066,6 +4073,15 @@ extern "C"
 				snprintf(tempBuffer, tempBufferSize, "RTC 0x%02X %s", rtcAddr & 0x7f,
 					g_rtcPresent ? "YES" : "NO");
 			screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+			if (g_rtcPresent) {
+				if (g_rtcTimeValid)
+					snprintf(tempBuffer, tempBufferSize, "RTC %04u-%02u-%02u %02u:%02u:%02u",
+						g_rtcChipTime.year, g_rtcChipTime.month, g_rtcChipTime.day,
+						g_rtcChipTime.hour, g_rtcChipTime.minute, g_rtcChipTime.second);
+				else
+					snprintf(tempBuffer, tempBufferSize, "RTC TIME ----");
+				screen.PrintText(false, 0, y_pos+=16, tempBuffer, COLOUR_WHITE, COLOUR_BLACK);
+			}
 		}
 
 		if (options.I2CScan())

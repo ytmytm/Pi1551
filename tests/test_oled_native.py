@@ -23,6 +23,9 @@ def run():
         flags = ["g++", "-std=c++11", "-Wall", "-Wextra", "-g", "-O1",
                  "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                  "-ffunction-sections", "-fdata-sections", "-Isrc", "-Iuspi/include"]
+        subprocess.run(flags + ["-Werror", "tests/rtc_decode_native.cpp", "src/RtcI2c.cpp", "tests/rtc_i2c_native.cpp",
+                               "-o", str(build / "rtc-decode")], cwd=ROOT, check=True)
+        subprocess.run([str(build / "rtc-decode")], cwd=ROOT, check=True)
         subprocess.run(flags + ["-Werror", "-Wno-unused-parameter", "tests/m6502_resume_native.cpp", "src/m6502.cpp",
                                "-o", str(build / "m6502-resume")], cwd=ROOT, check=True)
         subprocess.run([str(build / "m6502-resume")], cwd=ROOT, check=True)

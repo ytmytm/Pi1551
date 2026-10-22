@@ -7,7 +7,7 @@ OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 	commands_base.o tcbm_bus.o tcbm_commands.o tcbm2sd_protocol.o cbm_diskimage.o m6523.o InputMappings.o \
 	gcr.o prot.o lz.o emmc.o diskio.o options.o Screen.o SSD1306.o ScreenLCD.o \
 	Timer.o FileBrowser.o DiskCaddy.o ROMs.o xga_font_data.o SpinLock.o tape_player.o \
-	OledMenu.o OledSettings.o Pi1551Oled.o
+	OledMenu.o OledSettings.o Pi1551Oled.o RtcI2c.o
 
 #	Drive.o Pi1541.o iec_bus.o iec_commands.o m6522.o m8520.o wd177x.o Pi1581.o InputMappings.o
 
