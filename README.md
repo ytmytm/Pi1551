@@ -24,7 +24,9 @@ player through the tape port only, without the TCBM ribbon cable.
 - `.prg` files can be mounted as read-only virtual one-file disks without
   starting drive emulation; ordinary Commodore `LOAD` remains direct SD access.
 - Read-only file-level access to files inside D71, D81, D80, and D82 images.
-- TAP player for C16/C116/Plus/4 TAP files, output through the tape port.
+- C16/C116/Plus/4 TAP playback and recording through the tape port. Matching
+  IDX files let you jump directly to individual files on a tape and are created
+  or updated automatically when recording a recognized Plus/4 `SAVE`.
 - Eight-row I2C OLED browser/menu with rotary encoder, Insert and Back controls.
 - Runtime drive, tape, display, encoder and sound settings with safe load/save.
 - Multiple 1551 ROM slots and runtime ROM switching.
