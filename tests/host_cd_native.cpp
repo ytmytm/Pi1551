@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cstring>
 #include <vector>
-unsigned versionMajor = 1, versionMinor = 26;
+unsigned versionMajor = 1, versionMinor = 90;
 int numberOfUSBMassStorageDevices = 0;
 static std::string switchedDrive;
 void Reboot_Pi() {}

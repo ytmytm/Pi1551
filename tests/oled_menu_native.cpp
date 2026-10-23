@@ -30,7 +30,7 @@ struct KernelStub : Backend {
         settings[Setting::ResetPath] = 1; settings[Setting::Contrast] = 255; settings[Setting::Scroll] = 100;
         settings[Setting::Temp] = 1; settings[Setting::SoundMode] = 1; settings[Setting::Duration] = 500;
         settings[Setting::DimTime] = 30; settings[Setting::DimLevel] = 10;
-        status.rom = "dos1551.bin"; status.firmware = "1.26"; status.temperature = 38;
+        status.rom = "dos1551.bin"; status.firmware = "1.90"; status.temperature = 38;
         status.sdSize = "8192MB"; status.sdFree = "6400MB";
     }
     bool List(const std::string& p,std::vector<Entry>& e) override { if (!sd.count(p)) return false; e = sd[p]; return true; }
