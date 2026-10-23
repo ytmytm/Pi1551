@@ -14,7 +14,8 @@ player through the tape port only, without the TCBM ribbon cable.
 
 ## Main Features
 
-- Cycle-exact Commodore 1551 emulation for D64 and G64 disk images.
+- Cycle-exact Commodore 1551 emulation for D64 and G64 disk images on the
+  recommended Raspberry Pi 3 hardware.
 - G64-only preservation of SuperDOS 1551 non-standard formatting, including
   per-track density changes that current YaPe/VICE releases do not handle
   correctly when formatting disks.
@@ -53,7 +54,7 @@ signals. Use one of the Pi1551 interface projects:
 - [PI1551-hat](https://github.com/ytmytm/PI1551-hat)
 - [PI1551-III](https://github.com/ytmytm/PI1551-III)
 
-The Raspberry Pi 3 must be powered from its own external USB power supply. Do
+The Raspberry Pi must be powered from its own external USB power supply. Do
 not rely on the Commodore, tcbm2sd paddle, or Pi1551 interface board to power
 the Raspberry Pi.
 
@@ -119,9 +120,13 @@ the [option reference](USER-MANUAL.md#optionstxt), and upgrades.
 
 ## Building
 
-Pi1551 supports Raspberry Pi 3 family boards only: Raspberry Pi 3A, 3A+, 3B,
-and 3B+. See [BUILD.md](BUILD.md) for toolchain installation, CI-friendly
-commands, and the canonical `make RASPPI=3` build sequence.
+Raspberry Pi 3A, 3A+, 3B, and 3B+ are recommended for full emulation
+compatibility; the 3A/3A+ are the smallest recommended boards. Raspberry Pi
+Zero 2 W also works with the same `kernel.img` build and can be used until a
+Pi 3 is available. Its lower CPU performance limits the most demanding
+software: for example, demos using the Bitfire fastloader do not work on
+Zero 2 W, although much other software does. See [BUILD.md](BUILD.md) for
+toolchain installation and build commands.
 
 ## Documentation
 

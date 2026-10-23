@@ -1,9 +1,9 @@
 # Pi1551 User Manual
 
-Pi1551 connects a Raspberry Pi 3 to a Commodore C16, C116 or Plus/4. It can
-emulate a 1551 drive from D64/G64 disk images, serve files directly from an SD
-card, and play or record C16/Plus/4 TAP files. Tape use does not require the
-disk ribbon cable.
+Pi1551 connects a Raspberry Pi 3 or Zero 2 W to a Commodore C16, C116 or
+Plus/4. It can emulate a 1551 drive from D64/G64 disk images, serve files
+directly from an SD card, and play or record C16/Plus/4 TAP files. Tape use
+does not require the disk ribbon cable.
 
 This manual covers preparing the SD card and using the device. For board
 assembly, power, cable orientation and voltage details, follow the
@@ -27,13 +27,21 @@ assembly, power, cable orientation and voltage details, follow the
 
 ### What you need
 
-- A Raspberry Pi 3A, 3A+, 3B or 3B+, with its own USB power supply.
+- A Raspberry Pi 3A, 3A+, 3B or 3B+ (recommended), with its own USB power
+  supply. The 3A/3A+ are the smallest recommended boards. A Zero 2 W also
+  works, but has limited emulation compatibility; see below.
 - A PI1551-hat or PI1551-III interface board and a FAT32 SD card.
 - For disk access, a tcbm2sd board revision 1.3 or newer and its ribbon cable.
   CPLD firmware/JED version 1.4 or newer is needed for software that uses
   mirrored TCBM register addresses, such as the games Corruption and Fish.
 - For tape access, a Mini-DIN 7 cable connecting the interface board to the
   computer's cassette port. The disk ribbon cable is optional for tape-only use.
+
+The Zero 2 W uses the same `kernel.img` and SD card configuration as Pi 3.
+It has been tested and runs Pi1551, and much software works. Its lower CPU
+performance limits emulation compatibility: demanding software, including
+demos using the Bitfire fastloader, does not work. Use a Pi 3 for the best
+compatibility; Zero 2 W is a fallback until one is available.
 
 ### Prepare the SD card
 

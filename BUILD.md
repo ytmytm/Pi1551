@@ -3,17 +3,25 @@
 Pi1551 is bare-metal Raspberry Pi firmware. It builds a `kernel.img` file that
 is copied to the SD card root; it is not a host application.
 
-## Supported Target
+## Hardware compatibility
 
-Pi1551 supports Raspberry Pi 3 family boards only:
+For the best emulation compatibility, use a Raspberry Pi 3:
 
 - Raspberry Pi 3A
 - Raspberry Pi 3A+
 - Raspberry Pi 3B
 - Raspberry Pi 3B+
 
-Raspberry Pi 0/1/2/4/5 targets are not supported by this firmware.
-`Makefile.rules` defaults to `RASPPI=3` and rejects all other target values.
+The 3A/3A+ are the smallest recommended boards. Raspberry Pi Zero 2 W has
+also been tested and works with the same build, but its CPU performance is
+insufficient for full emulation compatibility. Much software works; demanding
+software such as demos using the Bitfire fastloader does not. Zero 2 W is a
+fallback until a Pi 3 is available.
+
+Use the same `kernel.img` and `sdcard/config.txt` on Pi 3 and Zero 2 W. The
+build still uses `RASPPI=3` for both boards; there is no separate Zero 2 W
+target. First-generation Pi Zero and Raspberry Pi 1/2/4/5 targets are not
+supported by this firmware.
 
 ## Toolchain Install
 
@@ -62,7 +70,8 @@ make
 ```
 
 The default build is already `RASPPI=3`. Passing `make RASPPI=3` is equivalent
-and may be useful in automation. Passing any other `RASPPI` value is an error.
+and may be useful in automation, including for Zero 2 W. Passing any other
+`RASPPI` value is an error.
 
 The build produces these root-level artifacts:
 
@@ -72,7 +81,8 @@ kernel.elf
 kernel.map
 ```
 
-Copy `kernel.img` to the SD card root to install or upgrade the firmware.
+Copy `kernel.img` to the SD card root to install or upgrade the firmware on
+either board. Keep the repository's `sdcard/config.txt` with it.
 
 ## Agent Build Checklist
 
