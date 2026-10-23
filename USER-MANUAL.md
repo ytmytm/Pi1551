@@ -442,10 +442,17 @@ require editing `/options.txt` and rebooting. See the
 ### Drive
 
 - `Device number` selects TCBM device 8 or 9.
-- `Idle trap` pauses an idle D64 drive at the supported ROM's TCBM wait loop
-  to reduce power use and temperature. `S` after the track number indicates
-  that the drive is sleeping. Turn it off for timing diagnostics or an
-  unsupported custom ROM.
+- `Idle trap ON/OFF` controls idle sleep (`IdleSleep` in `options.txt`, ON by
+  default). With ON, a mounted D64 drive can sleep at the supplied 1551 ROMs'
+  TCBM wait loop when the motor and activity LED are off, no mechanism job or
+  open file channel remains, and no transfer, interrupt, disk swap or head
+  sound is pending. The emulated CPU, disk mechanism and 100 Hz drive interrupt
+  pause while asleep. Pi1551 still checks the TCBM bus, computer RESET and OLED
+  actions at 100 Hz, waking within about 10 ms when needed. An `S` after the
+  track number shows that the drive is asleep. Browser mode, G64 images and
+  active fastloaders do not use idle sleep. With OFF, the drive continues
+  emulating while idle, using more power and running warmer. Use OFF for timing
+  diagnostics or a custom ROM without the supported idle loop.
 - `RAMBOard` enables 8 KiB drive RAM expansion. Use the matching
   `dos1551-ram.bin` ROM for software that needs it.
 - `Skip spinup` removes the emulated motor spinup delay.
@@ -741,7 +748,7 @@ All four runtime Sound items trigger the one-second preview described above.
 | --- | --- | --- |
 | `RAMBOard` | `0` | Enable 8 KiB drive RAM expansion at `$8000`. Use with `dos1551-ram.bin`; this comes from the [1551-RAMBOard](https://github.com/ytmytm/1551-RAMBOard) project and is supported by [Parobek](https://github.com/ytmytm/plus4-parobek) fastloaders. |
 | `skipMotorSpinUpDelay` | `0` | Skip 1551 motor spin-up delay when set to `1`. |
-| `IdleSleep` | `1` | Pause idle D64 emulation at the supplied 1551 ROMs' TCBM wait loop to reduce Pi power use and temperature. TCBM/RESET/UI wake polling continues at 100 Hz; OLED shows an `S` after the track number while asleep. Set to `0` for timing diagnostics or unsupported custom ROMs. |
+| `IdleSleep` | `1` | Initial state of `Drive` → `Idle trap`: `1` = ON, `0` = OFF. See [Drive settings](#drive) for what each state does. |
 
 ### Rotary encoder
 
