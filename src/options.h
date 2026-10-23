@@ -138,7 +138,7 @@ public:
 private:
 	unsigned autoMountEnabled = 1;
 	unsigned oledDimming = 1;
-	unsigned oledSound = 1;
+	unsigned soundEnabled = 1;
 	unsigned int deviceID;
 	unsigned int onResetChangeToStartingFolder;
 	unsigned int extraRAM;

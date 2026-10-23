@@ -108,7 +108,7 @@ New runtime options written alongside the existing options are:
 | --- | --- |
 | `autoMountEnabled` | 0/1; default 1, applies the configured `AutoMountImage` only at boot/processed host reset |
 | `oledDimming` | 0/1; uses the existing dim contrast and timeout |
-| `oledSound` | 0/1; enables head-step audio independently of its mode |
+| `SoundEnabled` | 0/1; enables head-step audio independently of its mode |
 | `tapeAutoplay` | 0/1; presses PLAY automatically when a TAP is loaded |
 
 Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,

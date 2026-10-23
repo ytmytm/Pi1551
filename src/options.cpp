@@ -246,7 +246,12 @@ void Options::Process(char* buffer)
 		ELSE_CHECK_DECIMAL_OPTION(idleSleep)
 		ELSE_CHECK_DECIMAL_OPTION(autoMountEnabled)
 		ELSE_CHECK_DECIMAL_OPTION(oledDimming)
-		ELSE_CHECK_DECIMAL_OPTION(oledSound)
+		ELSE_CHECK_DECIMAL_OPTION(soundEnabled)
+		else if (strcasecmp(pOption, "oledSound") == 0)
+		{
+			unsigned nValue = GetDecimal(pValue);
+			if (nValue != INVALID_VALUE) soundEnabled = nValue;
+		}
 		ELSE_CHECK_DECIMAL_OPTION(lowercaseBrowseModeFilenames)
 		ELSE_CHECK_DECIMAL_OPTION(displayTemperature)
 		ELSE_CHECK_DECIMAL_OPTION(displayPC)
@@ -428,7 +433,7 @@ int Options::Runtime(oled::Setting id) const
     case Setting::Font: return i2cLcdUseCBMChar;
     case Setting::Scroll: return scrollHighlightRate > 0 ? (int)(scrollHighlightRate * 1000 + 0.5f) : 100;
     case Setting::Reverse: return rotaryEncoderInvert;
-    case Setting::Sound: return oledSound;
+    case Setting::Sound: return soundEnabled;
     case Setting::Freq: return soundOnGPIOFreq;
     case Setting::Temp: return displayTemperature;
     case Setting::DimTime: return i2cLcdDimTime;
@@ -460,7 +465,7 @@ void Options::SetRuntime(oled::Setting id, int value)
     case Setting::Font: i2cLcdUseCBMChar = value; break;
     case Setting::Scroll: scrollHighlightRate = value / 1000.0f; break;
     case Setting::Reverse: rotaryEncoderInvert = value; break;
-    case Setting::Sound: oledSound = value; break;
+    case Setting::Sound: soundEnabled = value; break;
     case Setting::Freq: soundOnGPIOFreq = value; break;
     case Setting::Temp: displayTemperature = value; break;
     case Setting::DimTime: i2cLcdDimTime = value; break;

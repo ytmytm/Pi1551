@@ -468,6 +468,20 @@ static void status_local_clock() {
 }
 static void canonical_setting_formats() {
     std::map<Setting,int> parsed;
+    CHECK(OptionName(Setting::Sound) == std::string("SoundEnabled"));
+    CHECK(ParseRuntimeSettings("SoundEnabled = 0\n",parsed)); CHECK(parsed[Setting::Sound] == 0);
+    CHECK(ParseRuntimeSettings("oledSound = 0\n",parsed)); CHECK(parsed[Setting::Sound] == 0);
+    Options soundOptions;
+    char oldSoundOption[] = "oledSound = 0\n";
+    soundOptions.Process(oldSoundOption); CHECK(soundOptions.Runtime(Setting::Sound) == 0);
+    char newSoundOption[] = "SoundEnabled = 1\n";
+    soundOptions.Process(newSoundOption); CHECK(soundOptions.Runtime(Setting::Sound) == 1);
+    std::map<Setting,int> soundChange; soundChange[Setting::Sound] = 1;
+    CHECK(MergeRuntimeSettings("SoundEnabled = 0 // head steps\n",soundChange) ==
+        "SoundEnabled = 1 // head steps\n");
+    CHECK(MergeRuntimeSettings("oledSound = 0\n",soundChange) == "SoundEnabled = 1\n");
+    CHECK(MergeRuntimeSettings("SoundEnabled = 0\noledSound = 0 // effective\n",soundChange) ==
+        "SoundEnabled = 0\nSoundEnabled = 1 // effective\n");
     CHECK(ParseRuntimeSettings("scrollHighlightRate = 0.10\ni2cLcdUseCBMChar = 1\nNewDiskType = G64\ndisplayTemperature = 0\nsoundOnGPIO = 1\nsoundOnGPIODuration = 500\ni2cLcdDimTime = 60\ni2cLcdDimContrast = 8\n",parsed));
     CHECK(parsed[Setting::Scroll] == 100); CHECK(parsed[Setting::Font] == 1); CHECK(parsed[Setting::NewType] == 1);
     CHECK(parsed[Setting::Duration] == 500); CHECK(parsed[Setting::DimTime] == 60);

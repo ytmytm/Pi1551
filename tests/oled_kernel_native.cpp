@@ -298,7 +298,7 @@ int main(int argc, char** argv) {
     CHECK(options.Runtime(Setting::TapeAutoplay) == 0);
     CHECK(options.GetNewDiskType() == DiskImage::G64); CHECK(options.DisplayTemperature() == 1);
     CHECK(options.SoundOnGPIO() == 1); CHECK(options.SoundOnGPIODuration() == 250);
-    { std::ofstream f(root+"/options.txt"); f << "deviceID = 8\nsoundOnGPIO = 0\noledSound = 1\n"; }
+    { std::ofstream f(root+"/options.txt"); f << "deviceID = 8\nsoundOnGPIO = 0\nSoundEnabled = 1\n"; }
     sampleAvailable = false; Enter("Load settings"); CHECK(options.GetDeviceID() == 9); CHECK(options.SoundOnGPIO() == 1);
     sampleAvailable = true;
     { std::ofstream f(root+"/options.txt"); f << "deviceID = wrong\n"; }
@@ -316,6 +316,11 @@ int main(int argc, char** argv) {
     CHECK(templateOptions.SoundOnGPIODuration() == 500); CHECK(templateOptions.GetNewDiskType() == DiskImage::D64);
     CHECK(templateOptions.LoadRuntimeText(templateText)); CHECK(templateOptions.Runtime(Setting::Scroll) == 100);
     CHECK(templateOptions.Runtime(Setting::Font) == 1); CHECK(templateOptions.SoundOnGPIO() == 1);
+    CHECK(templateOptions.Runtime(Setting::Sound) == 1);
+    char oldSoundOption[] = "oledSound = 0\n";
+    templateOptions.Process(oldSoundOption); CHECK(templateOptions.Runtime(Setting::Sound) == 0);
+    char newSoundOption[] = "SoundEnabled = 1\n";
+    templateOptions.Process(newSoundOption); CHECK(templateOptions.Runtime(Setting::Sound) == 1);
     std::cout << "PASS firmware bridge: deferred effects, ROM slots, options save/load failures, reboot\n";
     return 0;
 }

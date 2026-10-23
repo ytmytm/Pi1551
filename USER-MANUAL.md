@@ -720,7 +720,7 @@ The Pi1551 interface uses I2C bus 1 for the OLED.
 | Option | Default | Meaning |
 | --- | --- | --- |
 | `SoundOnGPIO` | `0` | `0`: legacy PWM/DMA sample on GPIO13. `1`: square-wave buzzer on GPIO13. |
-| `oledSound` | `1` | Runtime `Sound ON/OFF`, independent of the `SAMPLE`/`BUZZER` mode. |
+| `SoundEnabled` | `1` | Runtime `Sound ON/OFF`, independent of the `SAMPLE`/`BUZZER` mode. |
 | `SoundOnGPIODuration` | `1000` | Buzzer duration in milliseconds when `SoundOnGPIO = 1`. |
 | `SoundOnGPIOFreq` | `1200` | Buzzer frequency in Hz when `SoundOnGPIO = 1`. |
 
@@ -769,7 +769,7 @@ DisplayTemperature = 1
 oledDimming = 1
 i2cLcdDimTime = 30
 i2cLcdDimContrast = 0
-oledSound = 1
+SoundEnabled = 1
 SoundOnGPIO = 1
 tapeMotorAlwaysOn = 1
 skipMotorSpinUpDelay = 1

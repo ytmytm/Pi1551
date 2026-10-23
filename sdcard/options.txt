@@ -48,7 +48,7 @@ tapeAutoplay = 1
 
 // Settings -> Sound. The SOUND wire is fixed to GPIO13 (physical pin 33).
 // GPIO18 is TCBM data; GPIO19 is tape READ. Neither is selectable for sound.
-oledSound = 1 // Sound ON/OFF, independent of the output method below.
+SoundEnabled = 1 // Sound ON/OFF, independent of the output method below.
 SoundOnGPIO = 1 // Mode: 1 = BUZZER (square wave), 0 = SAMPLE (embedded PWM/DMA click).
 SoundOnGPIODuration = 500 // Buzzer duration in milliseconds.
 SoundOnGPIOFreq = 1200 // Buzzer frequency in Hz.

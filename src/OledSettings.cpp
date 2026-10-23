@@ -4,7 +4,7 @@
 #include <stdio.h>
 namespace oled {
 const char* OptionName(Setting id) {
-    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "tapeAutoplay", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "oledSound", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
+    static const char* names[] = {"deviceID", "idleSleep", "RAMBOard", "skipMotorSpinUpDelay", "ignoreReset", "tapeMotorAlwaysOn", "tapeAutoplay", "autoMountEnabled", "onResetChangeToStartingFolder", "lowercaseBrowseModeFilenames", "disableSD2IECCommands", "i2cLcdOnContrast", "oledDimming", "i2cLcdFlip", "i2cLcdUseCBMChar", "scrollHighlightRate", "rotaryEncoderInvert", "SoundEnabled", "soundOnGPIOFreq", "displayTemperature", "i2cLcdDimTime", "i2cLcdDimContrast", "soundOnGPIODuration", "soundOnGPIO", "NewDiskType"};
     return names[(unsigned)id];
 }
 static const char* OptionComment(Setting id) {
@@ -18,7 +18,7 @@ static const char* OptionComment(Setting id) {
         "Enable SD2IEC commands.", "OLED active contrast (1..255).", "Enable OLED dimming.",
         "Rotate the OLED display by 180 degrees.", "Use the Commodore character set.",
         "Browser scroll interval in seconds.", "Invert rotary encoder direction.",
-        "Enable OLED sound.", "Sound frequency in Hz.", "Show temperature in the OLED header.",
+        "Enable head-step sound.", "Sound frequency in Hz.", "Show temperature in the OLED header.",
         "OLED dim timeout in seconds; 0 disables dimming.", "OLED dim contrast (0..255).",
         "Sound duration in milliseconds.", "Sound output mode: 1 = buzzer, 0 = sample.",
         "Default new disk image type: d64 or g64."
@@ -99,7 +99,8 @@ bool ParseRuntimeSettings(const std::string& text, std::map<Setting, int>& value
         size_t end = text.find('\n', start); if (end == std::string::npos) end = text.size();
         std::string line = visible.substr(start, end - start), key = Name(line);
         for (unsigned i = 0; i < (unsigned)Setting::Count; ++i) {
-            Setting id = (Setting)i; if (key != Lower(OptionName(id))) continue;
+            Setting id = (Setting)i;
+            if (key != Lower(OptionName(id)) && !(id == Setting::Sound && key == "oledsound")) continue;
             std::string value = Trim(line.substr(line.find('=') + 1));
             size_t comment = value.find_first_of(";#"); if (comment != std::string::npos) value.erase(comment);
             comment = value.find("//"); if (comment != std::string::npos) value.erase(comment);
@@ -129,7 +130,8 @@ std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting
         if (!foundEnding && !line.ending.empty()) { newline = line.ending; foundEnding = true; }
         std::string key = Name(line.visible);
         for (std::map<Setting,int>::const_iterator it = changes.begin(); it != changes.end(); ++it)
-            if (key == Lower(OptionName(it->first))) last[it->first] = lines.size();
+            if (key == Lower(OptionName(it->first)) || (it->first == Setting::Sound && key == "oledsound"))
+                last[it->first] = lines.size();
         lines.push_back(line);
         start = end + 1;
     }
@@ -142,8 +144,13 @@ std::string MergeRuntimeSettings(const std::string& text, const std::map<Setting
         size_t b = a;
         while (b < masked.size() && !isspace((unsigned char)masked[b])) ++b;
         std::string token = line.substr(a, b - a); int original;
-        if (DecodeValue(it->first, token, original) && original == it->second) continue;
-        line.replace(a, b - a, EncodeValue(it->first, it->second));
+        if (!DecodeValue(it->first, token, original) || original != it->second)
+            line.replace(a, b - a, EncodeValue(it->first, it->second));
+        if (it->first == Setting::Sound && Name(masked) == "oledsound") {
+            size_t nameStart = masked.find_first_not_of(" \t");
+            size_t nameEnd = masked.find_last_not_of(" \t", masked.find('=') - 1);
+            line.replace(nameStart, nameEnd - nameStart + 1, OptionName(it->first));
+        }
     }
     std::string result;
     for (size_t i = 0; i < lines.size(); ++i) result += lines[i].body + lines[i].ending;
