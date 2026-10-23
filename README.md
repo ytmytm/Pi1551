@@ -216,18 +216,10 @@ cancels the edit. The same clock backs SD2IEC `T-R`/`T-W`, Status DATE/TIME,
 and FatFs timestamps on new/updated SD files once the clock is set. It
 survives drive resets but clears on reboot.
 
-See the [OLED menu guide](USER-MANUAL.md#oled-menu-and-controls) for selection
-rules, option values and examples. Run `make tui` for the keyboard simulator;
-`make help` lists build and native-test targets.
-
-To try IDX in `make tui`, open `/1551/tap` and select `Winter Games.idx`.
-The simulator loads and stops the matching `Winter Games.tap`, then shows INTRO, EVENT 1,
-and EVENT 2. After choosing a position, `Go to file...` appears directly
-below Play/Stop in the Tape menu. Selecting `Winter Games.tap` also loads its
-adjacent IDX automatically; choose `Stop` first if autoplay is on, then open
-`Go to file...` to choose a position.
-These are sample entries in the simulator's virtual SD card; they do not
-create actual TAP/IDX files on your computer or SD card.
+See the [OLED controls](USER-MANUAL.md#oled-menu-and-controls) and
+[menu reference](USER-MANUAL.md#menu-reference) for selection rules and menu
+entries. The [tape instructions](USER-MANUAL.md#tap-playback-and-recording)
+explain how to use TAP files and matching IDX position lists on an SD card.
 
 ### HDMI And USB Keyboard
 
@@ -235,8 +227,6 @@ HDMI startup output (logo, font/ROM loading and configured diagnostics) remains.
 The current menu uses the encoder, Insert and Back; interactive HDMI browser
 and USB keyboard control are not supported, even without an attached OLED.
 See [HDMI and USB keyboard](USER-MANUAL.md#hdmi-and-usb-keyboard) for details.
-The make tui keyboard controls are for the desktop simulator, not USB input
-on the Raspberry Pi.
 
 ## Browser Mode, Emulation Mode, And Tape Mode
 
@@ -258,8 +248,8 @@ Stop, Rewind, Go to counter and Eject also finish recording. See the
 [tape instructions](USER-MANUAL.md#tap-playback-and-recording) for the menu
 steps and file behavior.
 
-See [USER-MANUAL.md](USER-MANUAL.md) for the full button map,
-keyboard shortcuts, TAP behavior, and every accepted `options.txt` setting.
+See [USER-MANUAL.md](USER-MANUAL.md) for controls, TAP behavior and the
+`options.txt` reference.
 
 ### D64 idle sleep
 
