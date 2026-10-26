@@ -81,6 +81,8 @@ u8 TCBM_Bus::lastOutA = 0xff; // invalid
 u8 TCBM_Bus::lastOutC = 0xff; // invalid
 bool TCBM_Bus::lastOutputLED = false;
 bool TCBM_Bus::lastOutputSound = false;
+bool TCBM_Bus::ledSoundOutputValid = false;
+bool TCBM_Bus::lastSoundGpioEnabled = false;
 
 // TCBM bus inputs sampled by the drive emulator (long cable / missing series R can glitch).
 static const u32 TCBM_GPIO_INPUT_MASK =
@@ -342,7 +344,7 @@ void TCBM_Bus::RefreshOuts1551(void)
 		IOPort* portC = TPI->GetPortC();
 		u8 ddrC = portC->GetDirection();
 		u8 pc = portC->GetOutput();
-		// Early exit only for TPI port state; LED/buzzer are pushed unconditionally below.
+		// Early exit only for TPI port state; LED/buzzer are handled below.
 		if (dir == lastDirA && out == lastOutA && ddrC == lastDirC && pc == lastOutC)
 			goto push_led_sound;
 		u8 changed = dir ^ lastDirA;
@@ -413,22 +415,28 @@ void TCBM_Bus::RefreshOuts1551(void)
 	}
 
 push_led_sound:
-	lastOutputLED = OutputLED;
-	lastOutputSound = OutputSound;
-
-	// LED is not a TPI register; drive every call (IEC RefreshOuts1541 style).
+	// LED and buzzer rarely change, but this function runs multiple times per
+	// emulated microsecond. Only touch their GPIO pins on a state transition.
 	unsigned ledSoundClear = 0;
 	unsigned ledSoundSet = 0;
-	if (OutputLED) ledSoundSet |= 1u << PIGPIO_OUT_LED;
-	else ledSoundClear |= 1u << PIGPIO_OUT_LED;
+	if (!ledSoundOutputValid || OutputLED != lastOutputLED)
+	{
+		if (OutputLED) ledSoundSet |= 1u << PIGPIO_OUT_LED;
+		else ledSoundClear |= 1u << PIGPIO_OUT_LED;
+		lastOutputLED = OutputLED;
+	}
 	// Runtime buzzer output is fixed to the board's SOUND pin (GPIO13).
-	if (options.Runtime(oled::Setting::Sound) && options.SoundOnGPIO())
+	bool soundGpioEnabled = options.Runtime(oled::Setting::Sound) && options.SoundOnGPIO();
+	if (soundGpioEnabled && (!ledSoundOutputValid || !lastSoundGpioEnabled || OutputSound != lastOutputSound))
 	{
 		if (OutputSound) ledSoundSet |= 1u << PIGPIO_OUT_SOUND;
 		else ledSoundClear |= 1u << PIGPIO_OUT_SOUND;
+		lastOutputSound = OutputSound;
 	}
-	write32(ARM_GPIO_GPCLR0, ledSoundClear);
-	write32(ARM_GPIO_GPSET0, ledSoundSet);
+	lastSoundGpioEnabled = soundGpioEnabled;
+	ledSoundOutputValid = true;
+	if (ledSoundClear) write32(ARM_GPIO_GPCLR0, ledSoundClear);
+	if (ledSoundSet) write32(ARM_GPIO_GPSET0, ledSoundSet);
 }
 
 // called whenever the emulated 6502 writes to port A ($4000) or DDRA ($4003)

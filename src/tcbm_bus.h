@@ -177,6 +177,8 @@ public:
 
 		// Clear all outputs to 0
 		write32(ARM_GPIO_GPCLR0, 0xFFFFFFFF);
+		ledSoundOutputValid = false;
+		lastSoundGpioEnabled = false;
 
 		SetDIODirectionInput(true);
 //		RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_IN_DAV, FS_INPUT);
@@ -603,6 +605,8 @@ private:
 	static u8 lastOutC;
 	static bool lastOutputLED;
 	static bool lastOutputSound;
+	static bool ledSoundOutputValid;
+	static bool lastSoundGpioEnabled;
 
 	//ROTARY: Added for rotary encoder support - 09/05/2019 by Geo...
 	static RotaryEncoder rotaryEncoder;
