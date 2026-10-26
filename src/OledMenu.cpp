@@ -339,7 +339,9 @@ std::vector<Menu::Row> Menu::Rows() {
         r.push_back(Row(std::string("LED ") + On(s.led))); r.push_back(Row(std::string("MOTOR ") + On(s.motor)));
         r.push_back(Row(std::string("PLAY ") + On(s.play)));
         char b[24]; snprintf(b, sizeof(b), "TRACK %u.%u%s", s.halfTrack / 2 + 1, s.halfTrack % 2 ? 5 : 0, s.idle ? "S" : "");
-        r.push_back(Row(s.emulating ? b : "TRACK ---")); break;
+        r.push_back(Row(s.emulating ? b : "TRACK ---"));
+        snprintf(b, sizeof(b), "%llu", (unsigned long long)s.overrunCounter);
+        r.push_back(Row("OVERRUN ", b)); break;
     }
     default: {
         struct Item { Setting id; const char* label; };

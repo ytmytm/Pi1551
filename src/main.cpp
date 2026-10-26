@@ -310,6 +310,7 @@ static void ApplyPi1551ROMSwitch(unsigned romIndex, bool resetCpu)
 		pi1551.Reset();
 		TCBM_Bus::RefreshOuts1551();
 		Pi1551RunFastBoot();
+		g_overrunCounter = 0;
 	}
 }
 
@@ -2392,6 +2393,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
 	bool resumeCpu = g_oledResumeCpu;
 	g_oledResumeCpu = false;
+	if (!resumeCpu) g_overrunCounter = 0;
 	// SetBusFunctions resets the 6502. A fliplist swap must only rebind its
 	// memory callbacks, including when the RAMBOard setting changed in the UI.
 	if (resumeCpu) pi1551.m6502.SetBusFunctionsPreservingState(dataBusRead, dataBusWrite);
@@ -2635,6 +2637,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		TCBM_Bus::RefreshOuts1551();
 	}
+	if (exitReason == EXIT_RESET) g_overrunCounter = 0;
 	return exitReason;
 }
 #endif
@@ -2992,6 +2995,7 @@ void OledKernelReset()
 {
     if (emulating == EMULATING_1551) {
         pi1551.m6502.Reset(); pi1551.Reset(); Pi1551RunFastBoot();
+        g_overrunCounter = 0;
         g_oledWakeCpu = true;
     }
 }
@@ -3081,6 +3085,7 @@ oled::Status OledKernelStatus()
     if (live) ReadPi1551UiSnapshot(snapshot);
     s.halfTrack = live ? snapshot.track : pi1551.drive.Track();
     s.idle = live && snapshot.valid && snapshot.idleSleeping;
+    s.overrunCounter = live ? (snapshot.valid ? snapshot.overrunCounter : 0) : g_overrunCounter;
     s.led = live && snapshot.valid && snapshot.led; s.temperature = temperature;
     s.sdSize = size; s.sdFree = free; s.rom = roms.GetSelectedROMName();
     char version[24]; snprintf(version, sizeof(version), "%u.%02u", versionMajor, versionMinor); s.firmware = version;

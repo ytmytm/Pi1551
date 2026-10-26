@@ -425,7 +425,7 @@ Browser / Fliplist
    │  ├─ TIME HH:MM:SS           (local clock, or unset)
    │  ├─ TEMP, SD size, FREE space, FW version
    │  ├─ DOS filename, current image filename, TAP filename
-   │  └─ LED, MOTOR, PLAY, TRACK (S while idle)
+   │  └─ LED, MOTOR, PLAY, TRACK (S while idle), OVERRUN
    └─ Reboot Pi1551
       ├─ ..
       ├─ Cancel                    (initial selection)
@@ -563,7 +563,9 @@ Inspect it on a computer if you need to recover settings.
 
 - `Status` displays the RTC state, local date and time, temperature, SD size
   and free space, firmware version, DOS filename, current image and TAP, LED,
-  MOTOR, PLAY and track state.
+  MOTOR, PLAY, track state and `OVERRUN`. The latter counts emulation loops
+  that exceeded the 1 µs budget. It starts at zero on entry to 1551 emulation
+  and resets after a hardware or software drive reset.
 - `Reboot Pi1551` opens a confirmation screen:
   - `Cancel` is selected initially and returns to the menu.
   - `Reboot Pi1551?` flushes writes and restarts the device. It is distinct
