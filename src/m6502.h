@@ -527,7 +527,7 @@ public:
 	void SetBusFunctions(DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) {this->dataBusReadFn = dataBusReadFn; this->dataBusWriteFn = dataBusWriteFn; status = FLAG_CONSTANT; Reset(); }
 	void SetBusFunctionsPreservingState(DataBusReadFn dataBusReadFn, DataBusWriteFn dataBusWriteFn) { this->dataBusReadFn = dataBusReadFn; this->dataBusWriteFn = dataBusWriteFn; }
 	void Reset(void);
-	void Step(void);
+	inline void Step(void);
 #ifdef  SUPPORT_RDY_HALTING
 	void RDY(bool asserted);
 	bool Halted() { return RDYHalted != 0; }
@@ -554,4 +554,44 @@ public:
 	Interrupt NMI;
 #endif //  SUPPORT_NMI
 };
+
+// A single step emulates both real 6502 1/2 cycles.
+// On a real 6502, interrupts can be asserted between 1/2 cycles. When this occurs the hardware effectively ignores it for a further 1/2 cycle anyway.
+// Here, interrupts are polled at the start of a cycle (in an instruction fetch cycle) emulating this behaviour.
+// High frequency (1/2 cycle) bursts of interrupts assertions and un-assertions occuring mid full cycle will be missed by the hardware anyway.
+inline void M6502::Step(void)
+{
+	bool irq;
+
+	// If an IRQ occurs during a CLI then it will not take effect until the instruction after the CLI has been executed.
+	// To emulate this, CLI simply sets CLIMaskingInterrupt flag.
+	// Similar behaviour can be witnessed with the 3 cycle branch taken instruction.
+#ifdef  SUPPORT_IRQ
+	irq = IRQ.IsAsserted();
+	if (irq && ((status & FLAG_INTERRUPT) == 0) && !CLIMaskingInterrupt && !BranchTakenMaskingInterrupt)
+		IRQPending = 1;
+	if (!irq)
+		IRQPending = 0;
+#endif //  SUPPORT_IRQ
+
+#ifdef  SUPPORT_NMI
+	NMIPending = NMI.IsAsserted() && !CLIMaskingInterrupt && !BranchTakenMaskingInterrupt;
+#endif //  SUPPORT_NMI
+
+	// The previous cycle's masks expire now, whether or not they were set.
+	// The cycle handler below can set them again for CLI or a taken branch.
+	CLIMaskingInterrupt = false;
+	BranchTakenMaskingInterrupt = false;
+
+#ifdef  SUPPORT_RDY_HALTING
+	if (!Halted())
+	{
+		CheckForHalt();
+		addressModeCycleFn(this);
+	}
+#else
+	addressModeCycleFn(this);
+#endif //  SUPPORT_RDY_HALTING
+}
+
 #endif
