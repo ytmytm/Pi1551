@@ -524,79 +524,9 @@ bool Drive::Update(unsigned encoderTicks)
 			}
 		}
 #else
-		for (unsigned cycles = 0; cycles < encoderTicks; ++cycles)
-		{
-			if (++cyclesForBit >= cyclesPerBit)
-			{
-				cyclesForBit -= cyclesPerBit;
-				// Advance bit-cell timing in read and write; only read flux from the disk
-				// during read.  GetNextBit() also advances headBitOffset, so it must not run
-				// while writing — SetNextBit() already advances the head once per written bit.
-				if (!writing && GetNextBit())
-					ResetEncoderDecoder(18.0f, 20.0f);
-			}
-			if (!writing)
-			{
-				randomFluxReversalTime -= 0.0625f;
-				if (randomFluxReversalTime <= 0)
-					ResetEncoderDecoder(2.0f, 25.0f);
-			}
-			if (++UE7Counter == 0x10) // The count carry (bit 4) clocks UF4.
-			{
-				UE7Counter = CLOCK_SEL_AB;	// A and B inputs of UE7 come from the VIA's CLOCK SEL A/B outputs (ie PB5/6) ie preload the encoder/decoder clock for the current density settings.
-				// The decoder consists of UF4 and UE5A. The ecoder has two outputs, Pin 1 of UE5A is the serial data output and pin 2 of UF4 (output B) is the serial clock output.
-				++UF4Counter &= 0xf; // Clock and clamp UF4.
-				// The UD2 read shift register is clocked by serial clock (the rising edge of encoder/decoder's UF4 B output (serial clock))
-				//	- ie on counts 2, 6, 10 and 14 (2 is the only count that outputs a 1 into readShiftRegister as the MSB bits of the count NORed together for other values are 0)
-				if ((UF4Counter & 0x3) == 2)
-				{
-					// A bit cell is four encoder/decoder clock pulses wide, as the 2nd bit of UF4 controls the serial clock (and takes 4 cycles to loop a two bit counter).
-					// If a flux reversal (or pulse into the decoder) occurs at the beginning of a cell, that cell is a 1 else that cell is a 0.
-					// If a flux reversal occurs, UF4's counter is cleared and the timing circuit is reset to start the encoder/decoder clock at the beginning of the VIA's current density setting.
-					// Pins 6 (output C) and 7 (output D) of UF4 are low, causing the output of UE5A, the serial data line, to go high.
-					// 2 encoder/decoder clock pulses later, the serial clock(pin 2 of UF4) goes high. When the serial clock line is high, the serial data line is valid and the shift register will shift in the data.
-					// The serial clock line remains high for another clock cycle.
-					// After four encoder/decoder clocks a bit cell is now complete.
-					// At this time, pins 2 (output A) and 3 (output B) of UF4 will again be low but as the count is counting up pin 6 (output C) will now be high.
-					// The high on pin 6 (output C) of UF4 causes the serial data line (pin 1 of UE5A) to go low as this is NORed with the low on pin 7 (output D).
-					// If a flux reversal occurs at the beginning of the next cell then everything resets and again we see a 1 on the serial data line 2 encoder/decoder cycles into that cell.
-					// If no flux reversal occurs at the beginning of the next cell, the serial data line will remain low when the serial clock line goes high again (two encoder/decoder clock cycles into the new cell).
-					// If there are no flux reversals for 2 cells then we see 0 on pin 6 (output C) and 1 on pin 7 (output D) of UF4 and this causes the serial data line (pin 1 of UE5A) to remain at 0.
-					// If there are no flux reversals for 3 cells then we see 1 on pin 6 (output C) and 1 on pin 7 (output D) of UF4 and this causes the serial data line (pin 1 of UE5A) to also remain at 0, after all, UE5A is a NOR gate.
-					// After 4 cells the counter inside UF4 loops back to 0 and we again see 0 on pin 6 (output C) and 0 on pin 7 (output C), causing the output of UE5A, the serial data line, to go to a 1, regardless of a true flux reversal!
-					readShiftRegister <<= 1;
-					readShiftRegister |= (UF4Counter == 2); // Emulate UE5A and only shift in a 1 when pins 6 (output C) and 7 (output D) (bits 2 and 3 of UF4Counter are 0. ie the first count of the bit cell)
-					if (writing) SetNextBit((writeShiftRegister & 0x80));
-					writeShiftRegister <<= 1;
-					// Note: SYNC can only trigger during reading as R/!W line is one of UC2's inputs.
-					if (!writing && ((readShiftRegister & 0x3ff) == 0x3ff))	// if the last 10 bits are 1s then SYNC
-					{
-						UE3Counter = 0;	// Phase lock on to byte boundary
-						m_pTPI->GetPortC()->SetInput(0x40, false);			// PC6 active low SYNC
-					}
-					else
-					{
-						if (!writing) m_pTPI->GetPortC()->SetInput(0x40, true); // SYNC not asserted if not following the SYNC bits
-						UE3Counter++;
-					}
-				}
-				// UC5B (NOR used to invert UF4's output B serial clock) output high when UF4 counts 0,1,4,5,8,9,12 and 13
-				else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
-				{
-					UE3Counter = 0;
-					m_pTPI->GetPortCPU()->SetInput(0x80, true);			// byte latched 1=yes, 0=no; 1551 does not couple SO to CPU V flag
-					if (writing) 
-					{
-						writeShiftRegister = m_pTPI->GetPortB()->GetOutput();
-					}
-					else
-					{
-						writeShiftRegister = (u8)(readShiftRegister & 0xff);
-						m_pTPI->GetPortB()->SetInput(writeShiftRegister);
-					}
-				}
-			}
-		}
+		// MODE is fixed for this call. Specialize the 16-tick loop once here.
+		if (writing) UpdateEncoderTicks<true>(encoderTicks);
+		else UpdateEncoderTicks<false>(encoderTicks);
 #endif
 
 #if defined(PROFILE)
@@ -607,6 +537,90 @@ bool Drive::Update(unsigned encoderTicks)
 	return true;
 }
 
+
+#if !defined(EXPERIMENTALZERO)
+template<bool writing>
+void Drive::UpdateEncoderTicks(unsigned encoderTicks)
+{
+	IOPort* const portB = m_pTPI->GetPortB();
+	IOPort* const portC = m_pTPI->GetPortC();
+	IOPort* const portCPU = m_pTPI->GetPortCPU();
+	const float bitPeriod = cyclesPerBit;
+	for (unsigned cycles = 0; cycles < encoderTicks; ++cycles)
+	{
+		if (++cyclesForBit >= bitPeriod)
+		{
+			cyclesForBit -= bitPeriod;
+			// Advance bit-cell timing in read and write; only read flux from the disk
+			// during read.  GetNextBit() also advances headBitOffset, so it must not run
+			// while writing — SetNextBit() already advances the head once per written bit.
+			if (!writing && GetNextBit())
+				ResetEncoderDecoder(18.0f, 20.0f);
+		}
+		if (!writing)
+		{
+			randomFluxReversalTime -= 0.0625f;
+			if (randomFluxReversalTime <= 0)
+				ResetEncoderDecoder(2.0f, 25.0f);
+		}
+		if (++UE7Counter == 0x10) // The count carry (bit 4) clocks UF4.
+		{
+			UE7Counter = CLOCK_SEL_AB;	// A and B inputs of UE7 come from the VIA's CLOCK SEL A/B outputs (ie PB5/6) ie preload the encoder/decoder clock for the current density settings.
+			// The decoder consists of UF4 and UE5A. The ecoder has two outputs, Pin 1 of UE5A is the serial data output and pin 2 of UF4 (output B) is the serial clock output.
+			++UF4Counter &= 0xf; // Clock and clamp UF4.
+			// The UD2 read shift register is clocked by serial clock (the rising edge of encoder/decoder's UF4 B output (serial clock))
+			//	- ie on counts 2, 6, 10 and 14 (2 is the only count that outputs a 1 into readShiftRegister as the MSB bits of the count NORed together for other values are 0)
+			if ((UF4Counter & 0x3) == 2)
+			{
+				// A bit cell is four encoder/decoder clock pulses wide, as the 2nd bit of UF4 controls the serial clock (and takes 4 cycles to loop a two bit counter).
+				// If a flux reversal (or pulse into the decoder) occurs at the beginning of a cell, that cell is a 1 else that cell is a 0.
+				// If a flux reversal occurs, UF4's counter is cleared and the timing circuit is reset to start the encoder/decoder clock at the beginning of the VIA's current density setting.
+				// Pins 6 (output C) and 7 (output D) of UF4 are low, causing the output of UE5A, the serial data line, to go high.
+				// 2 encoder/decoder clock pulses later, the serial clock(pin 2 of UF4) goes high. When the serial clock line is high, the serial data line is valid and the shift register will shift in the data.
+				// The serial clock line remains high for another clock cycle.
+				// After four encoder/decoder clocks a bit cell is now complete.
+				// At this time, pins 2 (output A) and 3 (output B) of UF4 will again be low but as the count is counting up pin 6 (output C) will now be high.
+				// The high on pin 6 (output C) of UF4 causes the serial data line (pin 1 of UE5A) to go low as this is NORed with the low on pin 7 (output D).
+				// If a flux reversal occurs at the beginning of the next cell then everything resets and again we see a 1 on the serial data line 2 encoder/decoder cycles into that cell.
+				// If no flux reversal occurs at the beginning of the next cell, the serial data line will remain low when the serial clock line goes high again (two encoder/decoder clock cycles into the new cell).
+				// If there are no flux reversals for 2 cells then we see 0 on pin 6 (output C) and 1 on pin 7 (output D) of UF4 and this causes the serial data line (pin 1 of UE5A) to remain at 0.
+				// If there are no flux reversals for 3 cells then we see 1 on pin 6 (output C) and 1 on pin 7 (output D) of UF4 and this causes the serial data line (pin 1 of UE5A) to also remain at 0, after all, UE5A is a NOR gate.
+				// After 4 cells the counter inside UF4 loops back to 0 and we again see 0 on pin 6 (output C) and 0 on pin 7 (output C), causing the output of UE5A, the serial data line, to go to a 1, regardless of a true flux reversal!
+				readShiftRegister <<= 1;
+				readShiftRegister |= (UF4Counter == 2); // Emulate UE5A and only shift in a 1 when pins 6 (output C) and 7 (output D) (bits 2 and 3 of UF4Counter are 0. ie the first count of the bit cell)
+				if (writing) SetNextBit((writeShiftRegister & 0x80));
+				writeShiftRegister <<= 1;
+				// Note: SYNC can only trigger during reading as R/!W line is one of UC2's inputs.
+				if (!writing && ((readShiftRegister & 0x3ff) == 0x3ff))	// if the last 10 bits are 1s then SYNC
+				{
+					UE3Counter = 0;	// Phase lock on to byte boundary
+					portC->SetInput(0x40, false);			// PC6 active low SYNC
+				}
+				else
+				{
+					if (!writing) portC->SetInput(0x40, true); // SYNC not asserted if not following the SYNC bits
+					UE3Counter++;
+				}
+			}
+			// UC5B (NOR used to invert UF4's output B serial clock) output high when UF4 counts 0,1,4,5,8,9,12 and 13
+			else if (((UF4Counter & 2) == 0) && (UE3Counter == 8))	// Phase locked on to byte boundary
+			{
+				UE3Counter = 0;
+				portCPU->SetInput(0x80, true);			// byte latched 1=yes, 0=no; 1551 does not couple SO to CPU V flag
+				if (writing)
+				{
+					writeShiftRegister = portB->GetOutput();
+				}
+				else
+				{
+					writeShiftRegister = (u8)(readShiftRegister & 0xff);
+					portB->SetInput(writeShiftRegister);
+				}
+			}
+		}
+	}
+}
+#endif
 
 #if defined(EXPERIMENTALZERO)
 #define min(a,b) (((a) < (b)) ? (a) : (b))

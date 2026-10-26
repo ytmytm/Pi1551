@@ -77,6 +77,9 @@ public:
 
 	inline unsigned char GetLastHeadDirection() const { return lastHeadDirection; } // For simulated head movement sounds
 private:
+#if !defined(EXPERIMENTALZERO)
+	template<bool writing> void UpdateEncoderTicks(unsigned encoderTicks);
+#endif
 #if defined(EXPERIMENTALZERO)
 	int32_t localSeed;
 	inline void ResetEncoderDecoder(unsigned int min, unsigned int span)
