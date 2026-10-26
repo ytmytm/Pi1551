@@ -4,7 +4,7 @@
 
 Run `make test-tcbm-gpio-native` to compare production `RefreshOuts1551()`
 with its frozen reference. Both `-O1` and `-Ofast` builds run with ASan/UBSan.
-Each checks 1,903,936 refreshes: every byte-to-byte transition across eight
+Each checks 1,903,938 refreshes: every byte-to-byte transition across eight
 control configurations, all data/control direction and output combinations,
 unchanged states, and seeded mixed traces with LED/buzzer option changes,
 null port pointers and initial cache states. The test compares ordered GPIO

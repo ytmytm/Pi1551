@@ -91,6 +91,13 @@ int main()
     m6523 tpi;
     auto* a = tpi.GetPortA(); auto* c = tpi.GetPortC();
     TCBM_Bus::TPI = &tpi; TCBM_Bus::port = a;
+    // All-0xff is also the initial cache sentinel: the unchanged check must
+    // keep its reference behavior, and the next data change must fully sync.
+    TCBMGpioDifferentialTest::ResetCache();
+    a->SetDirection(255); a->SetOutput(255);
+    c->SetDirection(255); c->SetOutput(255);
+    TCBMGpioDifferentialTest::Check();
+    a->SetOutput(0); TCBMGpioDifferentialTest::Check();
     // Every byte-to-byte transition with all data pins driven, across control states.
     for (unsigned mode = 0; mode < 8; ++mode) {
         a->SetDirection(255); c->SetDirection(mode == 0 ? 255 : mode * 19);

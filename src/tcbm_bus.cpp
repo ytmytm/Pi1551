@@ -329,6 +329,34 @@ void TCBM_Bus::ReadEmulationMode1551(bool updateTIAStatus)
     Resetting = !ignoreReset && ((gplev0 & PIGPIO_MASK_IN_RESET) != (PIGPIO_MASK_IN_RESET));
 }
 
+namespace {
+// Two nibble tables map the TPI data byte to the board's noncontiguous pins.
+// 128 bytes total; used only when all eight data pins are already outputs.
+constexpr u32 DataByteGpioMask(unsigned value)
+{
+	return ((value & 0x01) ? u32(PIGPIO_MASK_DIO1) : 0u)
+		| ((value & 0x02) ? u32(PIGPIO_MASK_DIO2) : 0u)
+		| ((value & 0x04) ? u32(PIGPIO_MASK_DIO3) : 0u)
+		| ((value & 0x08) ? u32(PIGPIO_MASK_DIO4) : 0u)
+		| ((value & 0x10) ? u32(PIGPIO_MASK_DIO5) : 0u)
+		| ((value & 0x20) ? u32(PIGPIO_MASK_DIO6) : 0u)
+		| ((value & 0x40) ? u32(PIGPIO_MASK_DIO7) : 0u)
+		| ((value & 0x80) ? u32(PIGPIO_MASK_DIO8) : 0u);
+}
+const u32 dataGpioLow[16] = {
+	DataByteGpioMask(0x00), DataByteGpioMask(0x01), DataByteGpioMask(0x02), DataByteGpioMask(0x03),
+	DataByteGpioMask(0x04), DataByteGpioMask(0x05), DataByteGpioMask(0x06), DataByteGpioMask(0x07),
+	DataByteGpioMask(0x08), DataByteGpioMask(0x09), DataByteGpioMask(0x0a), DataByteGpioMask(0x0b),
+	DataByteGpioMask(0x0c), DataByteGpioMask(0x0d), DataByteGpioMask(0x0e), DataByteGpioMask(0x0f)
+};
+const u32 dataGpioHigh[16] = {
+	DataByteGpioMask(0x00), DataByteGpioMask(0x10), DataByteGpioMask(0x20), DataByteGpioMask(0x30),
+	DataByteGpioMask(0x40), DataByteGpioMask(0x50), DataByteGpioMask(0x60), DataByteGpioMask(0x70),
+	DataByteGpioMask(0x80), DataByteGpioMask(0x90), DataByteGpioMask(0xa0), DataByteGpioMask(0xb0),
+	DataByteGpioMask(0xc0), DataByteGpioMask(0xd0), DataByteGpioMask(0xe0), DataByteGpioMask(0xf0)
+};
+}
+
 /// @brief Set real I/O pins / directions after emulation step in emulation mode
 /// @param  
 void TCBM_Bus::RefreshOuts1551(void)
@@ -347,61 +375,74 @@ void TCBM_Bus::RefreshOuts1551(void)
 		// Early exit only for TPI port state; LED/buzzer are handled below.
 		if (dir == lastDirA && out == lastOutA && ddrC == lastDirC && pc == lastOutC)
 			goto push_led_sound;
-		u8 changed = dir ^ lastDirA;
-		static const u8 masksA[8] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80 };
-		static const rpi_gpio_pin_t pinsA[8] = {
-			(rpi_gpio_pin_t)PIGPIO_DIO1,(rpi_gpio_pin_t)PIGPIO_DIO2,(rpi_gpio_pin_t)PIGPIO_DIO3,(rpi_gpio_pin_t)PIGPIO_DIO4,
-			(rpi_gpio_pin_t)PIGPIO_DIO5,(rpi_gpio_pin_t)PIGPIO_DIO6,(rpi_gpio_pin_t)PIGPIO_DIO7,(rpi_gpio_pin_t)PIGPIO_DIO8
-		};
-		static const u32 gpioMasksA[8] = {
-			PIGPIO_MASK_DIO1,PIGPIO_MASK_DIO2,PIGPIO_MASK_DIO3,PIGPIO_MASK_DIO4,
-			PIGPIO_MASK_DIO5,PIGPIO_MASK_DIO6,PIGPIO_MASK_DIO7,PIGPIO_MASK_DIO8
-		};
-		for (int i = 0; i < (int)(sizeof(masksA) / sizeof(masksA[0])); ++i)
+		if (dir == 0xff && lastDirA == 0xff && ddrC == lastDirC && pc == lastOutC
+			&& ((lastSet | lastClear) & PIGPIO_MASK_ANY_DIO) == PIGPIO_MASK_ANY_DIO)
 		{
-			u8 m = masksA[i];
-			if (changed & m)
+			// Byte-only transfer (e.g. Bitfire): reuse the unchanged control masks.
+			// The mask guard also excludes the initial 0xff cache sentinels.
+			const u32 dataSet = dataGpioLow[out & 0x0f] | dataGpioHigh[out >> 4];
+			set = (lastSet & ~PIGPIO_MASK_ANY_DIO) | dataSet;
+			clear = (lastClear & ~PIGPIO_MASK_ANY_DIO) | (PIGPIO_MASK_ANY_DIO ^ dataSet);
+			lastOutA = out;
+		}
+		else
+		{
+			u8 changed = dir ^ lastDirA;
+			static const u8 masksA[8] = { 0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80 };
+			static const rpi_gpio_pin_t pinsA[8] = {
+				(rpi_gpio_pin_t)PIGPIO_DIO1,(rpi_gpio_pin_t)PIGPIO_DIO2,(rpi_gpio_pin_t)PIGPIO_DIO3,(rpi_gpio_pin_t)PIGPIO_DIO4,
+				(rpi_gpio_pin_t)PIGPIO_DIO5,(rpi_gpio_pin_t)PIGPIO_DIO6,(rpi_gpio_pin_t)PIGPIO_DIO7,(rpi_gpio_pin_t)PIGPIO_DIO8
+			};
+			static const u32 gpioMasksA[8] = {
+				PIGPIO_MASK_DIO1,PIGPIO_MASK_DIO2,PIGPIO_MASK_DIO3,PIGPIO_MASK_DIO4,
+				PIGPIO_MASK_DIO5,PIGPIO_MASK_DIO6,PIGPIO_MASK_DIO7,PIGPIO_MASK_DIO8
+			};
+			for (int i = 0; i < (int)(sizeof(masksA) / sizeof(masksA[0])); ++i)
 			{
+				u8 m = masksA[i];
+				if (changed & m)
+				{
+					if (dir & m)
+						RPI_SetGpioPinFunction(pinsA[i], FS_OUTPUT);
+					else
+						RPI_SetGpioInputPullUp(pinsA[i]);  // pull-up so when Plus/4 (tcbm2sd) releases bus we read $FF
+				}
 				if (dir & m)
-					RPI_SetGpioPinFunction(pinsA[i], FS_OUTPUT);
-				else
-					RPI_SetGpioInputPullUp(pinsA[i]);  // pull-up so when Plus/4 (tcbm2sd) releases bus we read $FF
+				{
+					if (out & m) set |= gpioMasksA[i]; else clear |= gpioMasksA[i];
+				}
 			}
-			if (dir & m)
-			{
-				if (out & m) set |= gpioMasksA[i]; else clear |= gpioMasksA[i];
-			}
-		}
-		lastDirA = dir;
+			lastDirA = dir;
 
-		// Port C (1551 TIA): PC3..0 default to outputs (ACK, DEV, STATUS1, STATUS0) but emulated code may reprogram DDRC.
-		// Honour DDRC and only drive pins configured as outputs; set GPIO function only when DDR changes.
-		u8 changedC = ddrC ^ lastDirC;
-		static const u8 masksC[5] = { 0x01,0x02,0x04,0x08,0x80 };
-		static const rpi_gpio_pin_t pinsC[5] = {
-			(rpi_gpio_pin_t)PIGPIO_OUT_STATUS0,(rpi_gpio_pin_t)PIGPIO_OUT_STATUS1,(rpi_gpio_pin_t)PIGPIO_OUT_DEV,(rpi_gpio_pin_t)PIGPIO_OUT_ACK,(rpi_gpio_pin_t)PIGPIO_IN_DAV
-		};
-		static const u32 gpioMasksC[5] = {
-			PIGPIO_MASK_OUT_STATUS0,PIGPIO_MASK_OUT_STATUS1,PIGPIO_MASK_OUT_DEV,PIGPIO_MASK_OUT_ACK,PIGPIO_MASK_IN_DAV
-		};
-		for (int i = 0; i < (int)(sizeof(masksC) / sizeof(masksC[0])); ++i)
-		{
-			u8 m = masksC[i];
-			if (changedC & m)
+			// Port C (1551 TIA): PC3..0 default to outputs (ACK, DEV, STATUS1, STATUS0) but emulated code may reprogram DDRC.
+			// Honour DDRC and only drive pins configured as outputs; set GPIO function only when DDR changes.
+			u8 changedC = ddrC ^ lastDirC;
+			static const u8 masksC[5] = { 0x01,0x02,0x04,0x08,0x80 };
+			static const rpi_gpio_pin_t pinsC[5] = {
+				(rpi_gpio_pin_t)PIGPIO_OUT_STATUS0,(rpi_gpio_pin_t)PIGPIO_OUT_STATUS1,(rpi_gpio_pin_t)PIGPIO_OUT_DEV,(rpi_gpio_pin_t)PIGPIO_OUT_ACK,(rpi_gpio_pin_t)PIGPIO_IN_DAV
+			};
+			static const u32 gpioMasksC[5] = {
+				PIGPIO_MASK_OUT_STATUS0,PIGPIO_MASK_OUT_STATUS1,PIGPIO_MASK_OUT_DEV,PIGPIO_MASK_OUT_ACK,PIGPIO_MASK_IN_DAV
+			};
+			for (int i = 0; i < (int)(sizeof(masksC) / sizeof(masksC[0])); ++i)
 			{
+				u8 m = masksC[i];
+				if (changedC & m)
+				{
+					if (ddrC & m)
+						RPI_SetGpioPinFunction(pinsC[i], FS_OUTPUT);
+					else
+						RPI_SetGpioInputPullUp(pinsC[i]);  // pull-up when input so released line reads high
+				}
 				if (ddrC & m)
-					RPI_SetGpioPinFunction(pinsC[i], FS_OUTPUT);
-				else
-					RPI_SetGpioInputPullUp(pinsC[i]);  // pull-up when input so released line reads high
+				{
+					if (pc & m) set |= gpioMasksC[i]; else clear |= gpioMasksC[i];
+				}
 			}
-			if (ddrC & m)
-			{
-				if (pc & m) set |= gpioMasksC[i]; else clear |= gpioMasksC[i];
-			}
+			lastDirC = ddrC;
+			lastOutA = out;
+			lastOutC = pc;
 		}
-		lastDirC = ddrC;
-		lastOutA = out;
-		lastOutC = pc;
 
 		// Avoid redundant TPI writes; also skip zero writes but keep cache correct
 		if (clear != lastClear) {
