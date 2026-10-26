@@ -44,6 +44,10 @@ help:
 		'' \
 		'TUI requires Python 3; native tests require Python 3 and host GCC/G++.'
 
+.PHONY: test-tcbm-gpio-native
+test-tcbm-gpio-native:
+	python3 tests/test_tcbm_gpio_differential.py
+
 .PHONY: test-m6502-native
 test-m6502-native:
 	python3 tests/test_m6502_differential.py

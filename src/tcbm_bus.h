@@ -561,6 +561,11 @@ public:
 	static bool OutputLED;
 	static bool OutputSound;
 
+#ifdef PI1551_NATIVE_TCBM_TEST
+	static void ReferenceRefreshOuts1551(void);
+	friend struct TCBMGpioDifferentialTest;
+#endif
+
 private:
 	static u32 oldClears;
 	static u32 oldSets;

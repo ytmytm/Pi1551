@@ -136,6 +136,12 @@ extern "C" {
 #endif
 #include "rpi-mailbox-interface.h"
 
+#ifdef PI1551_NATIVE_TCBM_TEST
+	u32 Pi1551NativeRead32(unsigned int address);
+	void Pi1551NativeWrite32(unsigned int address, u32 value);
+	static inline u32 read32(unsigned int address) { return Pi1551NativeRead32(address); }
+	static inline void write32(unsigned int address, u32 value) { Pi1551NativeWrite32(address, value); }
+#else
 	static inline u32 read32(unsigned int nAddress)
 	{
 		return *(u32 volatile *)nAddress;
@@ -145,6 +151,8 @@ extern "C" {
 	{
 		*(u32 volatile *)nAddress = nValue;
 	}
+
+#endif
 
 	static inline void delay_us(u32 amount)
 	{

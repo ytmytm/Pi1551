@@ -1,5 +1,16 @@
 # Native Pi1551 tests
 
+## TCBM GPIO output differential test
+
+Run `make test-tcbm-gpio-native` to compare production `RefreshOuts1551()`
+with its frozen reference. Both `-O1` and `-Ofast` builds run with ASan/UBSan.
+Each checks 1,903,936 refreshes: every byte-to-byte transition across eight
+control configurations, all data/control direction and output combinations,
+unchanged states, and seeded mixed traces with LED/buzzer option changes,
+null port pointers and initial cache states. The test compares ordered GPIO
+register writes, direction/pull-up API calls, output latches and cached state.
+It checks equivalent effects and ordering, not physical timing on a Pi.
+
 ## 6502 CPU differential test
 
 Run `make test-m6502-native` to compare the production core with the frozen
