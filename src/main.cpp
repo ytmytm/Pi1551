@@ -54,11 +54,6 @@ void uspi_CleanAndInvalidateDataCacheRange(u32 nAddress, u32 nLength);
 #include "Pi1581.h"
 #endif
 
-// Uncomment to drive GPIO1 as a 1MHz duty-cycle probe during Emulate1551.
-// #define PI1551_GPIO1_TIMING_PROBE
-
-// Global overrun counter for 1us timing overruns
-unsigned long long g_overrunCounter = 0;
 #include "FileBrowser.h"
 #include "ScreenLCD.h"
 #include "SpinLock.h"
@@ -210,7 +205,6 @@ struct Pi1551UiSnapshot
 	u8 data;
 	u32 track;
 	bool idleSleeping;
-	unsigned long long overrunCounter;
 	u16 pc;
 	u8 a;
 	u8 x;
@@ -310,7 +304,6 @@ static void ApplyPi1551ROMSwitch(unsigned romIndex, bool resetCpu)
 		pi1551.Reset();
 		TCBM_Bus::RefreshOuts1551();
 		Pi1551RunFastBoot();
-		g_overrunCounter = 0;
 	}
 }
 
@@ -557,7 +550,6 @@ static void PublishPi1551UiSnapshot(bool includeDebug, bool idleSleeping)
 	g_pi1551UiSnapshot.data = TCBM_Bus::GetPI_Data();
 	g_pi1551UiSnapshot.track = pi1551.drive.Track();
 	g_pi1551UiSnapshot.idleSleeping = idleSleeping;
-	g_pi1551UiSnapshot.overrunCounter = g_overrunCounter;
 
 	if (includeDebug)
 	{
@@ -604,7 +596,6 @@ static void ReadPi1551UiSnapshot(Pi1551UiSnapshot& snapshot)
 		snapshot.data = g_pi1551UiSnapshot.data;
 		snapshot.track = g_pi1551UiSnapshot.track;
 		snapshot.idleSleeping = g_pi1551UiSnapshot.idleSleeping;
-		snapshot.overrunCounter = g_pi1551UiSnapshot.overrunCounter;
 		snapshot.pc = g_pi1551UiSnapshot.pc;
 		snapshot.a = g_pi1551UiSnapshot.a;
 		snapshot.x = g_pi1551UiSnapshot.x;
@@ -1622,9 +1613,8 @@ void UpdateScreen()
 					memByte3 = pi1551Snapshot.memAtPc[2];
 				}
 #endif
-				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X] ovf:%llu",
-					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3,
-					hasPi1551Snapshot ? pi1551Snapshot.overrunCounter : g_overrunCounter);
+				snprintf(tempBuffer, tempBufferSize, "PC=$%04X A=$%02X X=$%02X Y=$%02X ST=$%02X SP=$%02X [%02X %02X %02X]",
+					currentPC, currentA, currentX, currentY, currentStatus, currentSP, memByte1, memByte2, memByte3);
 				screen.PrintText(false, 49*8, y, tempBuffer, textColour, bgColour);
 
                 // Display drive memory 0x4000-0x4005 above CPU state line (+ CPU port on 1551)
@@ -2135,13 +2125,6 @@ EXIT_TYPE Emulate1541(FileBrowser* fileBrowser)
 		do	// Sync to the 1MHz clock
 		{
             ctAfter = read32(ARM_SYSTIMER_CLO);
-            unsigned ct = ctAfter - ctBefore;
-            if (ct > 1)
-            {
-                // If this ever occurs then we have taken too long (ie >1us) and lost a cycle.
-                // Cycle accuracy is now in jeopardy. If this occurs during critical communication loops then emulation can fail!
-                ++g_overrunCounter;
-            }
 		} while (ctAfter == ctBefore);
 #endif
 		ctBefore = ctAfter;
@@ -2393,7 +2376,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	DataBusWriteFn dataBusWrite = extraRAM ? write6502ExtraRAM_1551 : write6502_1551;
 	bool resumeCpu = g_oledResumeCpu;
 	g_oledResumeCpu = false;
-	if (!resumeCpu) g_overrunCounter = 0;
 	// SetBusFunctions resets the 6502. A fliplist swap must only rebind its
 	// memory callbacks, including when the RAMBOard setting changed in the UI.
 	if (resumeCpu) pi1551.m6502.SetBusFunctionsPreservingState(dataBusRead, dataBusWrite);
@@ -2429,10 +2411,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 	// Self test code done. Begin realtime emulation.
 	// Sync GPIO to TPI state after fast boot (6502 may have written $4003 during fast boot, or not yet)
 	TCBM_Bus::RefreshOuts1551();
-#if defined(PI1551_GPIO1_TIMING_PROBE)
-	RPI_SetGpioPinFunction(RPI_GPIO1, FS_OUTPUT);
-	RPI_SetGpioHi(RPI_GPIO1);
-#endif
 
 	Pi1551Oled::BeginLiveRender();
 	ctBefore = read32(ARM_SYSTIMER_CLO);
@@ -2489,11 +2467,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			if (commands.applyRomSwitch)
 				ApplyPi1551ROMSwitchFromUI(commands.romSwitchIndex);
 		}
-
-		// Timing marker on GPIO1: low = 6502 halves + interleaved drive; high = housekeeping + SYSTIMER.
-#if defined(PI1551_GPIO1_TIMING_PROBE)
-		RPI_SetGpioLo(RPI_GPIO1);
-#endif
 
 		for (int cycle2MHz = 0; cycle2MHz < 2; ++cycle2MHz)
 		{
@@ -2613,10 +2586,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 			directDiskSwapRequest = 0;
 		}
 
-#if defined(PI1551_GPIO1_TIMING_PROBE)
-		RPI_SetGpioHi(RPI_GPIO1);
-#endif
-
 		if (idleSleeping)
 		{
 			ctBefore = read32(ARM_SYSTIMER_CLO);
@@ -2626,9 +2595,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		do	// Sync to the 1MHz clock
 		{
 			ctAfter = read32(ARM_SYSTIMER_CLO);
-			unsigned ct = ctAfter - ctBefore;
-			if (ct > 1)
-				++g_overrunCounter;
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
 
@@ -2637,7 +2603,6 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 
 		TCBM_Bus::RefreshOuts1551();
 	}
-	if (exitReason == EXIT_RESET) g_overrunCounter = 0;
 	return exitReason;
 }
 #endif
@@ -2995,7 +2960,6 @@ void OledKernelReset()
 {
     if (emulating == EMULATING_1551) {
         pi1551.m6502.Reset(); pi1551.Reset(); Pi1551RunFastBoot();
-        g_overrunCounter = 0;
         g_oledWakeCpu = true;
     }
 }
@@ -3085,7 +3049,6 @@ oled::Status OledKernelStatus()
     if (live) ReadPi1551UiSnapshot(snapshot);
     s.halfTrack = live ? snapshot.track : pi1551.drive.Track();
     s.idle = live && snapshot.valid && snapshot.idleSleeping;
-    s.overrunCounter = live ? (snapshot.valid ? snapshot.overrunCounter : 0) : g_overrunCounter;
     s.led = live && snapshot.valid && snapshot.led; s.temperature = temperature;
     s.sdSize = size; s.sdFree = free; s.rom = roms.GetSelectedROMName();
     char version[24]; snprintf(version, sizeof(version), "%u.%02u", versionMajor, versionMinor); s.firmware = version;

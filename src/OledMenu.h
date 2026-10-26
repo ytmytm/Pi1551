@@ -29,7 +29,6 @@ struct Status {
     bool emulating = false, idle = false, led = false, motor = false, play = false, record = false;
     bool rtcPresent = false;
     unsigned halfTrack = 34, temperature = 0, counter = 0, counterMax = 999, percent = 0;
-    uint64_t overrunCounter = 0;
     uint32_t tapeIndexGeneration = 0;
     std::string tape, rom, sdSize, sdFree, firmware;
 };

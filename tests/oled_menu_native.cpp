@@ -465,13 +465,6 @@ static void status_local_clock() {
     f = m.Render(0);
     CHECK(std::string(f.rows[4]).find("DATE 2026-10-22") != std::string::npos);
     CHECK(std::string(f.rows[5]).find("TIME 21:42:05") != std::string::npos);
-    k.status.overrunCounter = 42;
-    Choose(m, "OVERRUN");
-    f = m.Render(0);
-    bool foundOverrun = false;
-    for (unsigned row = 2; row < 8; ++row)
-        foundOverrun |= std::string(f.rows[row]).find("OVERRUN 42") != std::string::npos;
-    CHECK(foundOverrun);
 }
 static void canonical_setting_formats() {
     std::map<Setting,int> parsed;
