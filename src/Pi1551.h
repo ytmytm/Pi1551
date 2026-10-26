@@ -50,8 +50,15 @@ public:
 
 	void Initialise();
 
-	void Update(unsigned encoderTicks = 16);
-	void EndMicrosecond();
+	inline void Update(unsigned encoderTicks = 16)
+	{
+		if (encoderTicks != 0) drive.Update(encoderTicks);
+	}
+	inline void EndMicrosecond()
+	{
+		// The TIA includes the 100Hz NE555 IRQ source, clocked once per microsecond.
+		TPI.Execute();
+	}
 
 	void Reset();
 

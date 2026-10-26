@@ -232,17 +232,6 @@ void Pi1551::Initialise()
 //		m6502.SetBusFunctions(this, Read6502, Write6502);
 //}
 
-void Pi1551::Update(unsigned encoderTicks)
-{
-	if (encoderTicks != 0)
-		drive.Update(encoderTicks);
-}
-
-void Pi1551::EndMicrosecond()
-{
-	// TIA does nothing, but IRQ source is embedded there, a free running timer based on 555 with 10ms period (100Hz, 10000 cycles at 1MHz)
-	TPI.Execute();
-}
 
 void Pi1551::Reset()
 {
