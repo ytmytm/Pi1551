@@ -38,60 +38,22 @@ u8 read6502_1551(u16 address)
 {
 	if (address & 0x8000)
 	{
-		bool ramBoard = options.GetRAMBOard();
-		unsigned romSize = roms.Get1551ROMSize();
-		
-		if (ramBoard && romSize == 16384)
-		{
-			// 16k ROM with RAMBOard=1
-			if (address >= 0x8000 && address < 0xa000)
-			{
-				// 0x8000-0x9fff: RAM
-				return s_u8Memory[address];
-			}
-			else if (address >= 0xa000 && address < 0xc000)
-			{
-				// 0xa000-0xbfff: return 0xff
-				return 0xff;
-			}
-			else
-			{
-				// 0xc000-0xffff: ROM (16k ROM at 0xc000)
-				return roms.Read1551(address);
-			}
-		}
-		else if (ramBoard && romSize == 32768)
-		{
-			// 32k ROM with RAMBOard=1
-			if (address >= 0x8000 && address < 0xa000)
-			{
-				// 0x8000-0x9fff: RAM (takes priority)
-				return s_u8Memory[address];
-			}
-			else
-			{
-				// 0xa000-0xffff: ROM (32k ROM starting at 0x8000, but first 8k covered by RAM)
-				return roms.Read1551(address);
-			}
-		}
-		else if (!ramBoard && romSize == 32768)
-		{
-			// 32k ROM with RAMBOard=0
-			// 0x8000-0xffff: ROM
+		// Both ROM sizes and both RAMBOard modes map $C000-$FFFF to ROM.
+		if (address >= 0xc000)
 			return roms.Read1551(address);
-		}
-		else
+
+		if (options.GetRAMBOard())
 		{
-			// 16k ROM with RAMBOard=0: default behavior
-			switch (address & 0xe000) // keep bits 15,14,13
+			unsigned romSize = roms.Get1551ROMSize();
+			if (romSize == 16384 || romSize == 32768)
 			{
-				case 0x8000: // 0x8000-0x9fff
-				case 0xa000: // 0xa000-0xbfff
-				case 0xc000: // 0xc000-0xdfff
-				case 0xe000: // 0xe000-0xffff
-					return roms.Read1551(address);
+				if (address < 0xa000)
+					return s_u8Memory[address];
+				if (romSize == 16384)
+					return 0xff; // RAMBOard leaves $A000-$BFFF unmapped with a 16K ROM.
 			}
 		}
+		return roms.Read1551(address);
 	}
 	// 0x0, 0x1 is CPU port
 	else if (address == 0) {
