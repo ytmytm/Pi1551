@@ -120,13 +120,26 @@ the [option reference](USER-MANUAL.md#optionstxt), and upgrades.
 
 ## Building
 
-Raspberry Pi 3A, 3A+, 3B, and 3B+ are recommended for full emulation
-compatibility; the 3A/3A+ are the smallest recommended boards. Raspberry Pi
-Zero 2 W also works with the same `kernel.img` build and can be used until a
-Pi 3 is available. Its lower CPU performance limits the most demanding
-software: for example, demos using the Bitfire fastloader do not work on
-Zero 2 W, although much other software does. See [BUILD.md](BUILD.md) for
-toolchain installation and build commands.
+Raspberry Pi 3A, 3A+, 3B, and 3B+ are recommended; the 3A/3A+ are the
+smallest recommended boards. **Raspberry Pi Zero 2 W also works when its CPU
+is clocked at 1200 MHz**, using the same `kernel.img`. This setting has been
+tested successfully with Carrion's 121 Colors demo and its Bitfire fastloader;
+the default 1000 MHz was insufficient for that loader.
+
+Both [config.txt](config.txt) and the [SD card template](sdcard/config.txt)
+include the model-specific setting:
+
+```ini
+[pi02]
+arm_freq=1200
+
+[all]
+```
+
+Keep the existing `force_turbo=1`. The `[pi02]` section applies only to Zero 2 W,
+so Pi 3 keeps its existing CPU clock. For an existing card, update `config.txt`
+and restart the Pi. See [BUILD.md](BUILD.md) for toolchain installation and
+build commands, and the [user manual](USER-MANUAL.md#what-you-need) for setup.
 
 ## Documentation
 

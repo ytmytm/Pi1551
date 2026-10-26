@@ -29,7 +29,7 @@ assembly, power, cable orientation and voltage details, follow the
 
 - A Raspberry Pi 3A, 3A+, 3B or 3B+ (recommended), with its own USB power
   supply. The 3A/3A+ are the smallest recommended boards. A Zero 2 W also
-  works, but has limited emulation compatibility; see below.
+  works with the 1200 MHz CPU setting described below.
 - A PI1551-hat or PI1551-III interface board and a FAT32 SD card.
 - For disk access, a tcbm2sd board revision 1.3 or newer and its ribbon cable.
   CPLD firmware/JED version 1.4 or newer is needed for software that uses
@@ -37,11 +37,30 @@ assembly, power, cable orientation and voltage details, follow the
 - For tape access, a Mini-DIN 7 cable connecting the interface board to the
   computer's cassette port. The disk ribbon cable is optional for tape-only use.
 
-The Zero 2 W uses the same `kernel.img` and SD card configuration as Pi 3.
-It has been tested and runs Pi1551, and much software works. Its lower CPU
-performance limits emulation compatibility: demanding software, including
-demos using the Bitfire fastloader, does not work. Use a Pi 3 for the best
-compatibility; Zero 2 W is a fallback until one is available.
+The Zero 2 W uses the same `kernel.img` as Pi 3 and works with its CPU
+clocked at **1200 MHz**. This has been tested with Carrion's 121 Colors demo
+and its Bitfire fastloader. At the default 1000 MHz, that loader fails because
+of insufficient CPU performance.
+
+The supplied [SD card configuration](sdcard/config.txt) already includes:
+
+```ini
+force_turbo=1
+```
+
+and the model-specific section:
+
+```ini
+[pi02]
+arm_freq=1200
+
+[all]
+```
+
+For an existing card, keep `force_turbo=1` and add the `[pi02]` section to
+`/config.txt`, or copy the updated template. Restart the Pi for the change to
+take effect; the kernel does not need recompilation. The section applies only
+to Zero 2 W, leaving Pi 3's CPU clock unchanged.
 
 ### Prepare the SD card
 
@@ -425,7 +444,7 @@ Browser / Fliplist
    │  ├─ TIME HH:MM:SS           (local clock, or unset)
    │  ├─ TEMP, SD size, FREE space, FW version
    │  ├─ DOS filename, current image filename, TAP filename
-   │  └─ LED, MOTOR, PLAY, TRACK (S while idle), OVERRUN
+   │  └─ LED, MOTOR, PLAY, TRACK (S while idle)
    └─ Reboot Pi1551
       ├─ ..
       ├─ Cancel                    (initial selection)
@@ -563,9 +582,7 @@ Inspect it on a computer if you need to recover settings.
 
 - `Status` displays the RTC state, local date and time, temperature, SD size
   and free space, firmware version, DOS filename, current image and TAP, LED,
-  MOTOR, PLAY, track state and `OVERRUN`. The latter counts emulation loops
-  that exceeded the 1 µs budget. It starts at zero on entry to 1551 emulation
-  and resets after a hardware or software drive reset.
+  MOTOR, PLAY and track state.
 - `Reboot Pi1551` opens a confirmation screen:
   - `Cancel` is selected initially and returns to the menu.
   - `Reboot Pi1551?` flushes writes and restarts the device. It is distinct

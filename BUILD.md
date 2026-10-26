@@ -13,10 +13,13 @@ For the best emulation compatibility, use a Raspberry Pi 3:
 - Raspberry Pi 3B+
 
 The 3A/3A+ are the smallest recommended boards. Raspberry Pi Zero 2 W has
-also been tested and works with the same build, but its CPU performance is
-insufficient for full emulation compatibility. Much software works; demanding
-software such as demos using the Bitfire fastloader does not. Zero 2 W is a
-fallback until a Pi 3 is available.
+also been tested and works with the same build **at 1200 MHz**. Carrion's
+121 Colors demo, which uses the Bitfire fastloader, works with this setting;
+it failed at the default 1000 MHz. Both repository `config.txt` files include
+`arm_freq=1200` in a `[pi02]` section, together with the existing global
+`force_turbo=1`. This changes only Zero 2 W's CPU clock. When upgrading an
+existing Zero 2 W card, copy the updated `config.txt` as well as the kernel,
+then restart the Pi. No separate kernel build is needed for overclocking.
 
 Use the same `kernel.img` and `sdcard/config.txt` on Pi 3 and Zero 2 W. The
 build still uses `RASPPI=3` for both boards; there is no separate Zero 2 W
