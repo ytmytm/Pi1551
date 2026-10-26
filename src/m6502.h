@@ -88,9 +88,9 @@
 	{											\
 		oldpc = pc;								\
 		pc = (pc & 0xff00) | ((pc + ra) & 0xff);\
-		addressModeCycleFn = &M6502::rel_5_8_T2;\
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::rel_5_8_T2>;\
 	}											\
-	else addressModeCycleFn = &M6502::InstructionFetch;
+	else addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>;
 
 typedef u8(*DataBusReadFn)(u16 address);
 typedef void(*DataBusWriteFn)(u16 address, const u8 value);
@@ -125,9 +125,16 @@ private:
 		FLAG_SIGN = 0x80
 	};
 
-	typedef void (M6502::*AddressModeCycleFunction)(void);	// Member function pointers for the starting cycle of the address mode functions.
+	// Runtime dispatch uses plain function pointers. The member-function
+	// target is known when each adapter is compiled, so it can be inlined
+	// without the member-pointer ABI adjustment/virtual-call checks.
+	typedef void (*CycleFunction)(M6502*);
+	template<void (M6502::*Function)(void)>
+	static void DispatchCycle(M6502* cpu) { (cpu->*Function)(); }
+
+	typedef CycleFunction AddressModeCycleFunction;
 	static AddressModeCycleFunction T1AddressModeFunctions[256];
-	typedef void (M6502::*OpcodeCycleFunction)(void);		// Member function pointers for the opcodes.
+	typedef CycleFunction OpcodeCycleFunction;
 	static OpcodeCycleFunction opcodeFunctions[256];
 
 	union
@@ -172,7 +179,11 @@ private:
 	AddressModeCycleFunction addressModeCycleFn;	// Our pointer to the function that will process the current address mode functionality for the current cycle.
 	OpcodeCycleFunction opcodeCycleFn;				// Our pointer to the function that will be called after (or during) the address mode cycle(s) that execute the actual opcode.
 
-	inline void ExecuteOpcode(void) { (this->*M6502::opcodeCycleFn)(); addressModeCycleFn = &M6502::InstructionFetch; } // Helper function to call opcodeCycleFn and set up for the next instruction fetch. 
+	inline void ExecuteOpcode(void)
+	{
+		opcodeCycleFn(this);
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>;
+	}
 
 	// Stack manipulation helpers.
 	inline void Push(u8 val) { dataBusWriteFn(0x100 + sp--, val); }
@@ -181,7 +192,7 @@ private:
 	// Helper function to write back the results of an instruction (to memory or the A register).
 	inline void WriteValue(u8 byte)
 	{
-		if (addressModeCycleFn == &M6502::sb_1_T1) a = byte;
+		if (addressModeCycleFn == &M6502::DispatchCycle<&M6502::sb_1_T1>) a = byte;
 		else dataBusWriteFn(ea, byte);
 	}
 
@@ -282,199 +293,199 @@ private:
 
 	void imm_2_1_T1(void) { value = BUS_READ(pc++); ExecuteOpcode(); } //2 cycles
 	
-	void rel_5_8_T1(void) { (this->*M6502::opcodeCycleFn)(); } // Branch instructions are the anomaly and execute their opcode in T1.
+	void rel_5_8_T1(void) { opcodeCycleFn(this); } // Branch instructions are the anomaly and execute their opcode in T1.
 	void rel_5_8_T2(void);
-	void rel_5_8_T3(void) { BUS_READ(pc); addressModeCycleFn = &M6502::InstructionFetch; } // Opcode has already been executed in T1 so just move on to the next instruction.
+	void rel_5_8_T3(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>; } // Opcode has already been executed in T1 so just move on to the next instruction.
 
-	void zp_2_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zp_2_1_T2; } //3 cycles
+	void zp_2_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zp_2_1_T2>; } //3 cycles
 	void zp_2_1_T2(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void zp_3_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zp_3_1_T2; } //3 cycles
+	void zp_3_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zp_3_1_T2>; } //3 cycles
 	void zp_3_1_T2(void) { ExecuteOpcode(); }
 
-	void abs_2_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::abs_2_3_T2; } //4 cycles
-	void abs_2_3_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::abs_2_3_T3; }
+	void abs_2_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_2_3_T2>; } //4 cycles
+	void abs_2_3_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_2_3_T3>; }
 	void abs_2_3_T3(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void abs_3_2_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::abs_3_2_T2; } //4 cycles
-	void abs_3_2_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::abs_3_2_T3; }
+	void abs_3_2_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_3_2_T2>; } //4 cycles
+	void abs_3_2_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_3_2_T3>; }
 	void abs_3_2_T3(void) { ExecuteOpcode(); }
 
-	void idx_2_4_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idx_2_4_T2; } //6 cycles
-	void idx_2_4_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::idx_2_4_T3; }
-	void idx_2_4_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idx_2_4_T4; }
-	void idx_2_4_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idx_2_4_T5; }
+	void idx_2_4_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_2_4_T2>; } //6 cycles
+	void idx_2_4_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_2_4_T3>; }
+	void idx_2_4_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_2_4_T4>; }
+	void idx_2_4_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_2_4_T5>; }
 	void idx_2_4_T5(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void idx_3_3_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idx_3_3_T2; } //6 cycles
-	void idx_3_3_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::idx_3_3_T3; }
-	void idx_3_3_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idx_3_3_T4; }
-	void idx_3_3_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idx_3_3_T5; }
+	void idx_3_3_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_3_3_T2>; } //6 cycles
+	void idx_3_3_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_3_3_T3>; }
+	void idx_3_3_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_3_3_T4>; }
+	void idx_3_3_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_3_3_T5>; }
 	void idx_3_3_T5(void) { ExecuteOpcode(); }
 
 	// idx_Undoc behaviour was determined by capturing bus activity on a real 6502 in a 1541 and confirmed by observing Visual6502.
-	void idx_Undoc_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idx_Undoc_T2; } //8 cycles
-	void idx_Undoc_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::idx_Undoc_T3; }
-	void idx_Undoc_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idx_Undoc_T4; }
-	void idx_Undoc_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idx_Undoc_T5; }
-	void idx_Undoc_T5(void) { value = BUS_READ(ea);  addressModeCycleFn = &M6502::idx_Undoc_T6; }
-	void idx_Undoc_T6(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::idx_Undoc_T7; }
+	void idx_Undoc_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T2>; } //8 cycles
+	void idx_Undoc_T2(void) { BUS_READ(ia); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T3>; }
+	void idx_Undoc_T3(void) { ia = (ia + x) & 0xff; ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T4>; }
+	void idx_Undoc_T4(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T5>; }
+	void idx_Undoc_T5(void) { value = BUS_READ(ea);  addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T6>; }
+	void idx_Undoc_T6(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idx_Undoc_T7>; }
 	void idx_Undoc_T7(void) { ExecuteOpcode(); }
 
-	void absx_2_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absx_2_5_T2; } //4/5 cycles
-	void absx_2_5_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absx_2_5_T3; }
+	void absx_2_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_2_5_T2>; } //4/5 cycles
+	void absx_2_5_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_2_5_T3>; }
 	void absx_2_5_T3(void);
 	void absx_2_5_T4(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void absx_3_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absx_3_4_T2; } //5 cycles
-	void absx_3_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absx_3_4_T3; }
-	void absx_3_4_T3(void) { BUS_READ(ea); ea += x; addressModeCycleFn = &M6502::absx_3_4_T4; }
+	void absx_3_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_3_4_T2>; } //5 cycles
+	void absx_3_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_3_4_T3>; }
+	void absx_3_4_T3(void) { BUS_READ(ea); ea += x; addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_3_4_T4>; }
 	void absx_3_4_T4(void) { ExecuteOpcode(); }
 
-	void absy_2_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absy_2_5_T2; } //4/5 cycles
-	void absy_2_5_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absy_2_5_T3; }
+	void absy_2_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_2_5_T2>; } //4/5 cycles
+	void absy_2_5_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_2_5_T3>; }
 	void absy_2_5_T3(void);
 	void absy_2_5_T4(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void absy_3_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absy_3_4_T2; } //5 cycles
-	void absy_3_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absy_3_4_T3; }
-	void absy_3_4_T3(void) { BUS_READ(ea); ea += y; addressModeCycleFn = &M6502::absy_3_4_T4; }
+	void absy_3_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_3_4_T2>; } //5 cycles
+	void absy_3_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_3_4_T3>; }
+	void absy_3_4_T3(void) { BUS_READ(ea); ea += y; addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_3_4_T4>; }
 	void absy_3_4_T4(void) { ExecuteOpcode(); }
 
-	void zpx_2_6_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zpx_2_6_T2; } //4 cycles
-	void zpx_2_6_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::zpx_2_6_T3; }
+	void zpx_2_6_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_2_6_T2>; } //4 cycles
+	void zpx_2_6_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_2_6_T3>; }
 	void zpx_2_6_T3(void) { ea = (ea + x) & 0xFF; value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void zpx_3_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zpx_3_5_T2; } //4 cycles
-	void zpx_3_5_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::zpx_3_5_T3; }
+	void zpx_3_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_3_5_T2>; } //4 cycles
+	void zpx_3_5_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_3_5_T3>; }
 	void zpx_3_5_T3(void) { ea = (ea + x) & 0xFF; ExecuteOpcode(); }
 
-	void zpy_2_6_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zpy_2_6_T2; } //4 cycles
-	void zpy_2_6_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::zpy_2_6_T3; }
+	void zpy_2_6_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpy_2_6_T2>; } //4 cycles
+	void zpy_2_6_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpy_2_6_T3>; }
 	void zpy_2_6_T3(void) { ea = (ea + y) & 0xFF; value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void zpy_3_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zpy_3_5_T2; } //4 cycles
-	void zpy_3_5_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::zpy_3_5_T3; }
+	void zpy_3_5_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpy_3_5_T2>; } //4 cycles
+	void zpy_3_5_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpy_3_5_T3>; }
 	void zpy_3_5_T3(void) { ea = (ea + y) & 0xFF; ExecuteOpcode(); }
 
-	void idy_2_7_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idy_2_7_T2; } //5/6 cycles
-	void idy_2_7_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idy_2_7_T3; }
-	void idy_2_7_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idy_2_7_T4; }
+	void idy_2_7_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_2_7_T2>; } //5/6 cycles
+	void idy_2_7_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_2_7_T3>; }
+	void idy_2_7_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_2_7_T4>; }
 	void idy_2_7_T4(void);
 	void idy_2_7_T5(void) { value = BUS_READ(ea); ExecuteOpcode(); }
 
-	void idy_3_6_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idy_3_6_T2; } //6 cycles
-	void idy_3_6_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idy_3_6_T3; }
-	void idy_3_6_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idy_3_6_T4; }
-	void idy_3_6_T4(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::idy_3_6_T5; }
+	void idy_3_6_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_3_6_T2>; } //6 cycles
+	void idy_3_6_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_3_6_T3>; }
+	void idy_3_6_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_3_6_T4>; }
+	void idy_3_6_T4(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_3_6_T5>; }
 	void idy_3_6_T5(void) { ExecuteOpcode(); }
 
 	// idy_Undoc behaviour was determined by capturing bus activity on a real 6502 in a 1541 and confirmed by Visual6502.
-	void idy_Undoc_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::idy_Undoc_T2; } //8 cycles
-	void idy_Undoc_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::idy_Undoc_T3; }
-	void idy_Undoc_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::idy_Undoc_T4; }
-	void idy_Undoc_T4(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::idy_Undoc_T5; }
-	void idy_Undoc_T5(void) { value = BUS_READ(ea);  addressModeCycleFn = &M6502::idy_Undoc_T6; }
-	void idy_Undoc_T6(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::idy_Undoc_T7; }
+	void idy_Undoc_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T2>; } //8 cycles
+	void idy_Undoc_T2(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T3>; }
+	void idy_Undoc_T3(void) { ea |= (BUS_READ(ia & 0xff) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T4>; }
+	void idy_Undoc_T4(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T5>; }
+	void idy_Undoc_T5(void) { value = BUS_READ(ea);  addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T6>; }
+	void idy_Undoc_T6(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_Undoc_T7>; }
 	void idy_Undoc_T7(void) { ExecuteOpcode(); }
 
-	void zp_4_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zp_4_1_T2; } //5 cycles
-	void zp_4_1_T2(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::zp_4_1_T3; }
-	void zp_4_1_T3(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::zp_4_1_T4; }
+	void zp_4_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zp_4_1_T2>; } //5 cycles
+	void zp_4_1_T2(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zp_4_1_T3>; }
+	void zp_4_1_T3(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zp_4_1_T4>; }
 	void zp_4_1_T4(void) { ExecuteOpcode(); }
 
-	void abs_4_2_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::abs_4_2_T2; } //6 cycles
-	void abs_4_2_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::abs_4_2_T3; }
-	void abs_4_2_T3(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::abs_4_2_T4; }
-	void abs_4_2_T4(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::abs_4_2_T5; }
+	void abs_4_2_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_4_2_T2>; } //6 cycles
+	void abs_4_2_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_4_2_T3>; }
+	void abs_4_2_T3(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_4_2_T4>; }
+	void abs_4_2_T4(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs_4_2_T5>; }
 	void abs_4_2_T5(void) { ExecuteOpcode(); }
 
-	void zpx_4_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::zpx_4_3_T2; } //6 cycles
-	void zpx_4_3_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::zpx_4_3_T3; }
-	void zpx_4_3_T3(void) { ea = (ea + x) & 0xFF; value = BUS_READ(ea); addressModeCycleFn = &M6502::zpx_4_3_T4; }
-	void zpx_4_3_T4(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::zpx_4_3_T5; }
+	void zpx_4_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_4_3_T2>; } //6 cycles
+	void zpx_4_3_T2(void) { BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_4_3_T3>; }
+	void zpx_4_3_T3(void) { ea = (ea + x) & 0xFF; value = BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_4_3_T4>; }
+	void zpx_4_3_T4(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::zpx_4_3_T5>; }
 	void zpx_4_3_T5(void) { ExecuteOpcode(); }
 
-	void absx_4_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absx_4_4_T2; } //7 cycles
-	void absx_4_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absx_4_4_T3; }
-	void absx_4_4_T3(void) { ea += x; BUS_READ(ea); addressModeCycleFn = &M6502::absx_4_4_T4; }
-	void absx_4_4_T4(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::absx_4_4_T5; }
-	void absx_4_4_T5(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::absx_4_4_T6; }
+	void absx_4_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_4_4_T2>; } //7 cycles
+	void absx_4_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_4_4_T3>; }
+	void absx_4_4_T3(void) { ea += x; BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_4_4_T4>; }
+	void absx_4_4_T4(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_4_4_T5>; }
+	void absx_4_4_T5(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_4_4_T6>; }
 	void absx_4_4_T6(void) { ExecuteOpcode(); }
 
-	void absy_4_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::absy_4_4_T2; } //7 cycles
-	void absy_4_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::absy_4_4_T3; }
-	void absy_4_4_T3(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::absy_4_4_T4; }
-	void absy_4_4_T4(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::absy_4_4_T5; }
-	void absy_4_4_T5(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::absy_4_4_T6; }
+	void absy_4_4_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_4_4_T2>; } //7 cycles
+	void absy_4_4_T2(void) { ea |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_4_4_T3>; }
+	void absy_4_4_T3(void) { ea += y; BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_4_4_T4>; }
+	void absy_4_4_T4(void) { value = BUS_READ(ea); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_4_4_T5>; }
+	void absy_4_4_T5(void) { dataBusWriteFn(ea, (u8)value); addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_4_4_T6>; }
 	void absy_4_4_T6(void) { ExecuteOpcode(); }
 
-	void ph_5_1_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::ph_5_1_T2; } //3 cycles
+	void ph_5_1_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::ph_5_1_T2>; } //3 cycles
 	void ph_5_1_T2(void) { ExecuteOpcode(); }
 
-	void pl_5_2_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::pl_5_2_T2; } //4 cycles
-	void pl_5_2_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::pl_5_2_T3; }
+	void pl_5_2_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::pl_5_2_T2>; } //4 cycles
+	void pl_5_2_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::DispatchCycle<&M6502::pl_5_2_T3>; }
 	void pl_5_2_T3(void) { ExecuteOpcode(); }
 
-	void jsr_5_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::jsr_5_3_T2; } //6 cycles
-	void jsr_5_3_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::jsr_5_3_T3; }
-	void jsr_5_3_T3(void) { Push((u8)((pc) >> 8)); addressModeCycleFn = &M6502::jsr_5_3_T4; }
-	void jsr_5_3_T4(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::jsr_5_3_T5; }
+	void jsr_5_3_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::jsr_5_3_T2>; } //6 cycles
+	void jsr_5_3_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::DispatchCycle<&M6502::jsr_5_3_T3>; }
+	void jsr_5_3_T3(void) { Push((u8)((pc) >> 8)); addressModeCycleFn = &M6502::DispatchCycle<&M6502::jsr_5_3_T4>; }
+	void jsr_5_3_T4(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::DispatchCycle<&M6502::jsr_5_3_T5>; }
 	void jsr_5_3_T5(void) { ea |= (BUS_READ(pc++) << 8); pc = ea; ExecuteOpcode(); }
 
-	void rti_5_5_T1(void) { BUS_READ(pc++); addressModeCycleFn = &M6502::rti_5_5_T2; } //6 cycles
-	void rti_5_5_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::rti_5_5_T3; }
-	void rti_5_5_T3(void) { status = Pull(); addressModeCycleFn = &M6502::rti_5_5_T4; }
-	void rti_5_5_T4(void) { pc = Pull(); addressModeCycleFn = &M6502::rti_5_5_T5; }
+	void rti_5_5_T1(void) { BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rti_5_5_T2>; } //6 cycles
+	void rti_5_5_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rti_5_5_T3>; }
+	void rti_5_5_T3(void) { status = Pull(); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rti_5_5_T4>; }
+	void rti_5_5_T4(void) { pc = Pull(); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rti_5_5_T5>; }
 	void rti_5_5_T5(void) { pc |= (Pull() << 8); ExecuteOpcode(); }
 
-	void abs5_6_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::abs5_6_1_T2; } //3 cycles
+	void abs5_6_1_T1(void) { ea = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs5_6_1_T2>; } //3 cycles
 	void abs5_6_1_T2(void) { ea |= (BUS_READ(pc++) << 8); ExecuteOpcode(); }
 
-	void abs5_6_2_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::abs5_6_2_T2; } //5 cycles
-	void abs5_6_2_T2(void) { ia |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::abs5_6_2_T3; }
-	void abs5_6_2_T3(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::abs5_6_2_T4; }
+	void abs5_6_2_T1(void) { ia = BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs5_6_2_T2>; } //5 cycles
+	void abs5_6_2_T2(void) { ia |= (BUS_READ(pc++) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs5_6_2_T3>; }
+	void abs5_6_2_T3(void) { ea = BUS_READ(ia++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::abs5_6_2_T4>; }
 	void abs5_6_2_T4(void) { ea |= (BUS_READ(ia) << 8); ExecuteOpcode(); }
 
-	void rts_5_7_T1(void) { BUS_READ(pc++); addressModeCycleFn = &M6502::rts_5_7_T2; } //6 cycles
-	void rts_5_7_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::rts_5_7_T3; }
-	void rts_5_7_T3(void) { pc = Pull(); addressModeCycleFn = &M6502::rts_5_7_T4; }
-	void rts_5_7_T4(void) { pc |= (Pull() << 8); addressModeCycleFn = &M6502::rts_5_7_T5; }
+	void rts_5_7_T1(void) { BUS_READ(pc++); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rts_5_7_T2>; } //6 cycles
+	void rts_5_7_T2(void) { BUS_READ(0x100 + sp); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rts_5_7_T3>; }
+	void rts_5_7_T3(void) { pc = Pull(); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rts_5_7_T4>; }
+	void rts_5_7_T4(void) { pc |= (Pull() << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::rts_5_7_T5>; }
 	void rts_5_7_T5(void) { BUS_READ(pc); pc++; ExecuteOpcode(); }
 
 	// The BRK, RESET, NMI and IRQ instructions are closely related.
 	// At T4 BRK can morph into one of the interrupts if that interrupt condition has subsequently occurred since the instruction started.
-	void brk_5_4_T1(void) { BUS_READ(pc); pc++; addressModeCycleFn = &M6502::brk_5_4_T2; } //7 cycles
-	void brk_5_4_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::brk_5_4_T3; }
-	void brk_5_4_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::brk_5_4_T4; }
+	void brk_5_4_T1(void) { BUS_READ(pc); pc++; addressModeCycleFn = &M6502::DispatchCycle<&M6502::brk_5_4_T2>; } //7 cycles
+	void brk_5_4_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::DispatchCycle<&M6502::brk_5_4_T3>; }
+	void brk_5_4_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::DispatchCycle<&M6502::brk_5_4_T4>; }
 	void brk_5_4_T4(void); // We check here if we continue on executing the BRK or take the interrupt.
-	void brk_5_4_T5(void) { ea = BUS_READ(0xFFFE); addressModeCycleFn = &M6502::brk_5_4_T6; } // Short burts of interrupt assertions will be correctly masked by the BRK in these 2 cycles.
+	void brk_5_4_T5(void) { ea = BUS_READ(0xFFFE); addressModeCycleFn = &M6502::DispatchCycle<&M6502::brk_5_4_T6>; } // Short burts of interrupt assertions will be correctly masked by the BRK in these 2 cycles.
 	void brk_5_4_T6(void) { SetI(); pc = ea | (BUS_READ(0xFFFF) << 8); ExecuteOpcode(); }
 
-	void Reset_T0(void) { sp = 0; BUS_READ(pc);	addressModeCycleFn = &M6502::Reset_T1; } //7 cycles
-	void Reset_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::Reset_T2; }
-	void Reset_T2(void) { BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::Reset_T3; }
-	void Reset_T3(void) { BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::Reset_T4; }
-	void Reset_T4(void) { ClearB(); BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::Reset_T5; }
-	void Reset_T5(void) { ea = BUS_READ(0xFFFC); addressModeCycleFn = &M6502::Reset_T6; }
-	void Reset_T6(void) { pc = ea | (BUS_READ(0xFFFD) << 8); addressModeCycleFn = &M6502::InstructionFetch; }
+	void Reset_T0(void) { sp = 0; BUS_READ(pc);	addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T1>; } //7 cycles
+	void Reset_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T2>; }
+	void Reset_T2(void) { BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T3>; }
+	void Reset_T3(void) { BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T4>; }
+	void Reset_T4(void) { ClearB(); BUS_READ(0x100 + sp--); addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T5>; }
+	void Reset_T5(void) { ea = BUS_READ(0xFFFC); addressModeCycleFn = &M6502::DispatchCycle<&M6502::Reset_T6>; }
+	void Reset_T6(void) { pc = ea | (BUS_READ(0xFFFD) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>; }
 
 #ifdef  SUPPORT_NMI
-	void NMI_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::NMI_T2; } //7 cycles
-	void NMI_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::NMI_T3; }
-	void NMI_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::NMI_T4; }
-	void NMI_T4(void) { ClearB(); Push(status); status |= FLAG_INTERRUPT; addressModeCycleFn = &M6502::NMI_T5; }
-	void NMI_T5(void) { ea = BUS_READ(0xFFFA); addressModeCycleFn = &M6502::NMI_T6; }
-	void NMI_T6(void) { SetI(); pc = ea | (BUS_READ(0xFFFB) << 8); NMIPending = false; addressModeCycleFn = &M6502::InstructionFetch; }
+	void NMI_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T2>; } //7 cycles
+	void NMI_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T3>; }
+	void NMI_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T4>; }
+	void NMI_T4(void) { ClearB(); Push(status); status |= FLAG_INTERRUPT; addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T5>; }
+	void NMI_T5(void) { ea = BUS_READ(0xFFFA); addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T6>; }
+	void NMI_T6(void) { SetI(); pc = ea | (BUS_READ(0xFFFB) << 8); NMIPending = false; addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>; }
 #endif //  SUPPORT_NMI
 
 #ifdef  SUPPORT_IRQ
-	void IRQ_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::IRQ_T2; } //7 cycles
-	void IRQ_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::IRQ_T3; }
-	void IRQ_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::IRQ_T4; }
+	void IRQ_T1(void) { BUS_READ(pc); addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T2>; } //7 cycles
+	void IRQ_T2(void) { Push((u8)(pc >> 8)); addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T3>; }
+	void IRQ_T3(void) { Push(pc & 0xff); addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T4>; }
 	void IRQ_T4(void);  // We check here if we continue on executing as IRQ or morph into NMI
-	void IRQ_T5(void) { ea = BUS_READ(0xFFFE); addressModeCycleFn = &M6502::IRQ_T6; } // Short burts of NMI assertions will be correctly masked by the IRQ in these 2 cycles
-	void IRQ_T6(void) { SetI();	pc = ea | (BUS_READ(0xFFFF) << 8); addressModeCycleFn = &M6502::InstructionFetchIRQ; }
+	void IRQ_T5(void) { ea = BUS_READ(0xFFFE); addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T6>; } // Short burts of NMI assertions will be correctly masked by the IRQ in these 2 cycles
+	void IRQ_T6(void) { SetI();	pc = ea | (BUS_READ(0xFFFF) << 8); addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetchIRQ>; }
 #endif //  SUPPORT_IRQ
 
 	inline void ClearB() { status &= (~FLAG_BREAK); }
@@ -534,7 +545,7 @@ public:
 	u8 GetY() const { return y; }
 	u8 GetStatus() const { return status; }
 	// Emulate the 6502's SYNC signal and pin
-	bool SYNC(void) const { return addressModeCycleFn == &M6502::InstructionFetch; }
+	bool SYNC(void) const { return addressModeCycleFn == &M6502::DispatchCycle<&M6502::InstructionFetch>; }
 
 #ifdef  SUPPORT_IRQ
 	Interrupt IRQ;

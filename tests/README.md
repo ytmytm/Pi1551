@@ -9,7 +9,10 @@ opcodes and status-byte patterns, decimal arithmetic, IRQ pulses, SO and
 resets, with 4,194,304 CPU cycles compared. After each cycle the test compares
 registers, transient data state, interrupt masks, SYNC and the ordered bus
 reads/writes, including accesses whose results the CPU discards. Final RAM
-contents must also match. Separate exhaustive checks cover all 16,777,216
+contents must also match. The test pairs every named reference handler with
+its production adapter, so it also verifies that the exact same microcycle
+and opcode handlers are selected after each cycle despite the different
+pointer representations. Separate exhaustive checks cover all 16,777,216
 N/Z input/status combinations and all 4,096 interrupt-mask combinations.
 This preserves the reference core's behavior with the production IRQ-only
 configuration; it is not an independent test of NMOS 6502 conformance.

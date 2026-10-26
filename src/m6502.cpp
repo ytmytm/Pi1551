@@ -21,43 +21,43 @@
 M6502::OpcodeCycleFunction M6502::opcodeFunctions[256] =
 {
 //       0           1           2           3           4           5           6           7           8           9           A           B           C           D           E           F
-&M6502::BRK,&M6502::ORA,&M6502::JAM,&M6502::SLO,&M6502::NOP,&M6502::ORA,&M6502::ASL,&M6502::SLO,&M6502::PHP,&M6502::ORA,&M6502::ASL,&M6502::ANC,&M6502::NOP,&M6502::ORA,&M6502::ASL,&M6502::SLO,// 0
-&M6502::BPL,&M6502::ORA,&M6502::JAM,&M6502::SLO,&M6502::NOP,&M6502::ORA,&M6502::ASL,&M6502::SLO,&M6502::CLC,&M6502::ORA,&M6502::NOP,&M6502::SLO,&M6502::NOP,&M6502::ORA,&M6502::ASL,&M6502::SLO,// 1
-&M6502::JSR,&M6502::AND,&M6502::JAM,&M6502::RLA,&M6502::BIT,&M6502::AND,&M6502::ROL,&M6502::RLA,&M6502::PLP,&M6502::AND,&M6502::ROL,&M6502::ANC,&M6502::BIT,&M6502::AND,&M6502::ROL,&M6502::RLA,// 2
-&M6502::BMI,&M6502::AND,&M6502::JAM,&M6502::RLA,&M6502::NOP,&M6502::AND,&M6502::ROL,&M6502::RLA,&M6502::SEC,&M6502::AND,&M6502::NOP,&M6502::RLA,&M6502::NOP,&M6502::AND,&M6502::ROL,&M6502::RLA,// 3
-&M6502::RTI,&M6502::EOR,&M6502::JAM,&M6502::SRE,&M6502::NOP,&M6502::EOR,&M6502::LSR,&M6502::SRE,&M6502::PHA,&M6502::EOR,&M6502::LSR,&M6502::ASR,&M6502::JMP,&M6502::EOR,&M6502::LSR,&M6502::SRE,// 4
-&M6502::BVC,&M6502::EOR,&M6502::JAM,&M6502::SRE,&M6502::NOP,&M6502::EOR,&M6502::LSR,&M6502::SRE,&M6502::CLI,&M6502::EOR,&M6502::NOP,&M6502::SRE,&M6502::NOP,&M6502::EOR,&M6502::LSR,&M6502::SRE,// 5
-&M6502::RTS,&M6502::ADC,&M6502::JAM,&M6502::RRA,&M6502::NOP,&M6502::ADC,&M6502::ROR,&M6502::RRA,&M6502::PLA,&M6502::ADC,&M6502::ROR,&M6502::ARR,&M6502::JMP,&M6502::ADC,&M6502::ROR,&M6502::RRA,// 6
-&M6502::BVS,&M6502::ADC,&M6502::JAM,&M6502::RRA,&M6502::NOP,&M6502::ADC,&M6502::ROR,&M6502::RRA,&M6502::SEI,&M6502::ADC,&M6502::NOP,&M6502::RRA,&M6502::NOP,&M6502::ADC,&M6502::ROR,&M6502::RRA,// 7
-&M6502::NOP,&M6502::STA,&M6502::NOP,&M6502::SAX,&M6502::STY,&M6502::STA,&M6502::STX,&M6502::SAX,&M6502::DEY,&M6502::NOP,&M6502::TXA,&M6502::XAA,&M6502::STY,&M6502::STA,&M6502::STX,&M6502::SAX,// 8
-&M6502::BCC,&M6502::STA,&M6502::JAM,&M6502::SHA,&M6502::STY,&M6502::STA,&M6502::STX,&M6502::SAX,&M6502::TYA,&M6502::STA,&M6502::TXS,&M6502::SHS,&M6502::SHY,&M6502::STA,&M6502::SHX,&M6502::SHA,// 9
-&M6502::LDY,&M6502::LDA,&M6502::LDX,&M6502::LAX,&M6502::LDY,&M6502::LDA,&M6502::LDX,&M6502::LAX,&M6502::TAY,&M6502::LDA,&M6502::TAX,&M6502::LXA,&M6502::LDY,&M6502::LDA,&M6502::LDX,&M6502::LAX,// A
-&M6502::BCS,&M6502::LDA,&M6502::JAM,&M6502::LAX,&M6502::LDY,&M6502::LDA,&M6502::LDX,&M6502::LAX,&M6502::CLV,&M6502::LDA,&M6502::TSX,&M6502::LAS,&M6502::LDY,&M6502::LDA,&M6502::LDX,&M6502::LAX,// B
-&M6502::CPY,&M6502::CMP,&M6502::NOP,&M6502::DCP,&M6502::CPY,&M6502::CMP,&M6502::DEC,&M6502::DCP,&M6502::INY,&M6502::CMP,&M6502::DEX,&M6502::SBX,&M6502::CPY,&M6502::CMP,&M6502::DEC,&M6502::DCP,// C
-&M6502::BNE,&M6502::CMP,&M6502::JAM,&M6502::DCP,&M6502::NOP,&M6502::CMP,&M6502::DEC,&M6502::DCP,&M6502::CLD,&M6502::CMP,&M6502::NOP,&M6502::DCP,&M6502::NOP,&M6502::CMP,&M6502::DEC,&M6502::DCP,// D
-&M6502::CPX,&M6502::SBC,&M6502::NOP,&M6502::ISB,&M6502::CPX,&M6502::SBC,&M6502::INC,&M6502::ISB,&M6502::INX,&M6502::SBC,&M6502::NOP,&M6502::SBC,&M6502::CPX,&M6502::SBC,&M6502::INC,&M6502::ISB,// E
-&M6502::BEQ,&M6502::SBC,&M6502::JAM,&M6502::ISB,&M6502::NOP,&M6502::SBC,&M6502::INC,&M6502::ISB,&M6502::SED,&M6502::SBC,&M6502::NOP,&M6502::ISB,&M6502::NOP,&M6502::SBC,&M6502::INC,&M6502::ISB // F
+&M6502::DispatchCycle<&M6502::BRK>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::SLO>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::ASL>,&M6502::DispatchCycle<&M6502::SLO>,&M6502::DispatchCycle<&M6502::PHP>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::ASL>,&M6502::DispatchCycle<&M6502::ANC>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::ASL>,&M6502::DispatchCycle<&M6502::SLO>,// 0
+&M6502::DispatchCycle<&M6502::BPL>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::SLO>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::ASL>,&M6502::DispatchCycle<&M6502::SLO>,&M6502::DispatchCycle<&M6502::CLC>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SLO>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ORA>,&M6502::DispatchCycle<&M6502::ASL>,&M6502::DispatchCycle<&M6502::SLO>,// 1
+&M6502::DispatchCycle<&M6502::JSR>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::RLA>,&M6502::DispatchCycle<&M6502::BIT>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::ROL>,&M6502::DispatchCycle<&M6502::RLA>,&M6502::DispatchCycle<&M6502::PLP>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::ROL>,&M6502::DispatchCycle<&M6502::ANC>,&M6502::DispatchCycle<&M6502::BIT>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::ROL>,&M6502::DispatchCycle<&M6502::RLA>,// 2
+&M6502::DispatchCycle<&M6502::BMI>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::RLA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::ROL>,&M6502::DispatchCycle<&M6502::RLA>,&M6502::DispatchCycle<&M6502::SEC>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::RLA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::AND>,&M6502::DispatchCycle<&M6502::ROL>,&M6502::DispatchCycle<&M6502::RLA>,// 3
+&M6502::DispatchCycle<&M6502::RTI>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::SRE>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::LSR>,&M6502::DispatchCycle<&M6502::SRE>,&M6502::DispatchCycle<&M6502::PHA>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::LSR>,&M6502::DispatchCycle<&M6502::ASR>,&M6502::DispatchCycle<&M6502::JMP>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::LSR>,&M6502::DispatchCycle<&M6502::SRE>,// 4
+&M6502::DispatchCycle<&M6502::BVC>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::SRE>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::LSR>,&M6502::DispatchCycle<&M6502::SRE>,&M6502::DispatchCycle<&M6502::CLI>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SRE>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::EOR>,&M6502::DispatchCycle<&M6502::LSR>,&M6502::DispatchCycle<&M6502::SRE>,// 5
+&M6502::DispatchCycle<&M6502::RTS>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::RRA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::ROR>,&M6502::DispatchCycle<&M6502::RRA>,&M6502::DispatchCycle<&M6502::PLA>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::ROR>,&M6502::DispatchCycle<&M6502::ARR>,&M6502::DispatchCycle<&M6502::JMP>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::ROR>,&M6502::DispatchCycle<&M6502::RRA>,// 6
+&M6502::DispatchCycle<&M6502::BVS>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::RRA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::ROR>,&M6502::DispatchCycle<&M6502::RRA>,&M6502::DispatchCycle<&M6502::SEI>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::RRA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ADC>,&M6502::DispatchCycle<&M6502::ROR>,&M6502::DispatchCycle<&M6502::RRA>,// 7
+&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SAX>,&M6502::DispatchCycle<&M6502::STY>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::STX>,&M6502::DispatchCycle<&M6502::SAX>,&M6502::DispatchCycle<&M6502::DEY>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::TXA>,&M6502::DispatchCycle<&M6502::XAA>,&M6502::DispatchCycle<&M6502::STY>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::STX>,&M6502::DispatchCycle<&M6502::SAX>,// 8
+&M6502::DispatchCycle<&M6502::BCC>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::SHA>,&M6502::DispatchCycle<&M6502::STY>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::STX>,&M6502::DispatchCycle<&M6502::SAX>,&M6502::DispatchCycle<&M6502::TYA>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::TXS>,&M6502::DispatchCycle<&M6502::SHS>,&M6502::DispatchCycle<&M6502::SHY>,&M6502::DispatchCycle<&M6502::STA>,&M6502::DispatchCycle<&M6502::SHX>,&M6502::DispatchCycle<&M6502::SHA>,// 9
+&M6502::DispatchCycle<&M6502::LDY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::LDX>,&M6502::DispatchCycle<&M6502::LAX>,&M6502::DispatchCycle<&M6502::LDY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::LDX>,&M6502::DispatchCycle<&M6502::LAX>,&M6502::DispatchCycle<&M6502::TAY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::TAX>,&M6502::DispatchCycle<&M6502::LXA>,&M6502::DispatchCycle<&M6502::LDY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::LDX>,&M6502::DispatchCycle<&M6502::LAX>,// A
+&M6502::DispatchCycle<&M6502::BCS>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::LAX>,&M6502::DispatchCycle<&M6502::LDY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::LDX>,&M6502::DispatchCycle<&M6502::LAX>,&M6502::DispatchCycle<&M6502::CLV>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::TSX>,&M6502::DispatchCycle<&M6502::LAS>,&M6502::DispatchCycle<&M6502::LDY>,&M6502::DispatchCycle<&M6502::LDA>,&M6502::DispatchCycle<&M6502::LDX>,&M6502::DispatchCycle<&M6502::LAX>,// B
+&M6502::DispatchCycle<&M6502::CPY>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::DCP>,&M6502::DispatchCycle<&M6502::CPY>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::DEC>,&M6502::DispatchCycle<&M6502::DCP>,&M6502::DispatchCycle<&M6502::INY>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::DEX>,&M6502::DispatchCycle<&M6502::SBX>,&M6502::DispatchCycle<&M6502::CPY>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::DEC>,&M6502::DispatchCycle<&M6502::DCP>,// C
+&M6502::DispatchCycle<&M6502::BNE>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::DCP>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::DEC>,&M6502::DispatchCycle<&M6502::DCP>,&M6502::DispatchCycle<&M6502::CLD>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::DCP>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::CMP>,&M6502::DispatchCycle<&M6502::DEC>,&M6502::DispatchCycle<&M6502::DCP>,// D
+&M6502::DispatchCycle<&M6502::CPX>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ISB>,&M6502::DispatchCycle<&M6502::CPX>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::INC>,&M6502::DispatchCycle<&M6502::ISB>,&M6502::DispatchCycle<&M6502::INX>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::CPX>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::INC>,&M6502::DispatchCycle<&M6502::ISB>,// E
+&M6502::DispatchCycle<&M6502::BEQ>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::JAM>,&M6502::DispatchCycle<&M6502::ISB>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::INC>,&M6502::DispatchCycle<&M6502::ISB>,&M6502::DispatchCycle<&M6502::SED>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::ISB>,&M6502::DispatchCycle<&M6502::NOP>,&M6502::DispatchCycle<&M6502::SBC>,&M6502::DispatchCycle<&M6502::INC>,&M6502::DispatchCycle<&M6502::ISB> // F
 };
 
 M6502::AddressModeCycleFunction M6502::T1AddressModeFunctions[256] =
 {
 //       0                     1                2                       3                4                  5                  6                 7                  8                  9                  A                 B                  C                  D                    E              F
-&M6502::brk_5_4_T1,&M6502::idx_2_4_T1,&M6502::sb_jam_T1, &M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::ph_5_1_T1,&M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //0
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1,//1
-&M6502::jsr_5_3_T1,&M6502::idx_2_4_T1,&M6502::sb_jam_T1, &M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::pl_5_2_T1,&M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //2
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1,//3
-&M6502::rti_5_5_T1,&M6502::idx_2_4_T1,&M6502::sb_jam_T1, &M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::ph_5_1_T1,&M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs5_6_1_T1,&M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //4
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1,//5
-&M6502::rts_5_7_T1,&M6502::idx_2_4_T1,&M6502::sb_jam_T1, &M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::pl_5_2_T1,&M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs5_6_2_T1,&M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //6
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1,//7
-&M6502::imm_2_1_T1,&M6502::idx_3_3_T1,&M6502::imm_2_1_T1,&M6502::idx_3_3_T1,  &M6502::zp_3_1_T1, &M6502::zp_3_1_T1, &M6502::zp_2_1_T1, &M6502::zp_3_1_T1, &M6502::sb_1_T1,  &M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_3_2_T1, &M6502::abs_3_2_T1, &M6502::abs_3_2_T1, &M6502::abs_3_2_T1, //8
-&M6502::rel_5_8_T1,&M6502::idy_3_6_T1,&M6502::sb_jam_T1, &M6502::idy_3_6_T1,  &M6502::zpx_3_5_T1,&M6502::zpx_3_5_T1,&M6502::zpy_3_5_T1,&M6502::zpy_3_5_T1,&M6502::sb_1_T1,  &M6502::absy_3_4_T1,&M6502::sb_1_T1,&M6502::absy_3_4_T1,&M6502::absx_3_4_T1,&M6502::absx_3_4_T1,&M6502::absy_3_4_T1,&M6502::absy_3_4_T1,//9
-&M6502::imm_2_1_T1,&M6502::idx_2_4_T1,&M6502::imm_2_1_T1,&M6502::idx_2_4_T1,  &M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::sb_1_T1,  &M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, //A
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_2_7_T1,  &M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpy_2_6_T1,&M6502::zpy_2_6_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absy_2_5_T1,&M6502::absy_2_5_T1,//B
-&M6502::imm_2_1_T1,&M6502::idx_2_4_T1,&M6502::imm_2_1_T1,&M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::sb_1_T1,  &M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //C
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1,//D
-&M6502::imm_2_1_T1,&M6502::idx_2_4_T1,&M6502::imm_2_1_T1,&M6502::idx_Undoc_T1,&M6502::zp_2_1_T1, &M6502::zp_2_1_T1, &M6502::zp_4_1_T1, &M6502::zp_4_1_T1, &M6502::sb_1_T1,  &M6502::imm_2_1_T1, &M6502::sb_1_T1,&M6502::imm_2_1_T1, &M6502::abs_2_3_T1, &M6502::abs_2_3_T1, &M6502::abs_4_2_T1, &M6502::abs_4_2_T1, //E
-&M6502::rel_5_8_T1,&M6502::idy_2_7_T1,&M6502::sb_jam_T1, &M6502::idy_Undoc_T1,&M6502::zpx_2_6_T1,&M6502::zpx_2_6_T1,&M6502::zpx_4_3_T1,&M6502::zpx_4_3_T1,&M6502::sb_1_T1,  &M6502::absy_2_5_T1,&M6502::sb_1_T1,&M6502::absy_4_4_T1,&M6502::absx_2_5_T1,&M6502::absx_2_5_T1,&M6502::absx_4_4_T1,&M6502::absx_4_4_T1 //F
+&M6502::DispatchCycle<&M6502::brk_5_4_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::ph_5_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //0
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,//1
+&M6502::DispatchCycle<&M6502::jsr_5_3_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::pl_5_2_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //2
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,//3
+&M6502::DispatchCycle<&M6502::rti_5_5_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::ph_5_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs5_6_1_T1>,&M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //4
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,//5
+&M6502::DispatchCycle<&M6502::rts_5_7_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::pl_5_2_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs5_6_2_T1>,&M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //6
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,//7
+&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_3_3_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_3_3_T1>,  &M6502::DispatchCycle<&M6502::zp_3_1_T1>, &M6502::DispatchCycle<&M6502::zp_3_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_3_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_3_2_T1>, &M6502::DispatchCycle<&M6502::abs_3_2_T1>, &M6502::DispatchCycle<&M6502::abs_3_2_T1>, &M6502::DispatchCycle<&M6502::abs_3_2_T1>, //8
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_3_6_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_3_6_T1>,  &M6502::DispatchCycle<&M6502::zpx_3_5_T1>,&M6502::DispatchCycle<&M6502::zpx_3_5_T1>,&M6502::DispatchCycle<&M6502::zpy_3_5_T1>,&M6502::DispatchCycle<&M6502::zpy_3_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_3_4_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_3_4_T1>,&M6502::DispatchCycle<&M6502::absx_3_4_T1>,&M6502::DispatchCycle<&M6502::absx_3_4_T1>,&M6502::DispatchCycle<&M6502::absy_3_4_T1>,&M6502::DispatchCycle<&M6502::absy_3_4_T1>,//9
+&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,  &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, //A
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_2_7_T1>,  &M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpy_2_6_T1>,&M6502::DispatchCycle<&M6502::zpy_2_6_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::absy_2_5_T1>,//B
+&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //C
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,//D
+&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_2_4_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>,&M6502::DispatchCycle<&M6502::idx_Undoc_T1>,&M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_2_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::zp_4_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::imm_2_1_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_2_3_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, &M6502::DispatchCycle<&M6502::abs_4_2_T1>, //E
+&M6502::DispatchCycle<&M6502::rel_5_8_T1>,&M6502::DispatchCycle<&M6502::idy_2_7_T1>,&M6502::DispatchCycle<&M6502::sb_jam_T1>, &M6502::DispatchCycle<&M6502::idy_Undoc_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_2_6_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::zpx_4_3_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,  &M6502::DispatchCycle<&M6502::absy_2_5_T1>,&M6502::DispatchCycle<&M6502::sb_1_T1>,&M6502::DispatchCycle<&M6502::absy_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_2_5_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1>,&M6502::DispatchCycle<&M6502::absx_4_4_T1> //F
 };
 
 void M6502::ADC(void)
@@ -153,7 +153,7 @@ void M6502::absx_2_5_T3(void)
 	if (startpage != (ea & 0xFF00))
 	{
 		BUS_READ(startpage | (ea & 0xff));
-		addressModeCycleFn = &M6502::absx_2_5_T4;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::absx_2_5_T4>;
 	}
 	else
 	{
@@ -169,7 +169,7 @@ void M6502::absy_2_5_T3(void)
 	if (startpage != (ea & 0xFF00))
 	{
 		BUS_READ(startpage | (ea & 0xff));
-		addressModeCycleFn = &M6502::absy_2_5_T4;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::absy_2_5_T4>;
 	}
 	else
 	{
@@ -185,7 +185,7 @@ void M6502::idy_2_7_T4(void)
 	if (startpage != (ea & 0xFF00))
 	{
 		BUS_READ(startpage | (ea & 0xff));
-		addressModeCycleFn = &M6502::idy_2_7_T5;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::idy_2_7_T5>;
 	}
 	else
 	{
@@ -201,11 +201,11 @@ void M6502::rel_5_8_T2(void)
 	if ((oldpc & 0xFF00) == (pc & 0xFF00))
 	{
 		BranchTakenMaskingInterrupt = true;
-		addressModeCycleFn = &M6502::InstructionFetch;	// Opcode has already been executed in T1 so just move on to the next instruction.
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::InstructionFetch>;	// Opcode has already been executed in T1 so just move on to the next instruction.
 	}
 	else
 	{
-		addressModeCycleFn = &M6502::rel_5_8_T3;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::rel_5_8_T3>;
 	}
 }
 
@@ -230,7 +230,7 @@ void M6502::brk_5_4_T4(void)
 	}
 #endif
 	Push(status | FLAG_CONSTANT | FLAG_BREAK);
-	addressModeCycleFn = &M6502::brk_5_4_T5;
+	addressModeCycleFn = &M6502::DispatchCycle<&M6502::brk_5_4_T5>;
 }
 
 // It is possible for a BRK/IRQ to mask a NMI for short burts of NMI assertions.
@@ -252,7 +252,7 @@ void M6502::IRQ_T4(void)
 #endif
 	ClearB();
 	Push(status);
-	addressModeCycleFn = &M6502::IRQ_T5;
+	addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T5>;
 }
 
 // Interrupts are polled before starting a new instruction
@@ -263,14 +263,14 @@ void M6502::InstructionFetch()
 
 #ifdef  SUPPORT_NMI
 	if (NMIPending)
-		addressModeCycleFn = &M6502::NMI_T1;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::NMI_T1>;
 	else
 #endif //  SUPPORT_NMI
 #ifdef  SUPPORT_IRQ
 	if (IRQPending && !IRQDisabled())
 	{
 		IRQPending = 0;
-		addressModeCycleFn = &M6502::IRQ_T1;
+		addressModeCycleFn = &M6502::DispatchCycle<&M6502::IRQ_T1>;
 	}
 	else
 #endif //  SUPPORT_IRQ
@@ -324,10 +324,10 @@ void M6502::Step(void)
 	if (!Halted())
 	{
 		CheckForHalt();
-		(this->*M6502::addressModeCycleFn)();
+		addressModeCycleFn(this);
 	}
 #else
-	(this->*M6502::addressModeCycleFn)();
+	addressModeCycleFn(this);
 #endif //  SUPPORT_RDY_HALTING
 }
 

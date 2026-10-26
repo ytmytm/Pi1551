@@ -1,5 +1,6 @@
 #include "m6502.h"
 #undef M6502_H
+#undef BRANCH_CONDITION
 #define M6502 ReferenceM6502
 #define Interrupt ReferenceInterrupt
 #include "reference/m6502.h"
@@ -9,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_map>
 
 struct Event {
     u16 address;
@@ -39,6 +41,27 @@ static void WriteReference(u16 address, u8 value) { referenceBus.Write(address, 
 static void WriteCurrent(u16 address, u8 value) { currentBus.Write(address, value); }
 
 struct M6502DifferentialTest {
+    static ReferenceM6502::AddressModeCycleFunction FetchFunction(ReferenceM6502&) {
+        return &ReferenceM6502::InstructionFetch;
+    }
+    static M6502::CycleFunction FetchFunction(M6502&) {
+        return &M6502::DispatchCycle<&M6502::InstructionFetch>;
+    }
+
+    static bool SameDispatch(const ReferenceM6502& a, const M6502& b) {
+        typedef std::unordered_map<M6502::CycleFunction,
+            ReferenceM6502::AddressModeCycleFunction> DispatchMap;
+        static const DispatchMap corresponding = {
+#define CPU_DISPATCH_CASE(name) {&M6502::DispatchCycle<&M6502::name>, &ReferenceM6502::name},
+#include "m6502_dispatch_pairs.inc"
+#undef CPU_DISPATCH_CASE
+        };
+        const auto mode = corresponding.find(b.addressModeCycleFn);
+        const auto opcode = corresponding.find(b.opcodeCycleFn);
+        return mode != corresponding.end() && opcode != corresponding.end() &&
+            mode->second == a.addressModeCycleFn && opcode->second == a.opcodeCycleFn;
+    }
+
     static unsigned Random(unsigned& state) {
         state ^= state << 13; state ^= state >> 17; state ^= state << 5;
         return state;
@@ -56,19 +79,19 @@ struct M6502DifferentialTest {
         cpu.BranchTakenMaskingInterrupt = Random(seed) & 1;
         cpu.IRQPending = Random(seed) & 1;
         cpu.IRQ.Release();
-        cpu.addressModeCycleFn = &T::InstructionFetch;
+        cpu.addressModeCycleFn = FetchFunction(cpu);
         cpu.opcodeCycleFn = T::opcodeFunctions[cpu.opcode];
     }
 
     static bool SameState(const ReferenceM6502& a, const M6502& b) {
-        // Member-function addresses belong to different classes. Compare all
-        // data state and SYNC; the bus trace checks the next state's behavior.
+        // Match the selected handler by name across the two representations,
+        // in addition to comparing all data state and observable bus effects.
         return a.ea == b.ea && a.ia == b.ia && a.value == b.value &&
             a.pc == b.pc && a.opcode == b.opcode && a.a == b.a && a.x == b.x &&
             a.y == b.y && a.sp == b.sp && a.status == b.status &&
             a.CLIMaskingInterrupt == b.CLIMaskingInterrupt &&
             a.BranchTakenMaskingInterrupt == b.BranchTakenMaskingInterrupt &&
-            a.IRQPending == b.IRQPending && a.SYNC() == b.SYNC();
+            a.IRQPending == b.IRQPending && a.SYNC() == b.SYNC() && SameDispatch(a, b);
     }
 
     static bool SameBus() {
@@ -114,7 +137,7 @@ struct M6502DifferentialTest {
                 if (flags & 8) { reference.IRQ.Assert(); current.IRQ.Assert(); }
                 // A no-op cycle isolates the interrupt-latch processing in Step().
                 reference.addressModeCycleFn = &ReferenceM6502::JAM;
-                current.addressModeCycleFn = &M6502::JAM;
+                current.addressModeCycleFn = &M6502::DispatchCycle<&M6502::JAM>;
                 reference.Step(); current.Step();
                 if (!SameState(reference, current)) {
                     std::fprintf(stderr, "IRQ latch mismatch: status %02x, flags %x\n", status, flags);
