@@ -1817,14 +1817,14 @@ static void StopSoundPreview()
 	TCBM_Bus::OutputSound = false;
 	write32(PWM_RNG1, 0x1B4); write32(PWM_RNG2, 0x1B4);
 	RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND,
-		options.Runtime(oled::Setting::Sound) && !options.SoundOnGPIO() ? FS_ALT0 : FS_OUTPUT);
+		options.SoundEnabled() && !options.SoundOnGPIO() ? FS_ALT0 : FS_OUTPUT);
 	RPI_SetGpioLo((rpi_gpio_pin_t)PIGPIO_OUT_SOUND);
 }
 bool OledKernelPreviewSound()
 {
 	StopSoundPreview();
 	StopSoundDMA();
-	if (!options.Runtime(oled::Setting::Sound)) return true; // OFF is an audible mute test.
+	if (!options.SoundEnabled()) return true; // OFF is an audible mute test.
 	if (!soundPreviewData || (!options.SoundOnGPIO() && !dmaSound)) return false;
 	Pi1551SoundPreview::Fill(soundPreviewData, true, options.SoundOnGPIO(),
 		options.SoundOnGPIODuration(), options.SoundOnGPIOFreq(), Sample_bin, Sample_bin_size);
@@ -2552,7 +2552,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		if (headDir != oldHeadDir)	// Need to start a new sound?
 		{
 			oldHeadDir = headDir;
-			if (!soundPreviewActive && headSound.Trigger(options.Runtime(oled::Setting::Sound), options.SoundOnGPIO(),
+			if (!soundPreviewActive && headSound.Trigger(options.SoundEnabled(), options.SoundOnGPIO(),
 				options.SoundOnGPIODuration(), options.SoundOnGPIOFreq())) {
 #if not defined(EXPERIMENTALZERO)
 				PlaySoundDMA();
@@ -2632,7 +2632,7 @@ EXIT_TYPE Emulate1551(FileBrowser* fileBrowser)
 		} while (ctAfter == ctBefore);
 		ctBefore = ctAfter;
 
-		headSound.Step(options.Runtime(oled::Setting::Sound) && !soundPreviewActive, options.SoundOnGPIO(), options.SoundOnGPIOFreq());
+		headSound.Step(options.SoundEnabled() && !soundPreviewActive, options.SoundOnGPIO(), options.SoundOnGPIOFreq());
 		TCBM_Bus::OutputSound = headSound.output;
 
 		TCBM_Bus::RefreshOuts1551();
@@ -3015,7 +3015,7 @@ void OledKernelApplySettings()
     TCBM_Bus::SetRotaryEncoderInvert(options.RotaryEncoderInvert());
     if (g_tapePlayer) g_tapePlayer->SetMotorAlwaysOn(options.TapeMotorAlwaysOn());
     headSoundFreq = 1000000 / (2 * std::max(100u, options.SoundOnGPIOFreq()));
-    int mode = options.SoundOnGPIO(), enabled = options.Runtime(oled::Setting::Sound);
+    int mode = options.SoundOnGPIO(), enabled = options.SoundEnabled();
     if (mode != previousMode || enabled != previousEnabled) {
         StopSoundDMA();
         RPI_SetGpioPinFunction((rpi_gpio_pin_t)PIGPIO_OUT_SOUND, enabled && !mode ? FS_ALT0 : FS_OUTPUT);

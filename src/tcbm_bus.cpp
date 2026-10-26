@@ -426,7 +426,7 @@ push_led_sound:
 		lastOutputLED = OutputLED;
 	}
 	// Runtime buzzer output is fixed to the board's SOUND pin (GPIO13).
-	bool soundGpioEnabled = options.Runtime(oled::Setting::Sound) && options.SoundOnGPIO();
+	bool soundGpioEnabled = options.SoundEnabled() && options.SoundOnGPIO();
 	if (soundGpioEnabled && (!ledSoundOutputValid || !lastSoundGpioEnabled || OutputSound != lastOutputSound))
 	{
 		if (OutputSound) ledSoundSet |= 1u << PIGPIO_OUT_SOUND;
