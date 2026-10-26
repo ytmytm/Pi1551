@@ -500,7 +500,11 @@ private:
 	inline void EstablishN(u16 val)	{ SetN(val & 0x0080); }
 	inline void EstablishC(u16 val) { SetC(val & 0xFF00); }
 	inline void EstablishV(u16 result, u8 val) { SetV((result ^ a) & (result ^ val) & 0x0080); }
-	inline void EstablishNZ(u16 val) { EstablishZ(val); EstablishN(val); }
+	inline void EstablishNZ(u16 val)
+	{
+		status = (status & ~(FLAG_ZERO | FLAG_SIGN)) | (val & FLAG_SIGN)
+			| ((val & 0xff) == 0 ? FLAG_ZERO : 0);
+	}
 
 #ifdef  SUPPORT_RDY_HALTING
 	void CheckForHalt();
