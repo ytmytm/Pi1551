@@ -101,7 +101,7 @@ class Simulator:
         self.seek_target = 0
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
-        self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "0.3.0"
+        self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "1.95"
         self.rtc_present = False
         self.rtc_value = datetime(2026, 11, 1, 12, 0, 0)
         self.clock_base: Optional[datetime] = None
@@ -818,6 +818,7 @@ class UI:
                 item = values[index]
                 submenu = sim.screen == "settings" and item in {"ROM", "Drive", "Tape", "Browser", "Display", "Encoder", "Sound", "Date & time"}
                 suffix = " " + sim.display_value(item) if sim.display_value(item) and not submenu else ""
+                if item == "SD2IEC Cmds.": suffix = sim.display_value(item)
                 label = ("*" if sim.screen == "date_time" and sim.clock_editing == item else "") + item + suffix
                 if sim.screen == "display" and item == "Scroll":
                     label += " " + sim.scrolling("Scrolling preview 0123456789", index == sim.cursor)

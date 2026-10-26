@@ -406,7 +406,7 @@ Browser / Fliplist
    │  │  ├─ Auto mount ON/OFF        (valid AutoMountImage required)
    │  │  ├─ Reset path ON/OFF
    │  │  ├─ Lowercase ON/OFF
-   │  │  └─ SD2IEC Cmds. ON/OFF
+   │  │  └─ SD2IEC Cmds.ON/OFF
    │  ├─ Display
    │  │  ├─ ..
    │  │  ├─ Temp ON/OFF
@@ -506,7 +506,7 @@ require editing `/options.txt` and rebooting. See the
   choice alone does not clear a list, unmount a disk or eject/rewind a TAP.
 - `Lowercase ON/OFF` controls whether browser-mode filenames are sent to the
   Commodore in lowercase.
-- `SD2IEC Cmds. ON/OFF` enables or disables the computer-facing browser file
+- `SD2IEC Cmds.ON/OFF` enables or disables the computer-facing browser file
   service and its command channel. OLED browsing remains available when OFF.
   This setting does not affect a mounted D64/G64 running in 1551 emulation.
 
@@ -591,7 +591,7 @@ Inspect it on a computer if you need to recover settings.
 
 ## Browser Command Reference
 
-`SD2IEC Cmds. ON` enables the computer-facing browser-mode file service:
+`SD2IEC Cmds.ON` enables the computer-facing browser-mode file service:
 directory listings, direct file `LOAD`/`SAVE`, and its command channel.
 `OFF` disables that service while leaving OLED browsing available. The name
 means compatibility with a useful subset of the SD2IEC/CMD command vocabulary;

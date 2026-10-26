@@ -373,7 +373,7 @@ std::vector<Menu::Row> Menu::Rows() {
             if (id == Setting::Scroll)
                 r.push_back(Row("Scroll " + value + " ", "Scrolling preview 0123456789"));
             else if (id == Setting::SD2IEC)
-                r.push_back(Row(std::string(items[i].label) + " " + value, "", false, true));
+                r.push_back(Row(std::string(items[i].label) + value));
             else r.push_back(Row(std::string(items[i].label) + " " + value));
         }
         break;

@@ -115,7 +115,7 @@ Other settings use their existing names (`deviceID`, `idleSleep`, `RAMBOard`,
 `ignoreReset`, `tapeMotorAlwaysOn`, `onResetChangeToStartingFolder`,
 `skipMotorSpinUpDelay`, `lowercaseBrowseModeFilenames`,
 `disableSD2IECCommands`, `i2cLcdOnContrast`, `i2cLcdFlip`,
-`rotaryEncoderInvert`, `soundOnGPIOFreq`). `SD2IEC Cmds. ON` is stored as
+`rotaryEncoderInvert`, `soundOnGPIOFreq`). `SD2IEC Cmds.ON` is stored as
 `disableSD2IECCommands = 0`.
 
 Settings/Display also uses `displayTemperature`, `i2cLcdDimTime` and

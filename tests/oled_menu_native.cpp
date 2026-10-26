@@ -333,7 +333,7 @@ static void reset_and_settings() {
     Choose(m,"SD2IEC Cmds."); f = m.Render(0);
     bool sd2iecLabel = false;
     for (unsigned row = 2; row < 8; ++row)
-        if (std::string(f.rows[row]) == "SD2IEC Cmds. OFF") sd2iecLabel = true;
+        if (std::string(f.rows[row]) == " SD2IEC Cmds.OFF") sd2iecLabel = true;
     CHECK(sd2iecLabel);
     Press(m,Key::Enter); CHECK(k.settings[Setting::SD2IEC] == 1);
     Choose(m,"Reset path"); Press(m,Key::Enter); CHECK(k.settings[Setting::ResetPath] == 0);
