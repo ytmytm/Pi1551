@@ -44,6 +44,14 @@ help:
 		'' \
 		'TUI requires Python 3; native tests require Python 3 and host GCC/G++.'
 
+.PHONY: test-m6502-native
+test-m6502-native:
+	python3 tests/test_m6502_differential.py
+
+.PHONY: test-drive1551-native
+test-drive1551-native:
+	python3 tests/test_drive1551_differential.py
+
 test-tcbm2sd-native:
 	python3 tests/test_tcbm2sd_protocol.py
 

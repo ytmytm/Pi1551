@@ -41,6 +41,7 @@ inline int ceil(float num) {
 
 class Drive
 {
+    friend struct Drive1551DifferentialTest;
 public:
 	Drive();
 

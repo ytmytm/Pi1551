@@ -111,6 +111,7 @@ private:
 
 class M6502
 {
+    friend struct M6502DifferentialTest;
 private:
 	enum
 	{

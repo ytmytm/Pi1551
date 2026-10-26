@@ -1,5 +1,49 @@
 # Native Pi1551 tests
 
+## 6502 CPU differential test
+
+Run `make test-m6502-native` to compare the production core with the frozen
+pre-optimization `tests/reference/m6502.cpp` and `.h`. Both `-O1` and `-Ofast`
+builds use ASan/UBSan. Each build executes 65,536 scenarios covering all 256
+opcodes and status-byte patterns, decimal arithmetic, IRQ pulses, SO and
+resets, with 4,194,304 CPU cycles compared. After each cycle the test compares
+registers, transient data state, interrupt masks, SYNC and the ordered bus
+reads/writes, including accesses whose results the CPU discards. Final RAM
+contents must also match. Separate exhaustive checks cover all 16,777,216
+N/Z input/status combinations and all 4,096 interrupt-mask combinations.
+This preserves the reference core's behavior with the production IRQ-only
+configuration; it is not an independent test of NMOS 6502 conformance.
+
+## 1551 drive update differential test
+
+Run `make test-drive1551-native` on a host with GCC/G++. This builds the current
+`Drive1551.cpp` and the frozen pre-optimization implementation in
+`tests/reference/` as separate classes. It executes 60,000 calls to the real
+`Drive::Update(16)` in 600 seeded scenarios, covering read/write transitions,
+random track contents, bit-position wraparound and flux timing. After every
+call it compares encoder state, TPI inputs and every byte of the disk track.
+Both `-O1` and the firmware's `-Ofast` build use ASan and UBSan. The test
+establishes agreement for those traces; it does not measure performance on
+the Raspberry Pi.
+
+The same target checks the production CPU read decoder against the frozen
+decoder in `tests/reference/read6502_1551.inc`: every 16-bit address, all seven
+ROM slots, both RAMBOard modes, 16K/32K and unknown ROM sizes, and four TIA
+direction patterns. All 14,680,064 reads must match in returned data, GPIO
+sampling calls and TIA input side effects. Only physical GPIO sampling is
+stubbed; ROM/RAM decoding and the TIA implementation are production code.
+
+When `~/Maciejdev/plus4/kicad-tcbm2sd/sdcard-tcbm2sd-pi1551/1551/demos/`
+`Carrion's-121-colors.d64` exists, the `-Ofast` run also converts it to GCR
+using `DiskImage::OpenD64`, reads every bit of all 40 tracks through both
+`Drive::Update(16)` implementations, and compares each resulting drive/TPI
+state. The test also reports the number of `rand()` calls during that read.
+It writes the decoded D64 and a version with changed payload bytes via
+`DiskImage::WriteD64` to temporary files and compares every output byte with
+the data supplied for writing. Set `PI1551_TEST_D64=/path/to/image.d64` to use
+another image. The source D64 is only read; outputs live in the test's
+temporary directory.
+
 Run the OLED/menu/component suite without Raspberry Pi:
 
 ```sh
