@@ -315,10 +315,10 @@ void M6502::Step(void)
 	NMIPending = NMI.IsAsserted() && !CLIMaskingInterrupt && !BranchTakenMaskingInterrupt;
 #endif //  SUPPORT_NMI
 
-	if (CLIMaskingInterrupt)	// If so we have delayed the IRQ long enough for the next instruction to now start. The CLI will then take effect after that instruction completes executing.
-		CLIMaskingInterrupt = false;
-	if (BranchTakenMaskingInterrupt)	// If so we have delayed the IRQ long enough for the next instruction to now start.
-		BranchTakenMaskingInterrupt = false;
+	// The previous cycle's masks expire now, whether or not they were set.
+	// The cycle handler below can set them again for CLI or a taken branch.
+	CLIMaskingInterrupt = false;
+	BranchTakenMaskingInterrupt = false;
 
 #ifdef  SUPPORT_RDY_HALTING
 	if (!Halted())
