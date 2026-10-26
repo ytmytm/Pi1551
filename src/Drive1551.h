@@ -148,7 +148,10 @@ private:
 #else
 	inline u32 AdvanceSectorPosition(int& byteOffset)
 	{
-		++headBitOffset %= bitsInTrack;
+		// UpdateHeadSectorPosition keeps the offset inside the track. A compare
+		// avoids a division on every bit read or written.
+		if (++headBitOffset == bitsInTrack)
+			headBitOffset = 0;
 		byteOffset = headBitOffset >> 3;
 		return (~headBitOffset) & 7;
 	}
