@@ -101,7 +101,7 @@ class Simulator:
         self.seek_target = 0
         self.rom = self.ROMS[0]; self.device = 8; self.write_protect = False
         self.reset_count = 0; self.track = 18.0; self.activity = "browser"
-        self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "1.95"
+        self.temperature = 38; self.sd_size = "8GB"; self.sd_free = "6.4GB"; self.firmware = "1.99"
         self.rtc_present = False
         self.rtc_value = datetime(2026, 11, 1, 12, 0, 0)
         self.clock_base: Optional[datetime] = None
@@ -445,8 +445,8 @@ class Simulator:
                 else: self.clock_base = None
                 self.message = "Pi1551 rebooted (simulated); settings reloaded"
         elif self.screen == "settings":
-            if item == "Load settings": self.message = "Settings loaded from options-pi1551.txt (simulated)"
-            elif item == "Save settings": self.message = "Settings saved to options-pi1551.txt (simulated)"
+            if item == "Load settings": self.message = "Settings loaded from /options.txt (simulated)"
+            elif item == "Save settings": self.message = "Settings saved to /options.txt (simulated)"
             else: self.set_screen({"ROM": "rom", "Drive": "drive", "Tape": "tape_settings", "Browser": "browser_settings", "Display": "display", "Encoder": "encoder", "Sound": "sound", "Date & time": "date_time"}[item], True)
         elif self.screen == "date_time":
             if item in {"Year", "Month", "Day", "Hour", "Minute"}:
@@ -536,7 +536,7 @@ class Simulator:
         if item == "Device number": self.device = 9 if self.device == 8 else 8
         elif item in self.options and isinstance(self.options[item], bool): self.options[item] = not self.options[item]
         elif item == "Contrast": self.options[item] = self.next_choice(self.options[item], [16,32,48,64,80,96,112,128,144,160,176,192,208,224,240,255])
-        elif item == "Orient": self.options["Orientation"] = "rotated" if self.options["Orientation"] == "normal" else "normal"
+        elif item == "Orient": self.options["Orientation"] = "flip" if self.options["Orientation"] == "normal" else "normal"
         elif item == "Font": self.options["i2cLcdUseCBMChar"] = not self.options["i2cLcdUseCBMChar"]
         elif item == "Scroll": self.options["scrollHighlightRate"] = self.next_choice(self.options["scrollHighlightRate"], [0.05,0.10,0.20,0.35,0.50,1.00])
         elif item == "Dim time": self.options[item] = self.next_choice(self.options[item], [0,5,10,16,30,60,120,300])
@@ -762,8 +762,8 @@ class UI:
         value = clip(left, self.width - len(right) - (1 if right else 0))
         self.text(self.oy + row, self.ox, (value + " " * max(0, self.width - len(value) - len(right)) + right).ljust(self.width))
     def tree(self) -> None:
-        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  ├─ Sound", "│  │  └─ Date & time", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
-        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_record": 5, "tape_seek": 5, "tape_index": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "date_time": 16, "status": 17, "reboot_confirm": 19}.get(self.sim.screen)
+        x = self.box_x + self.box_w + 3; lines = [f"MENU TREE  SD {self.sim.source_text()}", "├─ Fliplist", "├─ Browser", "├─ Device menu", "│  ├─ Browser", "│  ├─ Tape", "│  ├─ Disk", "│  │  └─ New image", "│  ├─ Settings", "│  │  ├─ ROM", "│  │  ├─ Drive", "│  │  ├─ Tape", "│  │  ├─ Browser", "│  │  ├─ Display", "│  │  ├─ Encoder", "│  │  ├─ Sound", "│  │  ├─ Date & time", "│  │  ├─ Load settings", "│  │  └─ Save settings", "│  ├─ Status", "│  └─ Reboot Pi1551", "│     └─ Confirm"]
+        active = {"flip": 1, "browser": 2, "menu": 3, "tape": 5, "tape_record": 5, "tape_seek": 5, "tape_index": 5, "disk": 6, "new_image": 7, "settings": 8, "rom": 9, "drive": 10, "tape_settings": 11, "browser_settings": 12, "display": 13, "encoder": 14, "sound": 15, "date_time": 16, "status": 19, "reboot_confirm": 21}.get(self.sim.screen)
         if self.sim.fliplist:
             lines.insert(4, "│  ├─ Clear list")
             if active is not None and active >= 4: active += 1

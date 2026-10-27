@@ -412,7 +412,7 @@ Browser / Fliplist
    │  │  ├─ Temp ON/OFF
    │  │  ├─ Contrast 16,32,...,240,255
    │  │  ├─ Dimming ON/OFF
-   │  │  ├─ Dim time OFF/5/10/30/60/120/300s
+   │  │  ├─ Dim time OFF/5/10/16/30/60/120/300s
    │  │  ├─ Dim level 0,16,32,...,240,255
    │  │  ├─ Orient normal/flip
    │  │  ├─ Font ASCII/C64
@@ -548,16 +548,21 @@ at one second. A shorter `Duration` leaves silence for the rest of the preview.
 
 ### Date and time
 
-The date and time entries are:
+Select `Year`, `Month`, `Day`, `Hour` or `Minute`, rotate to change the value,
+then click to apply. Back cancels the edit. The clock supplies timestamps for
+new SD files and keeps running through drive resets. Use local time in
+24-hour format; Pi1551 does not convert timezones.
 
-- **Setting the date and time:** Select `Year`, `Month`, `Day`, `Hour` or
-  `Minute`, rotate to change its value, then click to apply; Back cancels.
-  The local clock survives drive resets but not a device reboot. Once set,
-  it supplies timestamps for new SD files. Pi1551 does not infer a timezone.
-- `Load from RTC` reads the clock from a detected RTC. This entry appears
-  only when an RTC is available.
-- `Save to RTC` writes the current local clock to a detected RTC. It appears
-  under the same condition.
+An optional DS3231 or DS1307 RTC keeps time while Pi1551 is powered off.
+At startup, Pi1551 reads the RTC and sets its clock if the stored date and
+time are valid. When an RTC is detected, this menu also offers `Load from RTC`
+and `Save to RTC`. After setting the time manually, choose `Save to RTC` to
+keep it for the next boot. Without an RTC, set the clock again after a reboot.
+
+The defaults are `i2cRtcAddress = 104` (`0x68`) and `i2cRtcType = ds3231`.
+For a DS1307, set `i2cRtcType = ds1307` in `/options.txt` and reboot.
+Set `i2cRtcAddress = 0` to disable RTC detection. `i2cScan` only controls the
+startup address listing on HDMI.
 
 ### Load and save settings
 
@@ -641,17 +646,11 @@ was detected, `USB01` is active by default. `CP0` switches back to SD, while
 device is the default for ordinary file and directory operations until another
 `CP` command changes it.
 
-`T-W` and `Settings` → `Date & time` use the same software clock. It survives
-drive/bus resets but not a power cycle or reboot. Until it is set, `T-R`
-returns `31,SYNTAX ERROR,00,00`, and new SD files get a fixed 2026-11-01
-FatFs timestamp. After it is set, FatFs uses the local clock for file
-timestamps. If an RTC module answers at `i2cRtcAddress` (default `0x68`) and
-its time is valid, Pi1551 loads that time once at boot. `Date & time` then
-offers `Load from RTC` and `Save to RTC`. Set `i2cRtcType = ds1307` when using
-a DS1307 (default: `ds3231`). `i2cScan = 1` prints addresses on HDMI; it does
-not change RTC behavior. The OLED editor uses years 2000–2099; `T-W` accepts
-the wider SD2IEC range. Times are local 24-hour values; the firmware does not
-infer a timezone.
+`T-W` and `Settings` → `Date & time` set the same clock, also used for SD file
+timestamps. Until it is set, `T-R` returns `31,SYNTAX ERROR,00,00`, and new SD
+files get a fixed 2026-11-01 timestamp. The OLED editor supports years
+2000–2099; `T-W` accepts the wider SD2IEC range. See [Date and time](#date-and-time)
+for clock editing and RTC setup.
 
 The same browser command channel also implements file operations used
 by SD2IEC-compatible software: `C` (copy/concatenate), `N` (create and mount a

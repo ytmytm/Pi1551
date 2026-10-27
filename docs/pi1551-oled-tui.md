@@ -21,10 +21,16 @@ browser-mode containers. Plain `Menu...` means Enter replaces the current
 single medium; `Menu... LIST` means Enter adds and mounts a medium. Insert
 switches media selection to LIST and toggles the selected medium's membership
 without mounting it. The menu row is always available in Browser and Fliplist.
-In a one item Fliplist, rotating either direction from the selected image opens
-Browser; the `Menu...` row still activates that image when moving right.
+In a one-item Fliplist, left from the image selects `Menu...`; right keeps
+the image selected. Right from `Menu...` activates the image. Enter on the
+image opens Browser.
 Fliplist shows its item count in the menu row, while Browser shows only
-`Menu... LIST`. The Status view includes the selected virtual SD source path.
+`Menu... LIST`. The virtual SD source path appears in the terminal-side tree.
+Status shows RTC presence, local date and time, storage and media state.
+
+`Settings` → `Date & time` edits the local clock. The simulator starts with a
+sample date and no RTC; RTC actions appear when `rtc_present` is enabled in
+the simulator state. Hardware detection and RTC I/O are simulated.
 
 The complete interaction contract is in
 [`PI1551-TUI-SPEC.md`](PI1551-TUI-SPEC.md).

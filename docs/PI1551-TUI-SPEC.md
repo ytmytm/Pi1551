@@ -1,8 +1,9 @@
 # Pi1551 OLED TUI — current protocol and behaviour
 
 This document describes the current implementation of
-`tools/pi1551_oled_tui.py` and the matching Pi1551 firmware menu. The simulator
-remains the interaction reference; the firmware uses real media, GPIO and
+`tools/pi1551_oled_tui.py` and the matching Pi1551 firmware menu. The device
+menu is defined in `src/OledMenu.cpp`; the simulator mirrors it with fake
+media and hardware. The firmware uses real media, GPIO and
 persistent settings. Hardware-specific details and native testing are described
 in `docs/PI1551-OLED-IMPLEMENTATION.md`.
 
@@ -256,6 +257,7 @@ The menu is reached from `Menu...` in Browser or Fliplist. Its current order is:
 
 ```
 ..
+Clear list (only when the fliplist is nonempty)
 Browser
 Tape
 Disk
@@ -281,6 +283,9 @@ volatile state, including the mounted medium, fliplist, tape, computer MOTOR
 input, counters and navigation. It also restores the mock's initial settings,
 representing a reload from the fake options file; the mock has no persistent
 settings storage and does not perform a hardware reset. The target firmware
+loses its software clock on reboot and reloads it only if a valid RTC is
+available. The mock keeps its sample local clock across simulated reboots.
+The target firmware
 must safely finish pending image and SD writes, close or synchronize files,
 then invoke its existing full-Pi reboot path. After boot it rereads settings
 and ROM configuration and applies normal auto-mount rules; it must not assert
@@ -294,20 +299,22 @@ The current order is:
 ```
 ..
 1:<loaded TAP filename>
-Play or Stop (only when loaded)
+Play or Stop (only when loaded; Stop during PLAY or RECORD)
+Go to file... (valid matching IDX and tape stopped)
 Load TAP... (only when empty)
-Record (available without a TAP; hidden during RECORD)
+Record (no TAP or loaded TAP stopped)
   New TAP
   Current TAP (only when loaded)
-Eject TAP (only when loaded)
-Rewind (only when loaded)
-Go to counter (only when loaded)
+Eject TAP (only when loaded and stopped)
+Rewind (only when loaded and stopped)
+Go to counter (only when loaded and stopped)
 ```
 
 The filename row shows exactly `1:` when no TAP is loaded. When a TAP is
 loaded it shows its name after the fixed `1:` prefix and scrolls. The menu
-shows `Play` or `Stop` according to PLAY state. With no TAP it shows
-`Load TAP...` and `Record`; eject, rewind and seek only appear while a TAP is loaded. The
+shows `Stop` during playback or recording, and `Play` when stopped. With no TAP
+it shows `Load TAP...` and `Record`. Record, eject, rewind and seek are hidden
+during playback and recording; select `Stop` first. The
 counter and motor are not duplicated here because they are always visible in
 OLED row 1.
 
@@ -320,6 +327,9 @@ OLED row 1.
 - `Record`: New TAP creates the next unused `NEWTAPE*.tap` in the current SD
   folder; Current TAP records from the loaded tape's position. RECORD presses
   PLAY and follows MOTOR. New TAP is available even without a loaded tape;
+- `Go to file...`: opens the matching IDX position list. Selecting a position
+  seeks to its TAP pulse offset and returns to Tape, with playback stopped.
+  Selecting an IDX in Browser loads its paired TAP and opens this list directly;
 - `Eject TAP`: stops, saves changed data and removes the TAP without changing motor state;
 - `Rewind`: stops, saves changed data and sets counter to 000 when a TAP is loaded; otherwise reports
   `No TAP loaded`;
@@ -362,6 +372,7 @@ Browser
 Display
 Encoder
 Sound
+Date & time
 Load settings
 Save settings
 ```
@@ -393,18 +404,27 @@ Submenus:
   0/SAMPLE plays the embedded click using PWM/DMA; 1/BUZZER generates a square
   wave. Both use fixed GPIO13 (SOUND). Only BUZZER displays `Freq` in Hz and
   `Duration` in milliseconds; SAMPLE has a fixed clip length;
-- ROM: separate ROM selector.
+- ROM: separate ROM selector;
+- Date & time: `Year`, `Month`, `Day`, `Hour`, `Minute`, followed by
+  `Load from RTC` and `Save to RTC` only when an RTC is detected. Click a
+  field to edit it, rotate to change it, then click to apply or press Back
+  to cancel. Years wrap within 2000–2099, and days follow the selected month.
+  The local clock supplies SD file timestamps. Firmware reads a valid RTC
+  at boot; saving a manual clock change to RTC requires `Save to RTC`.
+  The simulator starts with a sample clock and `rtc_present = False`.
 
 Settings cycle on encoder click, as in the mock; rotation continues navigating
-rows. The counter editor is the exception: one impulse changes the target by
-one, Enter seeks and Back cancels. Firmware Font selects C64/ASCII, both 8x8;
+rows. In the counter editor, rotation changes the target by one, Enter seeks
+and Back cancels. In Date & time, rotation changes the selected field while
+editing. Firmware Font selects C64/ASCII, both 8x8;
 At startup both font slots are prepared: built-in ASCII and C64 from the
 configured ChargenFont/Font file (exactly 4096 bytes). If loading fails or size
 is invalid, both slots contain ASCII. Font selection switches the cached slot
 on the next frame, without restarting, reading SD or reloading HDMI fonts.
-The font filename remains a startup-only setting. Errors and completed
+The font filename remains a startup-only setting. Firmware errors and completed
 load/save/write actions use a dismissible message menu with `..` first. Enter
 on the message or Back returns to the previous screen; long messages scroll.
+The TUI displays action messages outside the OLED frame.
 
 Font uses the existing `i2cLcdUseCBMChar` (0 ASCII, 1 C64), and Scroll uses
 `scrollHighlightRate` in seconds per character step. There are no independent
@@ -412,7 +432,7 @@ Font uses the existing `i2cLcdUseCBMChar` (0 ASCII, 1 C64), and Scroll uses
 as unrelated settings. Scroll cycles 0.05/0.10/0.20/0.35/0.50/1.00 seconds.
 The Scroll row keeps its label and speed stationary, followed by a scrolling
 `Scrolling preview 0123456789` demo using the selected speed.
-Dim time cycles 0/5/10/30/60/120/300 seconds. Contrast cycles
+Dim time cycles 0/5/10/16/30/60/120/300 seconds. Contrast cycles
 16/32/48/64/80/96/112/128/144/160/176/192/208/224/240/255 (never zero).
 Dim level cycles 0/16/32/48/64/80/96/112/128/144/160/176/192/208/224/240/255.
 Duration cycles 0/50/100/250/500/1000/2000/5000 ms.
@@ -454,14 +474,15 @@ the user's order, key spelling, whitespace, comments and line endings, and
 replaces only the value in the last effective definition of a changed option.
 Every absent changed option is appended, including default values. Untouched
 options (including independent user edits) and duplicate earlier definitions
-remain unchanged. A no-op save performs no writes. A write failure must leave the current runtime state intact and be
+remain unchanged. Every save writes the options file and refreshes its backup,
+even when no runtime value changed. A write failure leaves the runtime state intact and is
 reported with its failing stage and, where available, FatFS result code.
-An existing options.txt.tmp is reported and retained. Each changed save keeps
+An existing options.txt.tmp is reported and retained. Each save keeps
 the previous `/options.txt` as `/options-backup.txt`, replacing any older
 backup; recover it manually if power fails during the rename sequence. Reboot reports
 host/image/media flush, SD sync or unmount failure and remains blocked until
 the storage checks succeed. Neither settings action itself mounts media or resets the device. The TUI
-mock only reports these actions using its fake `options-pi1551.txt`; it does
+mock only reports these actions for `/options.txt`; it does
 not read or write a file.
 
 `Auto mount` controls whether a configured `AutoMountImage` is applied on boot
@@ -490,10 +511,13 @@ status rows:
 
 ```
 ..
+RTC YES/NO
+DATE YYYY-MM-DD
+TIME HH:MM:SS
 TEMP 38C
 SD 8GB
 FREE 6.4GB
-FW 0.3.0
+FW 1.99
 DOS <selected ROM>
 <type> <current image name>
 TAP <current TAP name>
@@ -507,7 +531,8 @@ TRACK 18.0S / ---
 `D81`, `D82`, `PRG`), or `IMG` when none is active. The `DOS`, image and `TAP`
 filenames scroll while their prefixes remain fixed. `TRACK` is `---` without
 an emulated disk and gets the `S` suffix only when idle trap is active. `MOTOR`
-shows the effective tape motor state. The fake SD size, free space, firmware
+shows the effective tape motor state. When the clock is unset, DATE shows
+`---- -- --` and TIME `--:--:--`. The fake SD size, free space, firmware
 version and temperature are simulator data. The virtual SD source path is
 shown in the terminal-side menu tree, not on the OLED Status screen.
 

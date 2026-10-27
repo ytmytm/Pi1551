@@ -30,6 +30,7 @@ player through the tape port only, without the TCBM ribbon cable.
   or updated automatically when recording a recognized Plus/4 `SAVE`.
 - Eight-row I2C OLED browser/menu with rotary encoder, Insert and Back controls.
 - Runtime drive, tape, display, encoder and sound settings with safe load/save.
+- Date and time editor with optional DS3231/DS1307 I2C RTC support.
 - Multiple 1551 ROM slots and runtime ROM switching.
 - 1551 RAM expansion ([1551-RAMBOard](https://github.com/ytmytm/1551-RAMBOard))
   and its ROM patch, including support for [Parobek](https://github.com/ytmytm/plus4-parobek)
