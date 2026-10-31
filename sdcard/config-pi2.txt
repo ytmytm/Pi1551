@@ -1,14 +1,14 @@
-# Pi1551 dla Raspberry Pi 2B v1.1 (BCM2836 / Cortex-A7).
-# Na gotowej karcie SD Pi1551 podmien kernel.img i config.txt plikami z ZIP-a.
-# Pozostale pliki na karcie i podlaczenie interfejsu zostaja bez zmian.
+# Pi1551 for Raspberry Pi 2B v1.1 (BCM2836 / Cortex-A7).
+# On an existing Pi1551 SD card, replace kernel.img and config.txt with
+# the files from this ZIP. Keep the other files and interface wiring unchanged.
 #
-# Na poczatek uruchom przy 900 MHz.
-# Aby zwiekszyc wydajnosc, zmien ponizej arm_freq=900 na arm_freq=1000.
-# Jesli dziala stabilnie, mozna probowac 1100 MHz, potem 1200 MHz.
-# Wyzsze zegary nie sa gwarantowane. Przy zawieszaniu lub bledach wroc
-# do ostatniego stabilnego ustawienia; gdy Pi nie startuje, przywroc 900
-# po wlozeniu karty do komputera. Zadbaj o dobre zasilanie i chlodzenie.
-# Pozostaw force_turbo=1. Zmieniaj tylko arm_freq, pozostale opcje zostaw.
+# Start at 900 MHz.
+# To improve performance, change arm_freq=900 below to arm_freq=1000.
+# If stable, you can try 1100 MHz, then 1200 MHz.
+# Higher clocks are not guaranteed. If it freezes or produces errors,
+# return to the last stable setting. If the Pi will not boot, insert the
+# SD card into a computer and restore 900 MHz. Use good power and cooling.
+# Keep force_turbo=1. Change only arm_freq; leave the other settings as they are.
 kernel=kernel.img
 kernel_address=0x1f00000
 arm_64bit=0
