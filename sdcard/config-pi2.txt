@@ -1,5 +1,14 @@
-# Experimental Pi1551 build for Pi 2B v1.1 / BCM2836 / Cortex-A7.
-# Copy this file as config.txt alongside the Pi 2 build named kernel.img.
+# Pi1551 dla Raspberry Pi 2B v1.1 (BCM2836 / Cortex-A7).
+# Na gotowej karcie SD Pi1551 podmien kernel.img i config.txt plikami z ZIP-a.
+# Pozostale pliki na karcie i podlaczenie interfejsu zostaja bez zmian.
+#
+# Na poczatek uruchom przy 900 MHz.
+# Aby zwiekszyc wydajnosc, zmien ponizej arm_freq=900 na arm_freq=1000.
+# Jesli dziala stabilnie, mozna probowac 1100 MHz, potem 1200 MHz.
+# Wyzsze zegary nie sa gwarantowane. Przy zawieszaniu lub bledach wroc
+# do ostatniego stabilnego ustawienia; gdy Pi nie startuje, przywroc 900
+# po wlozeniu karty do komputera. Zadbaj o dobre zasilanie i chlodzenie.
+# Pozostaw force_turbo=1. Zmieniaj tylko arm_freq, pozostale opcje zostaw.
 kernel=kernel.img
 kernel_address=0x1f00000
 arm_64bit=0
@@ -10,7 +19,3 @@ temp_soft_limit=70
 dtparam=spi=off
 force_eeprom_read=0
 disable_pvt=1
-
-# Establish a working baseline at 900 MHz first. To experiment later,
-# change arm_freq above to 1000 (or a clock known stable on your board).
-# 1200 MHz on Cortex-A7 is neither guaranteed stable nor validated here.
