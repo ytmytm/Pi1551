@@ -19,6 +19,12 @@ the fixture uses local `/tmp` storage and leaves existing SD cards untouched.
 See [Pi 2 testing](../docs/PI2-TESTING.md) for hardware-test limits and the
 existing missing-RTC-stubs failure in the full OLED fixture.
 
+`python3 tests/test_pi2_icount.py` runs the isolated-core instruction-budget
+experiment on QEMU 6.2. It builds a host plugin, parks other CPUs after boot,
+and measures twelve workload/cost combinations. CSVs, JSON and logs go to
+`build/pi2-icount/`. This uses synthetic equal-cost instruction timing, not
+physical Cortex-A7 cycle timing. See [measured results](../docs/PI2-ICOUNT.md).
+
 ## TCBM GPIO output differential test
 
 Run `make test-tcbm-gpio-native` to compare production `RefreshOuts1551()`

@@ -4,6 +4,10 @@ This port targets **BCM2836 / four Cortex-A7 cores / ARMv7-A**, initially at
 the stock 900 MHz. Hardware compatibility and real-time TCBM deadlines remain
 unverified. Pi 3 / Zero 2 W remain the recommended targets and the default build.
 
+The [QEMU icount experiment](PI2-ICOUNT.md) now records instruction demand,
+timer jitter and instruction-budget projections for 900/1000/1200 MHz. These
+are isolated-core cost scenarios and do not validate physical A7 timing.
+
 ## Build and install
 
 ```sh

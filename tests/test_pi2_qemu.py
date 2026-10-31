@@ -21,6 +21,11 @@ def main():
     parser.add_argument("--kernel", default="kernel-pi2")
     parser.add_argument("--timeout", type=int, default=45)
     parser.add_argument("--rom", choices=("stock", "ramboard"), default="ramboard")
+    parser.add_argument("--icount", type=int, choices=(0, 1, 2))
+    parser.add_argument("--motor", action="store_true", help="Force disk read + synthetic 6502 register-polling loop")
+    parser.add_argument("--motor-off", action="store_true", help="Force motor off, retaining the ROM CPU workload")
+    parser.add_argument("--profile", nargs=5, metavar=("PLUGIN", "CSV", "WAIT_PC", "EXIT_PC", "LOOPS"),
+                        help="Instruction profile; parks other cores after boot (QEMU 6.2 only)")
     args = parser.parse_args()
     kernel = (ROOT / args.kernel).resolve()
     for tool in ("qemu-system-arm", "gdb-multiarch"):
@@ -36,7 +41,7 @@ def main():
         options = (("ROM1=" + ("RAM1551.BIN" if args.rom == "ramboard" else "DOS1551.BIN") + "\n") +
                    "ROM2=RAM1551.BIN\nRAMBOard=" + ("1" if args.rom == "ramboard" else "0") + "\n" +
                    "LCDName=none\ni2cScan=0\ni2cRtcAddress=0\n"
-                   "SoundEnabled=0\nSoundOnGPIO=1\nShowOptions=0\n"
+                   "SoundEnabled=0\nSoundOnGPIO=1\nShowOptions=0\nQuickBoot=1\n"
                    "IgnoreReset=1\nIdleSleep=0\n").replace("=", " = ").encode()
         d64 = bytearray(174848)
         d64[0x16500:0x16503] = bytes([18, 1, 0x41])
@@ -58,8 +63,13 @@ def main():
                    "-drive", "file=" + str(work / "card.img") + ",format=raw,if=sd,snapshot=on",
                    "-display", "none", "-serial", "null", "-serial", "file:" + str(work / "uart.log"),
                    "-S", "-gdb", "tcp:127.0.0.1:" + str(port)]
+        if args.icount is not None:
+            command += ["-accel", "tcg,thread=single", "-icount", "shift=" + str(args.icount) + ",sleep=off"]
+        if args.profile:
+            command += ["-plugin", args.profile[0] + "," + ",".join(
+                key + "=" + value for key, value in zip(("out", "wait", "exit", "loops"), args.profile[1:]))]
         script = work / "boot.gdb"
-        script.write_text("""set pagination off
+        script_text = """set pagination off
 set confirm off
 set breakpoint pending off
 target remote :PORT
@@ -124,7 +134,58 @@ printf "PASS 1001 ARMv7 CPU reads after entering real-time emulation\\n"
 info threads
 detach
 quit 0
-""".replace(":PORT", ":" + str(port)))
+""".replace(":PORT", ":" + str(port))
+        if args.profile:
+            profile_tail = """delete 8
+# Disable peripheral IRQs and park UI/tape/idle workers; measured kernel is unchanged.
+set {unsigned int} 0x3f00b21c = 0xffffffff
+set {unsigned int} 0x3f00b220 = 0xffffffff
+set {unsigned int} 0x3f00b224 = 0xffffffff
+set {unsigned int} 0x110000 = 0xe320f003
+set {unsigned int} 0x110004 = 0xeafffffd
+thread 1
+set $cpsr = $cpsr | 0xc0
+set $pc = 0x110000
+thread 3
+set $cpsr = $cpsr | 0xc0
+set $pc = 0x110000
+thread 4
+set $cpsr = $cpsr | 0xc0
+set $pc = 0x110000
+thread 2
+"""
+            types = Path(args.profile[0]).parent / "types.o"
+            if types.is_file():
+                profile_tail += "add-symbol-file " + str(types) + " 0x0\n"
+            if args.motor_off:
+                if not types.is_file():
+                    parser.error("Motor-off profile requires types.o")
+                profile_tail += "set ((Pi1551*)&pi1551)->drive.motor = 0\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->TPI.portCPU.stateOut &= ~4\n"
+            if args.motor:
+                profile_tail += "call ((void (*)(unsigned short, unsigned char))write6502_1551)(1, 0x64)\n"
+                if not types.is_file():
+                    parser.error("Motor profile requires types.o from test_pi2_icount.py")
+                symbols = subprocess.check_output(["arm-none-eabi-nm", "-C", str(kernel.with_suffix(".elf"))], text=True)
+                fetch = [line.split()[0] for line in symbols.splitlines()
+                         if line.endswith("void M6502::DispatchCycle<&M6502::InstructionFetch>(M6502*)")]
+                if len(fetch) != 1:
+                    parser.error("Cannot find instruction-fetch dispatch for synthetic workload")
+                # SEI; loop: LDA $4001; LDA $4002; STA scratch; JMP loop.
+                # A synthetic read-polling workload, not a real fastloader transfer.
+                origin = 0x8000 if args.rom == "ramboard" else 0x300
+                high = str(origin >> 8)
+                profile_tail += "set {unsigned char[13]} ((char*)&s_u8Memory+" + hex(origin) + ") = {0x78,0xad,1,0x40,0xad,2,0x40,0x8d,0x0f," + high + ",0x4c,1," + high + "}\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->m6502.pc = " + hex(origin) + "\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->m6502.status |= 4\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->m6502.IRQPending = 0\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->m6502.addressModeCycleFn = (void(*)(M6502*))0x" + fetch[0] + "\n"
+                profile_tail += "set ((Pi1551*)&pi1551)->TPI.portC.stateOut |= 0x10\n"
+            if types.is_file():
+                profile_tail += 'printf "PROFILE initial motor=%d queue=%u disk=%#x DDR=%#x port=%#x\\n", ((Pi1551*)&pi1551)->drive.motor, ((Pi1551*)&pi1551)->drive.newDiskImageQueuedCylesRemaining, ((Pi1551*)&pi1551)->drive.diskImage, ((Pi1551*)&pi1551)->TPI.portCPU.direction, ((Pi1551*)&pi1551)->TPI.portCPU.stateOut\n'
+            profile_tail += "echo PROFILE other CPUs parked; collect instruction/timer samples\\n\ncontinue\n"
+            script_text = script_text[:script_text.index("delete 8\n")] + profile_tail
+        script.write_text(script_text)
         with (work / "qemu.log").open("w") as log:
             process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=log)
             gdb = ["gdb-multiarch", "-q", "-batch", str(kernel.with_suffix(".elf"))]
@@ -142,6 +203,18 @@ quit 0
                     print(debug.stdout)
                     raise SystemExit("FAIL QEMU timed out; no timing conclusion can be drawn")
                 print(result.stdout)
+                if args.profile:
+                    import csv
+                    csv_path = Path(args.profile[1])
+                    if not csv_path.is_file():
+                        raise SystemExit("FAIL profile CSV was not produced")
+                    rows = list(csv.DictReader(csv_path.open()))
+                    if len(rows) != int(args.profile[4]) or process.wait(timeout=5) != 0:
+                        raise SystemExit("FAIL incomplete instruction profile")
+                    if any(int(row["other_core_insns"]) for row in rows):
+                        raise SystemExit("FAIL other CPUs executed during measured intervals")
+                    print("PASS isolated icount profile:", len(rows), "loops")
+                    return
                 if result.returncode or "PASS 1001 ARMv7 CPU reads" not in result.stdout:
                     raise SystemExit("FAIL QEMU boot smoke test")
                 stacks = {int(core): int(sp, 16) for core, sp in
