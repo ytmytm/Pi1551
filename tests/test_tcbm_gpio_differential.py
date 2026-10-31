@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare actual GPIO output code with its frozen reference on the host."""
 from pathlib import Path
+from platform_target import RPI_DEFINE
 import os
 import subprocess
 import tempfile
@@ -17,7 +18,7 @@ def main():
                      "-Wno-unused-parameter", "-Wno-int-to-pointer-cast",
                      "-Wno-unused-variable", "-Wno-type-limits", "-Wno-empty-body",
                      "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-                     "-ffunction-sections", "-fdata-sections", "-DRPI3=1",
+                     "-ffunction-sections", "-fdata-sections", RPI_DEFINE,
                      "-DPI1551_NATIVE_TCBM_TEST", "-Isrc", "-Iuspi/include"]
             subprocess.run(flags + ["tests/tcbm_gpio_differential_native.cpp",
                                     "src/tcbm_bus.cpp", "src/m6523.cpp", "src/options.cpp",

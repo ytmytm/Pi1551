@@ -1,5 +1,24 @@
 # Native Pi1551 tests
 
+## Experimental Pi 2 target
+
+The protocol, GPIO, drive and OLED runners accept `PI1551_TEST_RASPPI=2` to
+compile the Pi 2 conditionals; their default remains Pi 3. For example:
+
+```sh
+PI1551_TEST_RASPPI=2 make test-tcbm2sd-native test-tcbm-gpio-native test-drive1551-native
+```
+
+After building `kernel-pi2` and `kernel-pi3`, run
+`python3 tests/test_pi_targets.py` to compare all preprocessed firmware/USB
+units and exported functions. `python3 tests/test_pi2_qemu.py --rom stock`
+and `--rom ramboard` boot the actual Pi 2 kernel under QEMU, check worker
+stack separation, select a D64 through the production menu hook and observe
+CPU reads after entering real-time emulation. QEMU and GDB are required;
+the fixture uses local `/tmp` storage and leaves existing SD cards untouched.
+See [Pi 2 testing](../docs/PI2-TESTING.md) for hardware-test limits and the
+existing missing-RTC-stubs failure in the full OLED fixture.
+
 ## TCBM GPIO output differential test
 
 Run `make test-tcbm-gpio-native` to compare production `RefreshOuts1551()`

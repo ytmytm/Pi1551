@@ -2,6 +2,7 @@
 """Native protocol regression tests derived from tcbm2sd.ino and 6502 clients."""
 
 from pathlib import Path
+from platform_target import RPI_DEFINE
 import subprocess
 import tempfile
 import unittest
@@ -27,7 +28,7 @@ def build_cli():
     )
     subprocess.run(
         [
-            "g++", "-std=c++11", "-DRPI3=1", "-Wno-type-limits",
+            "g++", "-std=c++11", RPI_DEFINE, "-Wno-type-limits",
             "-Wno-int-to-pointer-cast",
             "-Isrc", "-Iuspi/include", "-c", "src/tcbm_commands.cpp",
             "-o", str(BUILD / "tcbm_commands.o"),

@@ -12,11 +12,13 @@ OBJS_BASE	= armc-start.o armc-cstartup.o armc-cstubs.o armc-cppstubs.o \
 #	Drive.o Pi1541.o iec_bus.o iec_commands.o m6522.o m8520.o wd177x.o Pi1581.o InputMappings.o
 
 SRCDIR   = src
-OBJS    := $(addprefix $(SRCDIR)/, $(OBJS_BASE))
+OBJDIR   = build/pi$(RASPPI)/src
+include Makefile.rules
+OBJS    := $(addprefix $(OBJDIR)/, $(OBJS_BASE))
 
 -include $(OBJS:.o=.d)
 
-LIBS     = uspi/libuspi.a
+LIBS     = uspi/build/pi$(RASPPI)/libuspi.a
 INCLUDE  = -Iuspi/include/
 
 TARGET  ?= kernel
@@ -28,7 +30,7 @@ all: $(TARGET)
 help:
 	@printf '%s\n' \
 		'Pi1551 targets:' \
-		'  make / make all          Build Raspberry Pi 3 firmware ($(TARGET).img).' \
+		'  make / make all          Build firmware (Pi 3 / Zero 2 W by default) ($(TARGET).img).' \
 		'  make tui                 Start the interactive OLED TUI simulator.' \
 		'  make test-oled-native    Run native menu, media, tape and OLED tests with ASan/UBSan.' \
 		'  make test-tcbm2sd-native Run native TCBM protocol regression tests.' \
@@ -40,7 +42,7 @@ help:
 		'  V=1                      Show full build commands.' \
 		'  PREFIX=arm-none-eabi-    Select the cross-compiler prefix (default shown).' \
 		'  TARGET=kernel            Select the firmware output basename (default shown).' \
-		'  RASPPI=3                 Raspberry Pi 3 is the only supported hardware target.' \
+		'  RASPPI=3                 Pi 3 / Zero 2 W (default); use RASPPI=2 for experimental Pi 2.' \
 		'' \
 		'TUI requires Python 3; native tests require Python 3 and host GCC/G++.'
 
@@ -72,11 +74,9 @@ $(TARGET): $(OBJS) $(LIBS)
 	# $(Q)$(PREFIX)objdump -d $(TARGET).elf | $(PREFIX)c++filt > $(TARGET).lst
 	$(Q)$(PREFIX)objcopy $(TARGET).elf -O binary $(TARGET).img
 
-uspi/libuspi.a:
-	$(MAKE) -C uspi
+$(LIBS):
+	$(MAKE) -C uspi RASPPI=$(RASPPI)
 
 clean:
-	$(Q)$(RM) $(OBJS) $(TARGET).elf $(TARGET).map $(TARGET).lst $(TARGET).img
-	$(MAKE) -C uspi clean
-
-include Makefile.rules
+	$(Q)$(RM) $(OBJS) $(OBJS:.o=.d) $(TARGET).elf $(TARGET).map $(TARGET).lst $(TARGET).img
+	$(MAKE) -C uspi RASPPI=$(RASPPI) clean

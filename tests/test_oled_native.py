@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile production OLED/TAP components and run them without Raspberry Pi."""
 from pathlib import Path
+from platform_target import RPI_DEFINE
 import os
 import struct
 import sys
@@ -29,7 +30,7 @@ def run():
         subprocess.run(flags + ["-Werror", "-Wno-unused-parameter", "tests/m6502_resume_native.cpp", "src/m6502.cpp",
                                "-o", str(build / "m6502-resume")], cwd=ROOT, check=True)
         subprocess.run([str(build / "m6502-resume")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-O0", "-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+        subprocess.run(flags + ["-O0", "-DPI1551_NATIVE_TEST", RPI_DEFINE, "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder", "-fno-sanitize=vptr",
                                "tests/fatfs_diskio_native.cpp", "src/ff.cpp", "src/diskio.cpp",
                                "src/Pi1551Oled.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp", "tests/rtc_i2c_native.cpp",
@@ -41,7 +42,7 @@ def run():
         subprocess.run([str(build / "menu")], cwd=ROOT, check=True)
         subprocess.run(flags + ["tests/sound_native.cpp", "-o", str(build / "sound")], cwd=ROOT, check=True)
         subprocess.run([str(build / "sound")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DPI1551_NATIVE_GPIO_IRQ_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DPI1551_NATIVE_GPIO_IRQ_TEST", RPI_DEFINE, "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "tests/tape_native.cpp",
                                "tests/fatfs_posix.cpp", "src/tape_player.cpp", "src/options.cpp", "src/OledMenu.cpp", "src/OledSettings.cpp", "tests/rtc_i2c_native.cpp",
                                "-Wl,--gc-sections", "-o", str(build / "tape")], cwd=ROOT, check=True)
@@ -68,22 +69,22 @@ def run():
         subprocess.run([str(build / "tape"), str(long_fixture), "long"], cwd=ROOT, check=True)
         subprocess.run(["gcc", "-O1", "-g", "-fsanitize=address,undefined", "-ffunction-sections",
                         "-fdata-sections", "-c", "src/lz.c", "-o", str(build / "lz.o")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",
+        subprocess.run(flags + [RPI_DEFINE, "-Wno-int-to-pointer-cast", "-Wno-type-limits",
                                "-Wno-unused-parameter", "-Wno-unused-variable",
                                "tests/disk_native.cpp", "tests/fatfs_posix.cpp", "src/DiskImage.cpp",
                                "src/gcr.cpp", "src/prot.cpp", "src/cbm_diskimage.cpp", str(build / "lz.o"), "-Wl,--gc-sections",
                                "-o", str(build / "disk")], cwd=ROOT, check=True)
         subprocess.run([str(build / "disk"), str(build / "write.d64")], cwd=ROOT, check=True)
         subprocess.run(["gcc", "-c", "src/xga_font_data.c", "-o", str(build / "font.o")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "tests/oled_display_native.cpp",
+        subprocess.run(flags + [RPI_DEFINE, "-Wno-int-to-pointer-cast", "tests/oled_display_native.cpp",
                                "src/SSD1306.cpp", str(build / "font.o"), "-o", str(build / "display")], cwd=ROOT, check=True)
         subprocess.run([str(build / "display")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-type-limits",
+        subprocess.run(flags + [RPI_DEFINE, "-Wno-int-to-pointer-cast", "-Wno-type-limits",
                                "-Wno-unused-parameter", "-Wno-reorder", "-Wno-unused-variable",
                                "-fno-sanitize=vptr", "tests/host_files_native.cpp", "tests/fatfs_posix.cpp",
                                "src/commands_base.cpp", "tests/rtc_i2c_native.cpp", "-Wl,--gc-sections", "-o", str(build / "host-files")], cwd=ROOT, check=True)
         subprocess.run([str(build / "host-files"), str(build / "host-save.prg")], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", "-DRPI3=1", "-Wno-int-to-pointer-cast",
+        subprocess.run(flags + ["-DPI1551_NATIVE_TEST", RPI_DEFINE, "-Wno-int-to-pointer-cast",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-Wno-reorder",
                                "-fno-sanitize=vptr", "tests/oled_kernel_native.cpp", "tests/fatfs_posix.cpp",
                                "src/OledMenu.cpp", "src/OledSettings.cpp", "src/Pi1551Oled.cpp", "tests/rtc_i2c_native.cpp",
@@ -103,7 +104,7 @@ def run():
         (card / "1551" / "pair.lst").write_text("a.d64\nb.d64\n")
         (card / "options.txt").write_text("deviceID = 8\nROM2 = do-not-touch.bin\nunknown = keep\n")
         subprocess.run([str(build / "bridge"), str(card)], cwd=ROOT, check=True)
-        subprocess.run(flags + ["-O0", "-DRPI3=1", "-Wno-int-to-pointer-cast", "-Wno-reorder",
+        subprocess.run(flags + ["-O0", RPI_DEFINE, "-Wno-int-to-pointer-cast", "-Wno-reorder",
                                "-Wno-type-limits", "-Wno-unused-parameter", "-fno-sanitize=vptr",
                                "tests/host_cd_native.cpp", "tests/fatfs_posix.cpp", "src/commands_base.cpp", "tests/rtc_i2c_native.cpp",
                                "src/cbm_diskimage.cpp", "src/tcbm2sd_protocol.cpp", "src/DiskImage.cpp",

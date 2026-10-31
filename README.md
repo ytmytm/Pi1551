@@ -121,6 +121,11 @@ the [option reference](USER-MANUAL.md#optionstxt), and upgrades.
 
 ## Building
 
+An experimental **Pi 2B v1.1 (BCM2836 / Cortex-A7)** build is available on this
+branch with `make RASPPI=2 TARGET=kernel-pi2 -j4`. See
+[Pi 2 testing and configuration](docs/PI2-TESTING.md); it has not yet been
+validated on physical hardware. The default build remains for Pi 3 / Zero 2 W.
+
 Raspberry Pi 3A, 3A+, 3B, and 3B+ are recommended; the 3A/3A+ are the
 smallest recommended boards. **Raspberry Pi Zero 2 W also works when its CPU
 is clocked at 1200 MHz**, using the same `kernel.img`. This setting has been

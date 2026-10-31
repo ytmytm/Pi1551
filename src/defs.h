@@ -20,10 +20,9 @@
 
 #define USE_HW_MAILBOX
 
-// Indicates we want to make active use of multiple cores
-#if defined(RPI3)
+// Both quad-core targets keep UI/IRQs on core 0, emulation on core 1,
+// and the dedicated tape engine on core 2.
 #define USE_MULTICORE
-#endif
 
 // Needs to match kernel_old setting in config.txt
 //#define KERNEL_OLD

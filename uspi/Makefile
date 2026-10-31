@@ -18,6 +18,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+.DEFAULT_GOAL := all
+
 OBJS	= uspilibrary.o \
 	  dwhcidevice.o dwhciregister.o dwhcixferstagedata.o \
 	  usbconfigparser.o usbdevice.o usbdevicefactory.o usbendpoint.o usbrequest.o usbstandardhub.o \
@@ -28,18 +30,19 @@ OBJS	= uspilibrary.o \
 	  dwhciframeschednsplit.o usbgamepad.o synchronize.o usbstring.o usbmidi.o
 
 SRCDIR  = lib
-OBJS   := $(addprefix $(SRCDIR)/, $(OBJS))
+OBJDIR  = build/pi$(RASPPI)
+include ../Makefile.rules
+OBJS   := $(addprefix $(OBJDIR)/, $(OBJS))
+-include $(OBJS:.o=.d)
 
-TARGET  = libuspi
+LIBRARY = $(OBJDIR)/libuspi
 INCLUDE = -Iinclude
 
-all: $(TARGET).a
+all: $(LIBRARY).a
 
-$(TARGET).a: $(OBJS)
+$(LIBRARY).a: $(OBJS)
 	@echo "  LINK $@"
-	$(Q)$(AR) cr $(TARGET).a $(OBJS)
+	$(Q)$(AR) cr $(LIBRARY).a $(OBJS)
 
 clean:
-	$(Q)$(RM) $(OBJS) $(TARGET).a
-
-include ../Makefile.rules
+	$(Q)$(RM) $(OBJS) $(OBJS:.o=.d) $(LIBRARY).a

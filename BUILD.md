@@ -23,8 +23,10 @@ then restart the Pi. No separate kernel build is needed for overclocking.
 
 Use the same `kernel.img` and `sdcard/config.txt` on Pi 3 and Zero 2 W. The
 build still uses `RASPPI=3` for both boards; there is no separate Zero 2 W
-target. First-generation Pi Zero and Raspberry Pi 1/2/4/5 targets are not
-supported by this firmware.
+target. An **experimental Pi 2B v1.1 / BCM2836** build is available with
+`RASPPI=2`; see [Pi 2 testing](docs/PI2-TESTING.md) for the kernel, configuration,
+validation and hardware-test limits. First-generation Pi Zero and Raspberry
+Pi 1/4/5 targets are not supported by this firmware.
 
 ## Toolchain Install
 
@@ -73,8 +75,11 @@ make
 ```
 
 The default build is already `RASPPI=3`. Passing `make RASPPI=3` is equivalent
-and may be useful in automation, including for Zero 2 W. Passing any other
-`RASPPI` value is an error.
+and may be useful in automation, including for Zero 2 W. For experimental
+Pi 2 builds use `make RASPPI=2 TARGET=kernel-pi2 -j4`. Values other than 2 or 3
+are errors. Platform objects are isolated under `build/pi2/`, `build/pi3/`
+and the corresponding `uspi/build/` directories, so switching platforms
+does not require cleaning. Use distinct `TARGET` names to retain both images.
 
 The build produces these root-level artifacts:
 

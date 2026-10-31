@@ -25,3 +25,7 @@ __pycache__/
 tools/__pycache__/
 src/*.d
 uspi/**/*.d
+
+# Per-platform firmware / USB build objects
+/build/
+/uspi/build/

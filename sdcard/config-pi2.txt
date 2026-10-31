@@ -1,0 +1,16 @@
+# Experimental Pi1551 build for Pi 2B v1.1 / BCM2836 / Cortex-A7.
+# Copy this file as config.txt alongside the Pi 2 build named kernel.img.
+kernel=kernel.img
+kernel_address=0x1f00000
+arm_64bit=0
+force_turbo=1
+arm_freq=900
+core_freq=250
+temp_soft_limit=70
+dtparam=spi=off
+force_eeprom_read=0
+disable_pvt=1
+
+# Establish a working baseline at 900 MHz first. To experiment later,
+# change arm_freq above to 1000 (or a clock known stable on your board).
+# 1200 MHz on Cortex-A7 is neither guaranteed stable nor validated here.

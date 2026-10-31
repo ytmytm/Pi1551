@@ -1,11 +1,11 @@
 # To show build commands: make V=1
+BUILD_RULES := $(lastword $(MAKEFILE_LIST))
 ifneq ($(V),1)
 Q		:= @
 endif
 
-# Pi1551 supports Raspberry Pi 3 family boards only (3A/3A+/3B/3B+).
-# Keep RASPPI overridable for tooling compatibility, but reject all non-3
-# targets so accidental Pi1541-era builds fail loudly.
+# Pi 3 / Zero 2 W remain the default; Pi 2 BCM2836 is experimental.
+# Keep platform objects separate so changing RASPPI never reuses another ISA.
 RASPPI	?= 3
 PREFIX	?= arm-none-eabi-
 
@@ -18,10 +18,14 @@ AR	= $(PREFIX)ar
 ifeq ($(strip $(RASPPI)),3)
 	ARCH	?= -march=armv8-a+crc -mtune=cortex-a53 -mfpu=crypto-neon-fp-armv8 -mfloat-abi=hard -marm -mno-unaligned-access -DRPI3=1
 	CFLAGS	+= -DRPI3=1
+else ifeq ($(strip $(RASPPI)),2)
+	ARCH	?= -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -marm -mno-unaligned-access -DRPI2=1
+	CFLAGS	+= -DRPI2=1
 else
-$(error Pi1551 supports Raspberry Pi 3 family boards only; build with RASPPI=3)
+$(error Pi1551 targets are RASPPI=3 (recommended) and RASPPI=2 (experimental BCM2836))
 endif
 
+CFLAGS += -DRASPPI=$(RASPPI)
 AFLAGS	 += $(ARCH)
 CFLAGS	 += $(ARCH) -Wall -Wno-unused-variable -Wno-unused-but-set-variable -Wno-psabi -fsigned-char -fno-builtin -Ofast -DNDEBUG
 CPPFLAGS := $(CFLAGS) $(CPPFLAGS) -fno-exceptions -fno-rtti -std=c++0x -Wno-write-strings
@@ -29,14 +33,17 @@ CFLAGS	 += -fno-delete-null-pointer-checks -fdata-sections -ffunction-sections -
 
 .PHONY: clean
 
-%.o: %.S
+$(OBJDIR)/%.o: $(SRCDIR)/%.S $(BUILD_RULES)
+	@mkdir -p $(@D)
 	@echo "  AS   $@"
 	$(Q)$(AS) $(AFLAGS) $(INCLUDE) -c -o $@ $<
 
-%.o: %.c
+$(OBJDIR)/%.o: $(SRCDIR)/%.c $(BUILD_RULES)
+	@mkdir -p $(@D)
 	@echo "  CC   $@"
 	$(Q)$(CC) $(CFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<
 
-%.o: %.cpp
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(BUILD_RULES)
+	@mkdir -p $(@D)
 	@echo "  CPP  $@"
 	$(Q)$(CPP) $(CPPFLAGS) $(INCLUDE) -MMD -MP -c -o $@ $<

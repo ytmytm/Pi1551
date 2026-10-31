@@ -413,6 +413,16 @@ _init_not_in_hyp_mode:
 
 _init_continue:
     ldr  r4,=_start
+    // Each worker needs all six banked stacks to itself. Core 1 uses
+    // C1_* below; core 2 starts another six STACK_SIZE regions lower.
+    // Previously both workers used C1_* and could overwrite each other's
+    // live emulator/tape frames even though their registers were banked.
+    mrc  p15, 0, r0, c0, c0, 5
+    and  r0, r0, #3
+    sub  r0, r0, #1
+    mov  r1, #(STACK_SIZE*6)
+    mul  r0, r1, r0
+    sub  r4, r4, r0
     // Initialise Stack Pointers ---------------------------------------------
 
     // We're going to use interrupt mode, so setup the interrupt mode

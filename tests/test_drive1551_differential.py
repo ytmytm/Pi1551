@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build both 1551 drive versions and compare complete host-side update traces."""
 from pathlib import Path
+from platform_target import RPI_DEFINE
 import os
 import subprocess
 import tempfile
@@ -19,7 +20,7 @@ def main():
             flags = ["g++", "-std=c++11", optimization, "-g", "-Wall", "-Wextra",
                      "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-empty-body",
                      "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
-                     "-ffunction-sections", "-fdata-sections", "-DRPI3=1",
+                     "-ffunction-sections", "-fdata-sections", RPI_DEFINE,
                      "-Wno-int-to-pointer-cast", "-Wno-type-limits",
                      "-Wno-unused-parameter", "-Isrc", "-Iuspi/include"]
             subprocess.run(flags + ["-c", "src/Drive1551.cpp", "-o", str(build / "current.o")],
